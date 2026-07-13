@@ -1,0 +1,4 @@
+{"url": "https://www.scrapingcourse.com/ecommerce/", "mode": "auto", "autoparse": true, "external_id": "home"}
+{"url": "https://httpbin.io/html", "external_id": "static"}
+{"url": "https://example.com", "js_render": true, "external_id": "spa"}
+{"url": "https://www.scrapingcourse.com/ecommerce/product/", "premium_proxy": true, "proxy_country": "us", "external_id": "geo"}

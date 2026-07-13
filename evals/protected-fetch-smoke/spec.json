@@ -1,0 +1,11 @@
+{
+  "description": "Smoke test: Protected Fetch returns HTML content for a known-good target.",
+  "steps": [
+    {
+      "kind": "fetch",
+      "url": "https://httpbin.io/html",
+      "options": {},
+      "expect": { "minLength": 200 }
+    }
+  ]
+}

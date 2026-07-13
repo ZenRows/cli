@@ -1,0 +1,19 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Local workspace — the CLI's runtime dir: secrets, keys, run artifacts,
+# generated skills/evals, local policy/config. Never commit any of it.
+.zenrows/
+
+# npm pack tarballs
+*.tgz
+
+# OS / editor
+.DS_Store
+*.log
+.idea/
+.vscode/*
+!.vscode/mcp.json

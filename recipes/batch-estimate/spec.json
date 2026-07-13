@@ -1,0 +1,10 @@
+{
+  "description": "Validate a JSONL batch spec and estimate its credit cost (local, no key).",
+  "steps": [
+    {
+      "kind": "batch-estimate",
+      "file": "jobs.jsonl",
+      "expect": { "maxErrors": 0, "minValidJobs": 1 }
+    }
+  ]
+}

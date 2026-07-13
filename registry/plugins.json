@@ -1,0 +1,93 @@
+{
+  "$comment": "Agent client integrations. A plugin = ZenRows MCP config + core skills for a client. The `zenrows plugin install <client>` command generates the MCP snippet and installs skills; clients marked auto-configurable have a known config file, others get explicit manual instructions (never silently skipped).",
+  "assets": [
+    {
+      "name": "claude-code",
+      "type": "plugin",
+      "description": "Claude Code: MCP via `claude mcp add` + core skills.",
+      "status": "available",
+      "requires_backend_capabilities": ["mcp"],
+      "requires_auth": true,
+      "version": "0.1.0",
+      "path": "docs",
+      "tags": ["mcp", "claude-code", "auto"]
+    },
+    {
+      "name": "cursor",
+      "type": "plugin",
+      "description": "Cursor: mcpServers config + core skills.",
+      "status": "available",
+      "requires_backend_capabilities": ["mcp"],
+      "requires_auth": true,
+      "version": "0.1.0",
+      "path": "docs",
+      "tags": ["mcp", "cursor", "auto"]
+    },
+    {
+      "name": "vscode",
+      "type": "plugin",
+      "description": "VS Code (Copilot MCP): servers config + core skills.",
+      "status": "available",
+      "requires_backend_capabilities": ["mcp"],
+      "requires_auth": true,
+      "version": "0.1.0",
+      "path": "docs",
+      "tags": ["mcp", "vscode", "auto"]
+    },
+    {
+      "name": "windsurf",
+      "type": "plugin",
+      "description": "Windsurf: mcpServers config + core skills.",
+      "status": "available",
+      "requires_backend_capabilities": ["mcp"],
+      "requires_auth": true,
+      "version": "0.1.0",
+      "path": "docs",
+      "tags": ["mcp", "windsurf", "auto"]
+    },
+    {
+      "name": "gemini",
+      "type": "plugin",
+      "description": "Gemini CLI: settings.json mcpServers + core skills.",
+      "status": "available",
+      "requires_backend_capabilities": ["mcp"],
+      "requires_auth": true,
+      "version": "0.1.0",
+      "path": "docs",
+      "tags": ["mcp", "gemini", "auto"]
+    },
+    {
+      "name": "codex",
+      "type": "plugin",
+      "description": "Codex CLI: TOML config (manual) + core skills.",
+      "status": "experimental",
+      "requires_backend_capabilities": ["mcp"],
+      "requires_auth": true,
+      "version": "0.1.0",
+      "path": "docs",
+      "tags": ["mcp", "codex", "manual"]
+    },
+    {
+      "name": "opencode",
+      "type": "plugin",
+      "description": "OpenCode: JSON MCP config (manual) + core skills.",
+      "status": "experimental",
+      "requires_backend_capabilities": ["mcp"],
+      "requires_auth": true,
+      "version": "0.1.0",
+      "path": "docs",
+      "tags": ["mcp", "opencode", "manual"]
+    },
+    {
+      "name": "generic",
+      "type": "plugin",
+      "description": "Generic MCP client: portable mcpServers snippet.",
+      "status": "available",
+      "requires_backend_capabilities": ["mcp"],
+      "requires_auth": true,
+      "version": "0.1.0",
+      "path": "docs",
+      "tags": ["mcp", "generic"]
+    }
+  ]
+}

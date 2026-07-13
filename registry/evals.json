@@ -1,0 +1,37 @@
+{
+  "assets": [
+    {
+      "name": "protected-fetch-smoke",
+      "type": "eval",
+      "description": "Smoke test: Protected Fetch returns content for a known-good target.",
+      "status": "available",
+      "requires_backend_capabilities": ["protected_fetch"],
+      "requires_auth": true,
+      "version": "0.1.0",
+      "path": "evals/protected-fetch-smoke",
+      "tags": ["smoke", "fetch", "reproducible"]
+    },
+    {
+      "name": "extract-smoke",
+      "type": "eval",
+      "description": "Smoke test: Extract returns structured output for a known-good target.",
+      "status": "available",
+      "requires_backend_capabilities": ["extract"],
+      "requires_auth": true,
+      "version": "0.1.0",
+      "path": "evals/extract-smoke",
+      "tags": ["smoke", "extract", "reproducible"]
+    },
+    {
+      "name": "batch-spec-validation",
+      "type": "eval",
+      "description": "Validate that a JSONL job spec parses and estimates cost (no cloud calls).",
+      "status": "beta",
+      "requires_backend_capabilities": [],
+      "requires_auth": false,
+      "version": "0.1.0",
+      "path": "evals/batch-spec-validation",
+      "tags": ["batch", "validation", "local"]
+    }
+  ]
+}

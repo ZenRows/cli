@@ -1,0 +1,15 @@
+{
+  "assets": [
+    {
+      "name": "competitor-intelligence",
+      "type": "workflow",
+      "description": "Gather competitor pages, extract structured data, and keep it fresh.",
+      "status": "available",
+      "requires_backend_capabilities": ["protected_fetch", "extract"],
+      "requires_auth": true,
+      "version": "0.1.0",
+      "path": "workflows/competitor-intelligence",
+      "tags": ["competitive", "extract", "fetch"]
+    }
+  ]
+}

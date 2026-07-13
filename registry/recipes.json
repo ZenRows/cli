@@ -1,0 +1,26 @@
+{
+  "assets": [
+    {
+      "name": "fetch-protected-page",
+      "type": "recipe",
+      "description": "Fetch a single anti-bot-protected page in Adaptive Stealth Mode.",
+      "status": "available",
+      "requires_backend_capabilities": ["protected_fetch"],
+      "requires_auth": true,
+      "version": "0.1.0",
+      "path": "recipes/fetch-protected-page",
+      "tags": ["fetch", "starter", "runnable"]
+    },
+    {
+      "name": "batch-estimate",
+      "type": "recipe",
+      "description": "Validate a JSONL batch spec and estimate its credit cost (local, no key).",
+      "status": "available",
+      "requires_backend_capabilities": [],
+      "requires_auth": false,
+      "version": "0.1.0",
+      "path": "recipes/batch-estimate",
+      "tags": ["batch", "jsonl", "local", "runnable"]
+    }
+  ]
+}

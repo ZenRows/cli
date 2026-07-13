@@ -1,0 +1,10 @@
+{
+  "description": "Local-only eval (no key, no cloud): validate a JSONL batch spec parses cleanly and estimate its credit cost.",
+  "steps": [
+    {
+      "kind": "batch-estimate",
+      "file": "jobs.jsonl",
+      "expect": { "maxErrors": 0, "minValidJobs": 4 }
+    }
+  ]
+}

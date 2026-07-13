@@ -1,0 +1,50 @@
+{
+  "$comment": "Honest capability matrix derived from confirmed ZenRows docs. Every command checks status here before attempting a cloud call. 'available' = a documented endpoint exists today; 'planned' = no documented endpoint yet (local spec / unavailable behavior only); 'experimental' = exists but gated behind policy.",
+  "capabilities": {
+    "protected_fetch": {
+      "key": "protected_fetch",
+      "label": "Protected Fetch",
+      "status": "available",
+      "command": "zenrows fetch",
+      "backend": "GET https://api.zenrows.com/v1/",
+      "requiresAuth": true,
+      "notes": "Universal Scraper API. Confirmed params: mode=auto (Adaptive Stealth), js_render, premium_proxy, proxy_country, wait, wait_for, js_instructions, custom_headers, session_id, original_status, allowed_status_codes, block_resources, response_type, screenshot."
+    },
+    "extract": {
+      "key": "extract",
+      "label": "Extract (Autoparse / CSS / Markdown)",
+      "status": "available",
+      "command": "zenrows extract",
+      "backend": "GET https://api.zenrows.com/v1/ (autoparse, css_extractor, response_type)",
+      "requiresAuth": true,
+      "notes": "Structured extraction runs on the same /v1/ endpoint via autoparse=true, css_extractor, and response_type=markdown|plaintext. There is no separate /extract endpoint."
+    },
+    "batch": {
+      "key": "batch",
+      "label": "Batch (beta, invite only)",
+      "status": "beta",
+      "command": "zenrows batch",
+      "backend": "Batch Scraper API — https://async.api.zenrows.com/v1 (X-API-Key header; separate host from the scraper /v1/)",
+      "requiresAuth": true,
+      "notes": "The ZenRows Batch Scraper API is a real product in private/invite-only beta. The cloud subcommands (create/status/results/cancel/wait/retry-failed) work WITH beta access; without it the API returns 403 → BATCH_ACCESS_DENIED. Local value always works with no key: `zenrows batch estimate` validates JSONL job specs and estimates credit cost."
+    },
+    "browser": {
+      "key": "browser",
+      "label": "Browser (Scraping Browser)",
+      "status": "experimental",
+      "command": "zenrows browser",
+      "backend": "Scraping Browser (CDP) + @zenrows/mcp browser tools",
+      "requiresAuth": true,
+      "notes": "ZenRows Scraping Browser and the @zenrows/mcp browser_* tools exist. There is no managed REST 'sessions' API in the public docs, so this is gated as experimental and escalation-only (policy.allow_browser=false by default)."
+    },
+    "mcp": {
+      "key": "mcp",
+      "label": "MCP",
+      "status": "available",
+      "command": "zenrows mcp",
+      "backend": "remote https://mcp.zenrows.com/mcp + local npx -y @zenrows/mcp",
+      "requiresAuth": true,
+      "notes": "Both a hosted remote MCP server and a local STDIO server (@zenrows/mcp, ZENROWS_API_KEY env) are documented."
+    }
+  }
+}

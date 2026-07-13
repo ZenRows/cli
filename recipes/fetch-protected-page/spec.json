@@ -1,0 +1,11 @@
+{
+  "description": "Fetch a single anti-bot-protected page in Adaptive Stealth Mode.",
+  "steps": [
+    {
+      "kind": "fetch",
+      "url": "https://httpbin.io/html",
+      "options": {},
+      "expect": { "minLength": 100 }
+    }
+  ]
+}

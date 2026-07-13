@@ -1,0 +1,37 @@
+{
+  "assets": [
+    {
+      "name": "protected-fetch-node",
+      "type": "template",
+      "description": "Minimal Node.js project calling the ZenRows Universal Scraper API.",
+      "status": "available",
+      "requires_backend_capabilities": ["protected_fetch"],
+      "requires_auth": true,
+      "version": "0.1.0",
+      "path": "templates/protected-fetch-node",
+      "tags": ["node", "fetch", "starter"]
+    },
+    {
+      "name": "extract-pricing-pages",
+      "type": "template",
+      "description": "Extract structured pricing fields from product pages (Autoparse / CSS).",
+      "status": "available",
+      "requires_backend_capabilities": ["extract"],
+      "requires_auth": true,
+      "version": "0.1.0",
+      "path": "templates/extract-pricing-pages",
+      "tags": ["extract", "pricing", "starter"]
+    },
+    {
+      "name": "batch-jsonl-pipeline",
+      "type": "template",
+      "description": "JSONL job-spec scaffold for high-scale workloads on the Batch Scraper API: submit/track/collect with beta access, validate + estimate locally with no key (invite-only beta).",
+      "status": "beta",
+      "requires_backend_capabilities": [],
+      "requires_auth": false,
+      "version": "0.1.0",
+      "path": "templates/batch-jsonl-pipeline",
+      "tags": ["batch", "jsonl", "pipeline"]
+    }
+  ]
+}

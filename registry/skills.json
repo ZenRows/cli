@@ -1,0 +1,92 @@
+{
+  "assets": [
+    {
+      "name": "zenrows",
+      "type": "skill",
+      "description": "Master playbook: the ZenRows primitive decision tree and cost/escalation rules.",
+      "status": "available",
+      "requires_backend_capabilities": [],
+      "requires_auth": false,
+      "version": "0.1.0",
+      "path": "skills/zenrows",
+      "tags": ["overview", "decision-tree", "routing"]
+    },
+    {
+      "name": "protected-fetch",
+      "type": "skill",
+      "description": "Use ZenRows Protected Fetch for anti-bot-protected page retrieval.",
+      "status": "available",
+      "requires_backend_capabilities": ["protected_fetch"],
+      "requires_auth": true,
+      "version": "0.1.0",
+      "path": "skills/protected-fetch",
+      "tags": ["fetch", "anti-bot", "scrape"]
+    },
+    {
+      "name": "extract",
+      "type": "skill",
+      "description": "Turn protected pages into structured data with Autoparse / CSS / Markdown.",
+      "status": "available",
+      "requires_backend_capabilities": ["extract"],
+      "requires_auth": true,
+      "version": "0.1.0",
+      "path": "skills/extract",
+      "tags": ["extract", "autoparse", "structured-data"]
+    },
+    {
+      "name": "batch-jobs",
+      "type": "skill",
+      "description": "Scale protected fetch/extract over many URLs with the Batch Scraper API (invite-only beta): submit/track/collect jobs with beta access; validate + estimate specs locally with no key.",
+      "status": "beta",
+      "requires_backend_capabilities": ["batch"],
+      "requires_auth": true,
+      "version": "0.1.0",
+      "path": "skills/batch-jobs",
+      "tags": ["batch", "scale", "jsonl"]
+    },
+    {
+      "name": "interact-browser",
+      "type": "skill",
+      "description": "Escalate to a browser (Scraping Browser / MCP) only when fetch/extract cannot do the job.",
+      "status": "experimental",
+      "requires_backend_capabilities": ["browser"],
+      "requires_auth": true,
+      "version": "0.1.0",
+      "path": "skills/interact-browser",
+      "tags": ["browser", "escalation", "interactive"]
+    },
+    {
+      "name": "cost-control",
+      "type": "skill",
+      "description": "Pick the cheapest reliable primitive; understand the cost multipliers.",
+      "status": "available",
+      "requires_backend_capabilities": [],
+      "requires_auth": false,
+      "version": "0.1.0",
+      "path": "skills/cost-control",
+      "tags": ["cost", "efficiency", "policy"]
+    },
+    {
+      "name": "trace-debug",
+      "type": "skill",
+      "description": "Read run traces and choose the next action when a fetch/extract fails.",
+      "status": "available",
+      "requires_backend_capabilities": [],
+      "requires_auth": false,
+      "version": "0.1.0",
+      "path": "skills/trace-debug",
+      "tags": ["trace", "debug", "errors"]
+    },
+    {
+      "name": "compliance-policy",
+      "type": "skill",
+      "description": "Respect domain allow/deny rules, credit limits, and secret handling.",
+      "status": "available",
+      "requires_backend_capabilities": [],
+      "requires_auth": false,
+      "version": "0.1.0",
+      "path": "skills/compliance-policy",
+      "tags": ["policy", "compliance", "governance"]
+    }
+  ]
+}

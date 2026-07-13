@@ -1,0 +1,6 @@
+{
+  "title": "h1.product_title",
+  "price": "p.price",
+  "sku": ".sku",
+  "availability": ".stock"
+}

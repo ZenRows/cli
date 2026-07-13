@@ -1,0 +1,11 @@
+{
+  "description": "Smoke test: Extract returns structured output for a known-good ecommerce demo.",
+  "steps": [
+    {
+      "kind": "extract",
+      "url": "https://www.scrapingcourse.com/ecommerce/",
+      "options": { "method": "autoparse", "jsRender": false },
+      "expect": { "minLength": 2 }
+    }
+  ]
+}
