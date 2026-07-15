@@ -113,6 +113,17 @@ export async function scrape(
       });
     }
   }
+  if (res.status === 402 && isZenRowsErrorEnvelope(body)) {
+    // ZenRows returns 402 with a JSON error envelope (e.g. AUTH004 "reached its
+    // usage limit" / "Subscription has no credit available") when the account is
+    // out of credits. This is NOT scraped content — surface it as a credits
+    // error (claim link for an unclaimed trial, dashboard/upgrade otherwise).
+    const acct = readAccount();
+    throw quotaExhausted(redacted, acct?.unclaimed ? acct.claimUrl : undefined, {
+      status: 402,
+      detail: zrErrorDetail(body) ?? undefined,
+    });
+  }
   if (res.status === 429) {
     // A 429 is not always trial-credit exhaustion: it can also be a ZenRows
     // account concurrency cap or a target-site rate limit. Only nudge to
@@ -156,8 +167,30 @@ export async function scrape(
 }
 
 function looksLikeContent(r: ScraperResult): boolean {
-  // allowed_status_codes / original_status can legitimately return 4xx bodies.
+  // allowed_status_codes / original_status can legitimately return 4xx bodies
+  // (the target's real page content). But ZenRows' OWN error responses also
+  // carry a non-empty JSON body — those are errors, not content, and must fail
+  // loudly rather than be reported as a successful fetch.
+  if (isZenRowsErrorEnvelope(r.body)) return false;
   return r.body.length > 0;
+}
+
+/**
+ * True when `body` is a ZenRows API error envelope (as opposed to scraped page
+ * content). ZenRows errors carry a stable `code` (e.g. AUTH004, REQS002) and a
+ * `type` pointing at the api-error-codes docs. A target site's returned body
+ * (even a 4xx page) does not match this shape, so allowed_status_codes /
+ * original_status content is preserved.
+ */
+function isZenRowsErrorEnvelope(body: string): boolean {
+  try {
+    const j = JSON.parse(body) as { code?: unknown; type?: unknown };
+    if (typeof j.code === "string" && /^[A-Z]+\d+$/.test(j.code)) return true;
+    if (typeof j.type === "string" && /docs\.zenrows\.com\/api-error-codes/.test(j.type)) return true;
+    return false;
+  } catch {
+    return false;
+  }
 }
 
 function parseCost(v: string | null): number | null {
@@ -204,7 +237,7 @@ export function isQuotaError(body: string): boolean {
   );
 }
 
-function zrErrorDetail(body: string): string | null {
+export function zrErrorDetail(body: string): string | null {
   try {
     const j = JSON.parse(body) as { code?: string; title?: string; detail?: string };
     const label = j.title ?? j.detail;

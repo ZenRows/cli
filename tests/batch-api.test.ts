@@ -120,6 +120,18 @@ test("problem+json 429 quota_exceeded maps to BATCH_QUOTA_EXCEEDED", async () =>
   );
 });
 
+test("problem+json 402 (no credit available) maps to POLICY_MAX_CREDITS_EXCEEDED", async () => {
+  const { impl } = jsonFetch(
+    402,
+    { title: "Payment Required", status: 402, code: "payment_required", detail: "Subscription has no credit available." },
+    "application/problem+json",
+  );
+  await assert.rejects(
+    () => createJob({ type: "regular", status: "closed", tasks: [] }, { apiKey: "k", fetchImpl: impl }),
+    (e: unknown) => e instanceof ToolkitError && e.code === "POLICY_MAX_CREDITS_EXCEEDED",
+  );
+});
+
 test("problem+json 404 maps to BATCH_NOT_FOUND", async () => {
   const { impl } = jsonFetch(404, { code: "not_found", detail: "job missing" }, "application/problem+json");
   await assert.rejects(

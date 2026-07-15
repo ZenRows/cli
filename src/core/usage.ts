@@ -6,7 +6,9 @@
  * this call does not count against the account's concurrency limit, so it is
  * safe to poll. The API key is registered as a secret so it is redacted in logs.
  */
-import { ToolkitError } from "./errors.ts";
+import { ToolkitError, quotaExhausted } from "./errors.ts";
+import { isQuotaError, zrErrorDetail } from "./http.ts";
+import { readAccount } from "./agent-account.ts";
 import { registerSecret } from "./logger.ts";
 
 export interface UsageConcurrency {
@@ -88,6 +90,16 @@ export async function fetchUsage(
       likely_cause: `HTTP ${res.status}: ${body.slice(0, 240)}`,
       next_action: "Re-check your key and log in again.",
       suggested_commands: ["zenrows login --api-key <your-key>"],
+    });
+  }
+  if (res.status === 402 || (res.status >= 400 && isQuotaError(body))) {
+    // Out of credits / over the usage limit — same "exhausted" state as the
+    // scraper 402. Surface it as a credits error (claim link for an unclaimed
+    // trial, dashboard/upgrade otherwise) instead of a generic "retry".
+    const acct = readAccount();
+    throw quotaExhausted(url, acct?.unclaimed ? acct.claimUrl : undefined, {
+      status: res.status,
+      detail: zrErrorDetail(body) ?? undefined,
     });
   }
   if (res.status >= 400) {

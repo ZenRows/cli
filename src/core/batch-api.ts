@@ -14,7 +14,8 @@
  * (`schedule` / `PUT /schedule` / `schedule/state`), webhooks + HMAC, ZIP
  * archive export, and the `Idempotency-Key` header.
  */
-import { ToolkitError } from "./errors.ts";
+import { ToolkitError, quotaExhausted } from "./errors.ts";
+import { readAccount } from "./agent-account.ts";
 import { registerSecret } from "./logger.ts";
 
 /** Confirmed Batch Scraper API base (no trailing slash). */
@@ -193,8 +194,19 @@ function problemToError(status: number, body: string, method: string, path: stri
       suggested_commands: ["zenrows batch status <id>"],
     });
   }
+  if (status === 402) {
+    // Out of credits ("Subscription has no credit available") — the same
+    // exhausted state as the scraper/usage 402. Surface the credits error with
+    // a claim link (unclaimed trial) or dashboard/upgrade pointer, not a
+    // generic "fix the problem and retry".
+    const acct = readAccount();
+    return quotaExhausted(`${method} ${path}`, acct?.unclaimed ? acct.claimUrl : undefined, {
+      status: 402,
+      detail: problem.detail || problem.title || undefined,
+    });
+  }
 
-  // 400 invalid_argument, 409 conflict, 402 payment_required, 5xx, etc.
+  // 400 invalid_argument, 409 conflict, 5xx, etc.
   const invalid = problem.invalid_tasks?.length
     ? ` invalid_tasks: ${problem.invalid_tasks
         .slice(0, 10)

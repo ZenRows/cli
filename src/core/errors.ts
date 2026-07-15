@@ -5,6 +5,7 @@
  * a `next_action`, and optional `suggested_commands`. Agents (and humans) can
  * react to the code and follow the suggested command without guessing.
  */
+import { DASHBOARD_URL } from "./open-url.ts";
 
 export type ErrorCode =
   | "AUTH_MISSING"
@@ -67,16 +68,30 @@ export class ToolkitError extends Error {
   }
 }
 
-/** Build the canonical "trial quota exhausted" error with a claim nudge. */
-export function quotaExhausted(url: string, claimUrl?: string): ToolkitError {
+/**
+ * Build the canonical "quota / credits exhausted" error.
+ *
+ * For an UNCLAIMED auto-provisioned account the actionable step is to claim it
+ * (so `claimUrl` is surfaced); for a real logged-in account there is nothing to
+ * claim — the step is to add credits / upgrade in the dashboard. `status`/`detail`
+ * let the caller record the actual upstream response (402 usage-limit, 429
+ * quota, …) instead of a hardcoded status.
+ */
+export function quotaExhausted(
+  url: string,
+  claimUrl?: string,
+  opts: { status?: number; detail?: string } = {},
+): ToolkitError {
   const claimLine = claimUrl
-    ? `You are on a free trial. Claim your account to continue and keep your usage: ${claimUrl}`
-    : "You are out of trial credits. Add credits in the ZenRows dashboard.";
+    ? `You are on a free trial. Claim your account to keep your usage and add credits: ${claimUrl}`
+    : `You are out of ZenRows credits. Add credits or upgrade your plan: ${DASHBOARD_URL}`;
+  const detail = opts.detail ? `${opts.detail.replace(/\.\s*$/, "")}. ` : "";
   return new ToolkitError({
     code: "POLICY_MAX_CREDITS_EXCEEDED",
     message: "ZenRows request quota exhausted.",
-    likely_cause: `HTTP 429 for ${url}`,
+    likely_cause: `${detail}HTTP ${opts.status ?? 429} for ${url}`,
     next_action: claimLine,
+    suggested_commands: claimUrl ? [] : ["zenrows usage"],
   });
 }
 

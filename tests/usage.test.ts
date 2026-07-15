@@ -40,3 +40,15 @@ test("fetchUsage throws AUTH_INVALID on 401", async () => {
     (e: unknown) => e instanceof ToolkitError && e.code === "AUTH_INVALID",
   );
 });
+
+test("fetchUsage maps a 402 (over usage limit) to POLICY_MAX_CREDITS_EXCEEDED", async () => {
+  const fakeFetch = (async () =>
+    new Response(
+      JSON.stringify({ code: "AUTH004", title: "Usage exceeded (AUTH004)", status: 402 }),
+      { status: 402, headers: { "content-type": "application/json" } },
+    )) as unknown as typeof fetch;
+  await assert.rejects(
+    () => fetchUsage("https://api.zenrows.com/v1/", "x", { fetchImpl: fakeFetch }),
+    (e: unknown) => e instanceof ToolkitError && e.code === "POLICY_MAX_CREDITS_EXCEEDED",
+  );
+});
