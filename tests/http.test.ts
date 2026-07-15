@@ -38,6 +38,31 @@ test("scrape treats a 402 credit/quota response as an error, not success", async
   );
 });
 
+test("scrape maps REQS001 (forbidden domain) to a non-retryable DOMAIN_FORBIDDEN error", async () => {
+  const REQS001 = JSON.stringify({
+    code: "REQS001",
+    detail: "Requests to this domain are forbidden.",
+    status: 400,
+    title: "Requests to this domain are forbidden (REQS001)",
+    type: "https://docs.zenrows.com/api-error-codes#REQS001",
+  });
+  await withFetch(
+    () => new Response(REQS001, { status: 400, headers: { "content-type": "application/json" } }),
+    async () => {
+      await assert.rejects(
+        () => scrape("https://api.zenrows.com/v1/", "k", { url: "https://books.toscrape.com/" }),
+        (err: unknown) => {
+          const e = err as { code?: string; next_action?: string };
+          assert.equal(e.code, "DOMAIN_FORBIDDEN");
+          // Must NOT advise a retry — the block is permanent.
+          assert.doesNotMatch(e.next_action ?? "", /retry/i);
+          return true;
+        },
+      );
+    },
+  );
+});
+
 test("scrape still returns non-ZenRows 4xx bodies (allowed_status_codes / original_status)", async () => {
   // A target site's own 404 (real page content) must NOT be swallowed as an
   // error — original_status / allowed_status_codes legitimately return it.

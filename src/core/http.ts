@@ -144,6 +144,19 @@ export async function scrape(
       suggested_commands: [`zenrows fetch ${params.url}`],
     });
   }
+  if (isForbiddenDomain(body)) {
+    // REQS001 — ZenRows refuses this domain at the policy layer (returned as a
+    // 4xx envelope). It's PERMANENT: js_render / premium_proxy / any retry will
+    // fail identically, so say so rather than suggesting the generic retry.
+    const detail = zrErrorDetail(body) ?? snippet(body);
+    throw new ToolkitError({
+      code: "DOMAIN_FORBIDDEN",
+      message: "ZenRows does not allow scraping this domain.",
+      likely_cause: `${detail}. This domain is blocked by ZenRows policy.`,
+      next_action:
+        "This is a permanent policy block, not a transient failure — the same request will fail again with any parameters (--js-render, --premium-proxy, …). Use a different source, or contact ZenRows if you believe this domain should be allowed.",
+    });
+  }
   if (res.status === 422 || res.status >= 500 || (res.status >= 400 && !looksLikeContent(result))) {
     throw new ToolkitError({
       code: "FETCH_FAILED",
@@ -182,6 +195,16 @@ function looksLikeContent(r: ScraperResult): boolean {
  * (even a 4xx page) does not match this shape, so allowed_status_codes /
  * original_status content is preserved.
  */
+/** True when `body` is a ZenRows REQS001 "domain forbidden" error. */
+function isForbiddenDomain(body: string): boolean {
+  try {
+    const j = JSON.parse(body) as { code?: unknown };
+    return typeof j.code === "string" && j.code.toUpperCase() === "REQS001";
+  } catch {
+    return false;
+  }
+}
+
 function isZenRowsErrorEnvelope(body: string): boolean {
   try {
     const j = JSON.parse(body) as { code?: unknown; type?: unknown };
