@@ -1,11 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, existsSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   createJob,
+  downloadResults,
   getJob,
   listResults,
   stopJob,
   waitForJob,
+  type ResultRow,
   type ResultsPage,
 } from "../src/core/batch-api.ts";
 import { ToolkitError } from "../src/core/errors.ts";
@@ -150,6 +155,37 @@ test("problem+json 400 surfaces invalid_tasks in the cause", async () => {
     () => createJob({ type: "regular", status: "closed", tasks: [] }, { apiKey: "k", fetchImpl: impl }),
     (e: unknown) => e instanceof ToolkitError && e.code === "BATCH_FAILED" && /#0: bad url/.test(e.likely_cause),
   );
+});
+
+test("downloadResults streams bodies to files, writes a manifest, reports skips + failures", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "zr-dl-"));
+  const rows: ResultRow[] = [
+    { task_id: "t1", external_id: "home", status: "successful", type: "json", url: "https://a", result_url: "https://s3/t1" },
+    { task_id: "t2", external_id: "page", status: "successful", type: "html", url: "https://b", result_url: "https://s3/t2" },
+    { task_id: "t3", external_id: "broke", status: "failed", url: "https://c" }, // failed → no result_url
+    { task_id: "t4", external_id: "gone", status: "successful", type: "html", url: "https://d", result_url: "https://s3/t4-404" },
+  ];
+  const impl = (async (url: string) => {
+    if (url.endsWith("t4-404")) return new Response("nope", { status: 404 });
+    return new Response(url.endsWith("t1") ? '{"ok":1}' : "<html>hi</html>", { status: 200 });
+  }) as unknown as typeof fetch;
+
+  const out = await downloadResults(rows, dir, { fetchImpl: impl, concurrency: 2 });
+
+  assert.equal(out.downloaded.length, 2);
+  assert.equal(out.skipped.length, 1); // t3 failed, no body
+  assert.equal(out.failed.length, 1); // t4 → 404
+  assert.equal(out.failed[0]!.task_id, "t4");
+  assert.ok(existsSync(join(dir, "home.json")));
+  assert.ok(existsSync(join(dir, "page.html")));
+  assert.equal(readFileSync(join(dir, "home.json"), "utf8"), '{"ok":1}');
+
+  const manifest = readFileSync(join(dir, "_manifest.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  assert.equal(manifest.length, 4);
+  assert.equal(manifest.find((m) => m.task_id === "t1").file, "home.json");
+  assert.equal(manifest.find((m) => m.task_id === "t3").file, null); // failed → no file
+  // The presigned result_url must NOT be persisted in the manifest (it expires).
+  assert.ok(!("result_url" in manifest[0]));
 });
 
 test("waitForJob polls until a terminal status", async () => {

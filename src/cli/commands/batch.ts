@@ -6,14 +6,15 @@
  * `create`, `status`, `results`, `cancel`, `wait`, `retry-failed`. Without beta
  * access the API returns 403 → BATCH_ACCESS_DENIED.
  */
-import { writeFileSync } from "node:fs";
+import { statSync } from "node:fs";
+import { join } from "node:path";
 import { log, ANSI, c } from "../../core/logger.ts";
 import { estimateCredits, toJobBody, validateJsonl } from "../../adapters/batch.ts";
 import { requireApiKey } from "../../core/auth.ts";
-import { createJob, getJob, listResults, rerunJob, stopJob, waitForJob, type Job } from "../../core/batch-api.ts";
+import { createJob, downloadResults, getJob, listResults, rerunJob, stopJob, waitForJob, type Job } from "../../core/batch-api.ts";
 import { asNumber, asString, parse, type Command, type RunContext } from "../command.ts";
 import { ToolkitError } from "../../core/errors.ts";
-import { printError } from "../output.ts";
+import { printError, writeOut } from "../output.ts";
 
 export const batch: Command = {
   name: "batch",
@@ -32,6 +33,7 @@ export const batch: Command = {
     "  status <id>                      show run status + stats",
     "  results <id> [--status s]        list results (successful|failed|all); paginated",
     "    --out <file>                   write results as JSONL instead of printing",
+    "    --download <dir>               fetch each result body into <dir> (+ _manifest.jsonl)",
     "  cancel <id>                      stop an in-flight run",
     "  wait <id> [--timeout <ms>]       poll until the run finishes",
     "  retry-failed <id>                rerun only the failed tasks (new run)",
@@ -150,6 +152,7 @@ async function resultsCmd(rest: string[], ctx: RunContext): Promise<number> {
   const { values, positionals } = parse(rest, {
     status: { type: "string" },
     out: { type: "string" },
+    download: { type: "string" },
     json: { type: "boolean" },
   });
   const json = ctx.json || values.json === true;
@@ -158,10 +161,52 @@ async function resultsCmd(rest: string[], ctx: RunContext): Promise<number> {
   const apiKey = requireApiKey();
 
   const rows = await listResults(id, { apiKey, status });
+
+  const downloadDir = asString(values.download);
+  if (downloadDir) {
+    const out = await downloadResults(rows, downloadDir);
+    if (json) {
+      log.out(
+        JSON.stringify(
+          {
+            ok: out.failed.length === 0,
+            jobId: id,
+            dir: out.dir,
+            downloaded: out.downloaded.length,
+            failed: out.failed.length,
+            skipped: out.skipped.length,
+            results: out,
+          },
+          null,
+          2,
+        ),
+      );
+    } else {
+      log.success(`Downloaded ${out.downloaded.length}/${rows.length} result(s) → ${out.dir}`);
+      log.dim(`  index: ${join(out.dir, "_manifest.jsonl")}`);
+      if (out.skipped.length) log.dim(`  skipped ${out.skipped.length} (no body — e.g. failed tasks)`);
+      if (out.failed.length) {
+        log.warn(`  ${out.failed.length} download(s) failed:`);
+        out.failed.slice(0, 10).forEach((f) => log.dim(`    ${f.external_id ?? f.task_id}: ${f.reason}`));
+      }
+    }
+    return out.failed.length ? 1 : 0;
+  }
+
   const jsonl = rows.map((r) => JSON.stringify(r)).join("\n");
   const outFile = asString(values.out);
   if (outFile) {
-    writeFileSync(outFile, jsonl + (jsonl ? "\n" : ""));
+    if (statSync(outFile, { throwIfNoEntry: false })?.isDirectory()) {
+      throw new ToolkitError({
+        code: "INVALID_USAGE",
+        message: `--out expects a file, but '${outFile}' is a directory.`,
+        likely_cause: "--out writes the results listing to a single JSONL file; you passed a directory.",
+        next_action:
+          "Use a file path (e.g. --out results.jsonl), or download each result body into a directory with --download <dir>.",
+        suggested_commands: [`zenrows batch results ${id} --download ${outFile}`],
+      });
+    }
+    writeOut(outFile, jsonl + (jsonl ? "\n" : ""));
     log.success(`Wrote ${rows.length} result(s) → ${outFile}`);
   } else if (json) {
     log.out(JSON.stringify({ ok: true, jobId: id, count: rows.length, results: rows }, null, 2));

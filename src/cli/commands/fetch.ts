@@ -4,7 +4,6 @@
  * Defaults to Adaptive Stealth Mode (mode=auto). `--manual` switches to manual
  * control. Writes a secret-free run artifact under .zenrows/runs/.
  */
-import { writeFileSync } from "node:fs";
 import { ensureApiKey } from "../../core/ensure-key.ts";
 import { maybeNudgeClaim } from "../../core/nudge.ts";
 import { assertUsable } from "../../core/capabilities.ts";
@@ -15,7 +14,7 @@ import { newRunId, writeRun } from "../../core/artifacts.ts";
 import { ToolkitError } from "../../core/errors.ts";
 import { runFetch, type FetchOptions, type ResponseFormat } from "../../adapters/protected-fetch.ts";
 import { parse, asString, asNumber, type Command, type RunContext } from "../command.ts";
-import { printError } from "../output.ts";
+import { printError, writeOut } from "../output.ts";
 
 export const fetch_: Command = {
   name: "fetch",
@@ -129,7 +128,7 @@ export const fetch_: Command = {
       );
 
       if (values.out) {
-        writeFileSync(values.out as string, result.body);
+        writeOut(values.out as string, result.body);
         log.success(`Wrote ${result.body.length} bytes → ${values.out}`);
       }
 

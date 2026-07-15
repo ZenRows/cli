@@ -2,8 +2,38 @@
  * Output helpers: render normalized errors for humans and machines, and a tiny
  * key/value printer used by `status`, `config`, `policy`.
  */
+import { statSync, writeFileSync } from "node:fs";
 import { ToolkitError, type ToolkitErrorShape } from "../core/errors.ts";
 import { ANSI, c, log } from "../core/logger.ts";
+
+/**
+ * Write a `--out` file, turning the cryptic fs errors for the two common
+ * mistakes into actionable ones: passing a directory (EISDIR) or a path whose
+ * parent directory doesn't exist (ENOENT). Everything else propagates.
+ */
+export function writeOut(filePath: string, data: string | Buffer): void {
+  if (statSync(filePath, { throwIfNoEntry: false })?.isDirectory()) {
+    throw new ToolkitError({
+      code: "INVALID_USAGE",
+      message: `--out expects a file path, but '${filePath}' is a directory.`,
+      likely_cause: "A directory was passed to --out, which writes to a single file.",
+      next_action: "Pass a file path, e.g. --out results.jsonl.",
+    });
+  }
+  try {
+    writeFileSync(filePath, data);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException)?.code === "ENOENT") {
+      throw new ToolkitError({
+        code: "INVALID_USAGE",
+        message: `Cannot write --out '${filePath}': the parent directory does not exist.`,
+        likely_cause: "A directory in the output path is missing.",
+        next_action: "Create the directory first, or choose an existing one.",
+      });
+    }
+    throw err;
+  }
+}
 
 /** Print a ToolkitError. In --json mode emits the structured shape to stdout. */
 export function printError(err: unknown, json = false): void {

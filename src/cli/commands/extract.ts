@@ -4,7 +4,6 @@
  * Deterministic methods (available today): --autoparse (default), --css <json>,
  * --output markdown|text. All run on the same /v1/ Universal Scraper API.
  */
-import { writeFileSync } from "node:fs";
 import { ensureApiKey } from "../../core/ensure-key.ts";
 import { maybeNudgeClaim } from "../../core/nudge.ts";
 import { assertUsable } from "../../core/capabilities.ts";
@@ -15,7 +14,7 @@ import { newRunId, writeRun } from "../../core/artifacts.ts";
 import { ToolkitError } from "../../core/errors.ts";
 import { runExtract, type ExtractMethod, type ExtractOptions } from "../../adapters/extract.ts";
 import { parse, asString, asNumber, type Command, type RunContext } from "../command.ts";
-import { printError } from "../output.ts";
+import { printError, writeOut } from "../output.ts";
 
 export const extract: Command = {
   name: "extract",
@@ -127,7 +126,7 @@ export const extract: Command = {
 
       const payload = outcome.data !== undefined ? JSON.stringify(outcome.data, null, 2) : outcome.result.body;
       if (values.out) {
-        writeFileSync(values.out as string, payload);
+        writeOut(values.out as string, payload);
         log.success(`Wrote output → ${values.out}`);
       }
       log.success(`Extracted via ${outcome.method} · ${outcome.result.body.length} bytes · cost $${(outcome.result.costUsd ?? 0).toFixed(4)} · run ${runId}`);

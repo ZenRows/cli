@@ -14,6 +14,8 @@
  * (`schedule` / `PUT /schedule` / `schedule/state`), webhooks + HMAC, ZIP
  * archive export, and the `Idempotency-Key` header.
  */
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { ToolkitError, quotaExhausted } from "./errors.ts";
 import { readAccount } from "./agent-account.ts";
 import { registerSecret } from "./logger.ts";
@@ -277,6 +279,112 @@ export async function listResults(
     cursor = page?.next_cursor ?? undefined;
   } while (cursor);
   return all;
+}
+
+/** Map a result `type` to a file extension for downloaded bodies. */
+const EXT_BY_TYPE: Record<string, string> = {
+  json: "json",
+  html: "html",
+  markdown: "md",
+  plaintext: "txt",
+  pdf: "pdf",
+};
+
+function safeName(s: string): string {
+  return s.replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^[._-]+|[._-]+$/g, "") || "task";
+}
+
+function fileBase(row: ResultRow): string {
+  const id = row.external_id && String(row.external_id).trim() ? String(row.external_id) : row.task_id;
+  return safeName(id);
+}
+
+function fileExt(row: ResultRow): string {
+  const t = typeof row.type === "string" ? row.type.toLowerCase() : "";
+  return EXT_BY_TYPE[t] ?? "bin";
+}
+
+function uniqueName(used: Set<string>, base: string, ext: string): string {
+  let name = `${base}.${ext}`;
+  for (let i = 1; used.has(name); i++) name = `${base}-${i}.${ext}`;
+  used.add(name);
+  return name;
+}
+
+export interface DownloadOutcome {
+  dir: string;
+  downloaded: Array<{ task_id: string; external_id?: string; file: string }>;
+  failed: Array<{ task_id: string; external_id?: string; reason: string }>;
+  skipped: Array<{ task_id: string; external_id?: string; reason: string }>;
+}
+
+/**
+ * Stream each result body into its own file under `dir` (created if needed),
+ * plus a self-describing `_manifest.jsonl` index (result_url dropped — it is a
+ * short-lived presigned link). Fetches run `concurrency` at a time and a single
+ * failure never aborts the rest: per-task outcomes come back in the result.
+ *
+ * Only tasks with a `result_url` have a body to fetch; failed tasks carry an
+ * `error` instead and are reported as `skipped`. Because the presigned links
+ * expire, download soon after `listResults`. Deliberately opt-in (not the
+ * `results` default): a large job's bodies can be many GB, and the URL manifest
+ * is the right primitive to pull selectively.
+ */
+export async function downloadResults(
+  rows: ResultRow[],
+  dir: string,
+  opts: { fetchImpl?: typeof fetch; concurrency?: number; timeoutMs?: number } = {},
+): Promise<DownloadOutcome> {
+  const doFetch = opts.fetchImpl ?? fetch;
+  const concurrency = Math.max(1, opts.concurrency ?? 8);
+  mkdirSync(dir, { recursive: true });
+
+  // Reserve filenames up front (sync) so concurrent workers can't collide.
+  const used = new Set<string>();
+  const planned = rows.map((row) => ({
+    row,
+    file: row.result_url ? uniqueName(used, fileBase(row), fileExt(row)) : null,
+  }));
+
+  const outcome: DownloadOutcome = { dir, downloaded: [], failed: [], skipped: [] };
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < planned.length) {
+      const { row, file } = planned[next++]!;
+      const ref = { task_id: row.task_id, external_id: row.external_id };
+      if (!file) {
+        outcome.skipped.push({
+          ...ref,
+          reason: row.status === "failed" ? "task failed — no result body" : "no result_url",
+        });
+        continue;
+      }
+      try {
+        const res = await doFetch(row.result_url!, { signal: AbortSignal.timeout(opts.timeoutMs ?? 60_000) });
+        if (!res.ok) {
+          outcome.failed.push({ ...ref, reason: `HTTP ${res.status} fetching result body` });
+          continue;
+        }
+        writeFileSync(join(dir, file), Buffer.from(await res.arrayBuffer()));
+        outcome.downloaded.push({ ...ref, file });
+      } catch (err) {
+        outcome.failed.push({ ...ref, reason: err instanceof Error ? err.message : String(err) });
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(concurrency, planned.length || 1) }, worker));
+
+  const fileByTask = new Map(outcome.downloaded.map((d) => [d.task_id, d.file]));
+  const manifest = rows.map((r) => {
+    const rest = { ...r };
+    delete rest.result_url; // expires — the local `file` is the durable pointer
+    return { ...rest, file: fileByTask.get(r.task_id) ?? null };
+  });
+  writeFileSync(
+    join(dir, "_manifest.jsonl"),
+    manifest.map((m) => JSON.stringify(m)).join("\n") + (manifest.length ? "\n" : ""),
+  );
+  return outcome;
 }
 
 /**
