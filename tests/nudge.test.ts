@@ -6,6 +6,7 @@ import { saveApiKey } from "../src/core/auth.ts";
 import { readAccount, writeAccount } from "../src/core/agent-account.ts";
 import { defaultConfig } from "../src/core/config.ts";
 import { nudgeMessage, maybeNudgeClaim } from "../src/core/nudge.ts";
+import { log } from "../src/core/logger.ts";
 import type { AgentAccount } from "../src/types/index.ts";
 
 const CLAIM_URL = "https://x/claim/tok";
@@ -72,6 +73,42 @@ test("maybeNudgeClaim: claimed account never calls fetch", async () => {
     assert.equal(called, false);
   } finally {
     cleanup();
+  }
+});
+
+test("maybeNudgeClaim: emits the claim nudge at high usage, stays silent at low usage", async () => {
+  const warns: string[] = [];
+  const origWarn = log.warn;
+  (log as { warn: (m: string) => void }).warn = (m) => void warns.push(m);
+  const runAt = async (usagePercent: number): Promise<void> => {
+    const { root, cleanup } = tempRoot();
+    try {
+      createWorkspace(root);
+      saveApiKey("zr-key", root);
+      writeAccount(acct(), root);
+      const fakeFetch = (async () =>
+        new Response(JSON.stringify({ usage_percent: usagePercent }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        })) as unknown as typeof fetch;
+      await maybeNudgeClaim(defaultConfig(), {
+        projectRoot: root,
+        fetchImpl: fakeFetch,
+        now: new Date("2026-07-11T00:00:00Z"),
+      });
+    } finally {
+      cleanup();
+    }
+  };
+  try {
+    await runAt(90);
+    assert.equal(warns.length, 1);
+    assert.ok(warns[0]!.includes(CLAIM_URL));
+    warns.length = 0;
+    await runAt(5);
+    assert.equal(warns.length, 0);
+  } finally {
+    (log as { warn: (m: string) => void }).warn = origWarn;
   }
 });
 
