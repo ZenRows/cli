@@ -19,11 +19,14 @@ import { printError, writeOut } from "../output.ts";
 export const extract: Command = {
   name: "extract",
   summary: "Turn a protected page into structured data (Autoparse / CSS / Markdown).",
-  usage: "zenrows extract <url> [--autoparse | --css <json> | --output md|text] [flags]",
+  usage: "zenrows extract <url> [--autoparse | --css <json> | --outputs <filters> | --output md|text] [flags]",
   help: [
     "Methods (available today, on /v1/):",
     "  --autoparse            automatic structured JSON (default)",
     "  --css <json>           CSS selector map, e.g. '{\"title\":\"h1\",\"price\":\".price\"}'",
+    "  --outputs <list>       built-in output filters → JSON: emails, phone_numbers, headings,",
+    "                         images, audios, videos, links, menus, hashtags, metadata, tables,",
+    "                         favicon (comma-separated, or '*' for all available fields)",
     "  --output md|text       Markdown / plaintext conversion",
     "Shared:",
     "  --manual --js-render --premium-proxy   manual fetch controls",
@@ -36,6 +39,7 @@ export const extract: Command = {
     const { values, positionals } = parse(argv, {
       autoparse: { type: "boolean" },
       css: { type: "string" },
+      outputs: { type: "string" },
       output: { type: "string" },
       manual: { type: "boolean" },
       "js-render": { type: "boolean" },
@@ -61,20 +65,32 @@ export const extract: Command = {
     }
 
     const output = asString(values.output);
-    const method: ExtractMethod | undefined = values.css
-      ? "css"
-      : output === "md" || output === "markdown"
-        ? "markdown"
-        : output === "text" || output === "plaintext"
-          ? "plaintext"
-          : values.autoparse
-            ? "autoparse"
-            : undefined;
+    const outputs = normalizeOutputs(asString(values.outputs));
+    if (outputs && (values.css || values.autoparse || output)) {
+      throw new ToolkitError({
+        code: "INVALID_USAGE",
+        message: "--outputs cannot be combined with --css, --autoparse, or --output.",
+        likely_cause: "Those are alternative extraction methods — choose exactly one.",
+        next_action: "Run --outputs on its own, e.g. zenrows extract <url> --outputs emails,links.",
+      });
+    }
+    const method: ExtractMethod | undefined = outputs
+      ? "outputs"
+      : values.css
+        ? "css"
+        : output === "md" || output === "markdown"
+          ? "markdown"
+          : output === "text" || output === "plaintext"
+            ? "plaintext"
+            : values.autoparse
+              ? "autoparse"
+              : undefined;
 
     const opts: ExtractOptions = {
       url,
       method,
       cssExtractor: asString(values.css),
+      outputs,
       manual: values.manual === true,
       jsRender: values["js-render"] === true,
       premiumProxy: values["premium-proxy"] === true,
@@ -156,3 +172,47 @@ export const extract: Command = {
     }
   },
 };
+
+/** Universal Scraper API `outputs` filters (docs.zenrows.com output-filters). */
+const OUTPUT_FILTERS = [
+  "emails",
+  "phone_numbers",
+  "headings",
+  "images",
+  "audios",
+  "videos",
+  "links",
+  "menus",
+  "hashtags",
+  "metadata",
+  "tables",
+  "favicon",
+];
+
+/**
+ * Parse/validate the `--outputs` value into the API's comma-separated form.
+ * Returns undefined when absent; throws INVALID_USAGE on any unrecognized filter
+ * (so a typo fails loudly rather than being silently dropped). `*` selects all.
+ */
+export function normalizeOutputs(v?: string): string | undefined {
+  if (!v) return undefined;
+  const tokens = v
+    .split(",")
+    .map((t) => t.trim().toLowerCase())
+    .filter(Boolean);
+  if (tokens.length === 0) return undefined;
+  if (tokens.includes("*")) return "*";
+  const known = new Set(OUTPUT_FILTERS);
+  const invalid = tokens.filter((t) => !known.has(t));
+  if (invalid.length > 0) {
+    throw new ToolkitError({
+      code: "INVALID_USAGE",
+      message: `Unknown --outputs filter(s): ${invalid.join(", ")}.`,
+      likely_cause: "One or more output-filter names are not recognized.",
+      next_action: `Use a comma-separated list of: ${OUTPUT_FILTERS.join(", ")} (or '*' for all available fields).`,
+      suggested_commands: ["zenrows extract <url> --outputs emails,links"],
+    });
+  }
+  // De-duplicate while preserving order.
+  return [...new Set(tokens)].join(",");
+}

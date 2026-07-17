@@ -33,6 +33,12 @@ export interface FetchOptions {
   screenshot?: boolean;
   cssExtractor?: string;
   autoparse?: boolean;
+  /**
+   * Comma-separated Universal Scraper API output filters (e.g. "emails,links",
+   * or "*" for all available fields). Returns structured JSON. Standalone: not combined with
+   * autoparse / css_extractor / response_type.
+   */
+  outputs?: string;
   jsonResponse?: boolean;
 }
 
@@ -108,6 +114,7 @@ export function buildParams(opts: FetchOptions, config: ToolkitConfig): ScraperP
   if (opts.allowedStatusCodes) params.allowed_status_codes = opts.allowedStatusCodes;
   if (opts.autoparse) params.autoparse = true;
   if (opts.cssExtractor) params.css_extractor = opts.cssExtractor;
+  if (opts.outputs) params.outputs = opts.outputs;
   if (opts.jsonResponse) params.json_response = true;
   if (opts.screenshot) params.screenshot = true;
   if (opts.output && RESPONSE_TYPE[opts.output]) params.response_type = RESPONSE_TYPE[opts.output];

@@ -5,18 +5,21 @@
  * Structured extraction runs on the same `/v1/` Universal Scraper API via:
  *   - autoparse=true        → automatic structured JSON          (available)
  *   - css_extractor=<json>  → selector-based field extraction     (available)
+ *   - outputs=<filters>     → built-in output filters → JSON      (available)
  *   - response_type=markdown|plaintext                            (available)
  */
 import type { Policy, ToolkitConfig } from "../types/index.ts";
 import { ToolkitError } from "../core/errors.ts";
 import { runFetch, type FetchOptions, type FetchOutcome } from "./protected-fetch.ts";
 
-export type ExtractMethod = "autoparse" | "css" | "markdown" | "plaintext";
+export type ExtractMethod = "autoparse" | "css" | "outputs" | "markdown" | "plaintext";
 
-export interface ExtractOptions extends Omit<FetchOptions, "autoparse" | "cssExtractor" | "output"> {
+export interface ExtractOptions extends Omit<FetchOptions, "autoparse" | "cssExtractor" | "outputs" | "output"> {
   /** Deterministic extraction method backed by /v1/. */
   method?: ExtractMethod;
   cssExtractor?: string;
+  /** Comma-separated output filters (e.g. "emails,links" or "*"). Used with method "outputs". */
+  outputs?: string;
   /** Validate the parsed JSON shape locally (best-effort). */
   validate?: boolean;
 }
@@ -33,12 +36,14 @@ export async function runExtract(
   policy: Policy,
   apiKey: string,
 ): Promise<ExtractOutcome> {
-  const method: ExtractMethod = opts.method ?? (opts.cssExtractor ? "css" : "autoparse");
+  const method: ExtractMethod =
+    opts.method ?? (opts.outputs ? "outputs" : opts.cssExtractor ? "css" : "autoparse");
 
   const fetchOpts: FetchOptions = {
     ...opts,
     autoparse: method === "autoparse",
     cssExtractor: method === "css" ? opts.cssExtractor : undefined,
+    outputs: method === "outputs" ? opts.outputs : undefined,
     output: method === "markdown" ? "markdown" : method === "plaintext" ? "plaintext" : "html",
   };
 
@@ -51,10 +56,19 @@ export async function runExtract(
     });
   }
 
+  if (method === "outputs" && !opts.outputs) {
+    throw new ToolkitError({
+      code: "INVALID_USAGE",
+      message: "Output-filter extraction requires a filter list.",
+      likely_cause: "--outputs was selected but no filter list was provided.",
+      next_action: `Pass one or more filters, e.g. --outputs emails,links (or --outputs '*').`,
+    });
+  }
+
   const outcome = await runFetch(fetchOpts, config, policy, apiKey);
 
   let data: unknown;
-  if (method === "autoparse" || method === "css") {
+  if (method === "autoparse" || method === "css" || method === "outputs") {
     try {
       data = JSON.parse(outcome.result.body);
     } catch {
