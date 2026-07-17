@@ -105,6 +105,15 @@ export const fetch_: Command = {
       const safeParams = { ...params };
       delete (safeParams as Record<string, unknown>).apikey;
 
+      // For binary responses (screenshot / PDF), the true byte count and the
+      // faithful payload come from `raw`; text responses use the decoded body.
+      const bytes = result.raw.length;
+      const artifactName = result.isBinary
+        ? opts.screenshot
+          ? "response.png"
+          : "response.pdf"
+        : "response.txt";
+
       const runDir = writeRun(
         {
           runId,
@@ -117,28 +126,34 @@ export const fetch_: Command = {
           request: { ...safeParams, mode },
           result: {
             httpStatus: result.status,
-            bytes: result.body.length,
+            bytes,
             contentType: result.contentType,
             finalUrl: result.finalUrl,
           },
           costUsd: result.costUsd,
           requestId: result.requestId,
         },
-        { "response.txt": result.body },
+        { [artifactName]: result.isBinary ? result.raw : result.body },
       );
 
       if (values.out) {
-        writeOut(values.out as string, result.body);
-        log.success(`Wrote ${result.body.length} bytes → ${values.out}`);
+        writeOut(values.out as string, result.isBinary ? result.raw : result.body);
+        log.success(`Wrote ${bytes} bytes → ${values.out}`);
       }
 
-      log.success(`HTTP ${result.status} · ${result.body.length} bytes · cost $${(result.costUsd ?? 0).toFixed(4)} · run ${runId}`);
+      log.success(`HTTP ${result.status} · ${bytes} bytes · cost $${(result.costUsd ?? 0).toFixed(4)} · run ${runId}`);
       if (runDir) log.dim(`  artifact: ${runDir}`);
 
       if (ctx.json || values.json) {
-        log.out(JSON.stringify({ ok: true, runId, mode, httpStatus: result.status, bytes: result.body.length, costUsd: result.costUsd, requestId: result.requestId, finalUrl: result.finalUrl }, null, 2));
+        log.out(JSON.stringify({ ok: true, runId, mode, httpStatus: result.status, bytes, costUsd: result.costUsd, requestId: result.requestId, finalUrl: result.finalUrl }, null, 2));
       } else if (!values.out) {
-        log.out(result.body);
+        if (result.isBinary) {
+          // Never dump raw binary to the terminal — it corrupts the session and
+          // is meaningless on screen. Tell the user how to capture it instead.
+          log.info(`Binary ${opts.screenshot ? "screenshot" : "PDF"} response (${bytes} bytes). Re-run with --out <file> to save it.`);
+        } else {
+          log.out(result.body);
+        }
       }
       await maybeNudgeClaim(config, {});
       return 0;

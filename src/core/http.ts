@@ -8,11 +8,23 @@
 import { ToolkitError, quotaExhausted } from "./errors.ts";
 import { readAccount } from "./agent-account.ts";
 import { registerSecret } from "./logger.ts";
+import { CLI_VERSION } from "./config.ts";
 
 export interface ScraperResult {
   status: number;
-  /** Original target status when `original_status=true` was requested. */
+  /**
+   * The response decoded as UTF-8 text. Safe for HTML/JSON/markdown/plaintext
+   * and for all error-envelope detection. For binary responses (screenshot /
+   * PDF) this is lossy — use `raw` to write the bytes faithfully.
+   */
   body: string;
+  /** The raw response bytes, exactly as received. The source of truth for output. */
+  raw: Buffer;
+  /**
+   * True when the response carries binary content (a screenshot or a PDF) that
+   * must be written from `raw`, not `body`. False for text/HTML/JSON/error bodies.
+   */
+  isBinary: boolean;
   contentType: string;
   /** Cost in USD reported by X-Request-Cost, if present. */
   costUsd: number | null;
@@ -57,7 +69,7 @@ export async function scrape(
   try {
     res = await fetch(full, {
       method: "GET",
-      headers: { "User-Agent": "zenrows-cli/0.1.0", "Accept-Encoding": "gzip, deflate" },
+      headers: { "User-Agent": `zenrows-cli/${CLI_VERSION}`, "Accept-Encoding": "gzip, deflate" },
       signal: controller.signal,
     });
   } catch (err) {
@@ -73,10 +85,20 @@ export async function scrape(
   }
   clearTimeout(timeout);
 
-  const body = await res.text();
+  // Read the raw bytes once. `body` (UTF-8) drives all error detection and text
+  // output; `raw` preserves the exact bytes so binary responses (screenshot /
+  // PDF) can be written without the UTF-8 round-trip that corrupts them.
+  const raw = Buffer.from(await res.arrayBuffer());
+  const body = raw.toString("utf8");
+  // A binary body is only ever produced by a successful screenshot/PDF request.
+  // ZenRows error responses are always a JSON envelope (text), so exclude those.
+  const wantedBinary = params.screenshot === true || params.response_type === "pdf";
+  const isBinary = wantedBinary && !isZenRowsErrorEnvelope(body);
   const result: ScraperResult = {
     status: res.status,
     body,
+    raw,
+    isBinary,
     contentType: res.headers.get("content-type") ?? "",
     costUsd: parseCost(res.headers.get("x-request-cost")),
     requestId: res.headers.get("x-request-id"),
