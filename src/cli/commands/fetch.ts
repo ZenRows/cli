@@ -175,7 +175,7 @@ export const fetch_: Command = {
   },
 };
 
-function normalizeOutput(v?: string): ResponseFormat | undefined {
+export function normalizeOutput(v?: string): ResponseFormat | undefined {
   if (!v) return undefined;
   const map: Record<string, ResponseFormat> = {
     html: "html",
@@ -186,5 +186,15 @@ function normalizeOutput(v?: string): ResponseFormat | undefined {
     txt: "plaintext",
     pdf: "pdf",
   };
-  return map[v.toLowerCase()];
+  const format = map[v.toLowerCase()];
+  if (!format) {
+    throw new ToolkitError({
+      code: "INVALID_USAGE",
+      message: `Unknown --output value '${v}'.`,
+      likely_cause: "A format that isn't supported was passed to --output.",
+      next_action: "Use one of: html, md (markdown), text (plaintext), pdf.",
+      suggested_commands: [`zenrows fetch <url> --output md`],
+    });
+  }
+  return format;
 }
