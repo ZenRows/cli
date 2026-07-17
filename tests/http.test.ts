@@ -22,6 +22,53 @@ function withFetch(res: () => Response, fn: () => Promise<void>): Promise<void> 
   });
 }
 
+// A binary response body: the PNG magic signature starts with 0x89 (>0x7F).
+// Reading it as UTF-8 text mangles every high byte into U+FFFD (ef bf bd),
+// which is exactly the screenshot/PDF corruption we are guarding against.
+const PNG_BYTES = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0xde, 0xad, 0xbe, 0xef]);
+
+test("scrape preserves raw bytes for a screenshot (no UTF-8 corruption)", async () => {
+  await withFetch(
+    () => new Response(PNG_BYTES, { status: 200, headers: { "content-type": "image/png" } }),
+    async () => {
+      const r = await scrape("https://api.zenrows.com/v1/", "k", {
+        url: "https://x",
+        screenshot: true,
+      });
+      assert.equal(r.isBinary, true);
+      assert.ok(Buffer.isBuffer(r.raw), "raw should be a Buffer");
+      assert.deepEqual([...r.raw], [...PNG_BYTES], "raw bytes must survive byte-for-byte");
+      assert.equal(r.raw[0], 0x89, "PNG signature byte must not be mangled");
+    },
+  );
+});
+
+test("scrape preserves raw bytes for a PDF response_type", async () => {
+  const PDF_BYTES = Buffer.from([0x25, 0x50, 0x44, 0x46, 0x2d, 0x31, 0x2e, 0x37, 0xff, 0xfe]);
+  await withFetch(
+    () => new Response(PDF_BYTES, { status: 200, headers: { "content-type": "application/pdf" } }),
+    async () => {
+      const r = await scrape("https://api.zenrows.com/v1/", "k", {
+        url: "https://x",
+        response_type: "pdf",
+      });
+      assert.equal(r.isBinary, true);
+      assert.deepEqual([...r.raw], [...PDF_BYTES]);
+    },
+  );
+});
+
+test("scrape marks ordinary text responses as non-binary", async () => {
+  await withFetch(
+    () => new Response("<html>hi</html>", { status: 200, headers: { "content-type": "text/html" } }),
+    async () => {
+      const r = await scrape("https://api.zenrows.com/v1/", "k", { url: "https://x" });
+      assert.equal(r.isBinary, false);
+      assert.equal(r.body, "<html>hi</html>");
+    },
+  );
+});
+
 test("scrape treats a 402 credit/quota response as an error, not success", async () => {
   await withFetch(
     () => new Response(AUTH004, { status: 402, headers: { "content-type": "application/json" } }),

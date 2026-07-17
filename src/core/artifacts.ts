@@ -41,7 +41,7 @@ function runsDir(projectRoot?: string): { runs: string; traces: string } | null 
  * Persist a run record + trace. Returns the run directory, or null if there is
  * no workspace (e.g. a one-off `fetch` outside an initialized project).
  */
-export function writeRun(meta: RunMeta, rawArtifacts: Record<string, string> = {}, projectRoot?: string): string | null {
+export function writeRun(meta: RunMeta, rawArtifacts: Record<string, string | Buffer> = {}, projectRoot?: string): string | null {
   const dirs = runsDir(projectRoot);
   if (!dirs) return null;
   const runDir = join(dirs.runs, meta.runId);
