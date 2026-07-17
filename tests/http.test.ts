@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { scrape } from "../src/core/http.ts";
+import { CLI_VERSION } from "../src/core/config.ts";
 
 // The exact shape ZenRows returns when an account is out of credits / over its
 // usage limit: HTTP 402 with a non-empty JSON error envelope.
@@ -67,6 +68,21 @@ test("scrape marks ordinary text responses as non-binary", async () => {
       assert.equal(r.body, "<html>hi</html>");
     },
   );
+});
+
+test("scrape sends a User-Agent carrying the current CLI version", async () => {
+  let seenUA: string | undefined;
+  const orig = globalThis.fetch;
+  globalThis.fetch = (async (_url: string, init: RequestInit) => {
+    seenUA = new Headers(init.headers).get("user-agent") ?? undefined;
+    return new Response("ok", { status: 200, headers: { "content-type": "text/html" } });
+  }) as typeof fetch;
+  try {
+    await scrape("https://api.zenrows.com/v1/", "k", { url: "https://x" });
+  } finally {
+    globalThis.fetch = orig;
+  }
+  assert.equal(seenUA, `zenrows-cli/${CLI_VERSION}`);
 });
 
 test("scrape treats a 402 credit/quota response as an error, not success", async () => {

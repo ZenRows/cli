@@ -8,6 +8,7 @@
 import { ToolkitError, quotaExhausted } from "./errors.ts";
 import { readAccount } from "./agent-account.ts";
 import { registerSecret } from "./logger.ts";
+import { CLI_VERSION } from "./config.ts";
 
 export interface ScraperResult {
   status: number;
@@ -68,7 +69,7 @@ export async function scrape(
   try {
     res = await fetch(full, {
       method: "GET",
-      headers: { "User-Agent": "zenrows-cli/0.1.0", "Accept-Encoding": "gzip, deflate" },
+      headers: { "User-Agent": `zenrows-cli/${CLI_VERSION}`, "Accept-Encoding": "gzip, deflate" },
       signal: controller.signal,
     });
   } catch (err) {
