@@ -9,14 +9,14 @@ test("capability matrix loads with the honest classifications", () => {
   assert.equal(caps.extract?.status, "available");
   assert.equal(caps.browser?.status, "experimental");
   assert.equal(caps.mcp?.status, "available");
-  // Batch is a real product in private/invite-only beta.
+  // Batch is a real product in beta.
   assert.equal(caps.batch?.status, "beta");
 });
 
 test("isUsable true for available, false for absent capabilities", () => {
   assert.equal(isUsable("protected_fetch"), true);
   assert.equal(isUsable("extract"), true);
-  assert.equal(isUsable("batch"), false); // beta is not usable (cloud is invite-only)
+  assert.equal(isUsable("batch"), false); // beta is not usable (cloud needs beta access)
 });
 
 test("assertUsable passes for available + experimental, throws for absent", () => {

@@ -13,7 +13,7 @@ zenrows batch estimate jobs.example.jsonl    # validate the spec + estimate cred
 
 ## Cloud (needs a key + Batch beta access)
 
-The Batch Scraper API is in **private/invite-only beta**. With beta access the
+The Batch Scraper API is in **beta**. With beta access the
 cloud subcommands run for real; without it the API returns `BATCH_ACCESS_DENIED`.
 
 ```bash

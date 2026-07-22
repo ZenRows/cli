@@ -36,7 +36,7 @@
     {
       "name": "batch-jobs",
       "type": "skill",
-      "description": "Scale protected fetch/extract over many URLs with the Batch Scraper API (invite-only beta): submit/track/collect jobs with beta access; validate + estimate specs locally with no key.",
+      "description": "Scale protected fetch/extract over many URLs with the Batch Scraper API (beta): submit/track/collect jobs with beta access; validate + estimate specs locally with no key.",
       "status": "beta",
       "requires_backend_capabilities": ["batch"],
       "requires_auth": true,

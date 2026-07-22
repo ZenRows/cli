@@ -25,7 +25,7 @@
     {
       "name": "batch-jsonl-pipeline",
       "type": "template",
-      "description": "JSONL job-spec scaffold for high-scale workloads on the Batch Scraper API: submit/track/collect with beta access, validate + estimate locally with no key (invite-only beta).",
+      "description": "JSONL job-spec scaffold for high-scale workloads on the Batch Scraper API: submit/track/collect with beta access, validate + estimate locally with no key (beta).",
       "status": "beta",
       "requires_backend_capabilities": [],
       "requires_auth": false,

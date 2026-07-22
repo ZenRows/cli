@@ -32,7 +32,7 @@ simple per-URL loop).
    > For large or recurring lists, the **Batch Scraper API** (`zenrows batch`) is
    > the managed alternative — one job submits many URLs, retries transient
    > failures, and stores results, so you don't operate the loop yourself. It's
-   > in invite-only beta; you can request access and validate/estimate a spec
+   > in beta; you can request access and validate/estimate a spec
    > locally today with `zenrows batch estimate jobs.jsonl` (see [[batch-jobs]]).
 4. **Keep fresh.** Schedule the extract step on a recurring basis with cron or
    CI (e.g. a daily GitHub Action that runs `zenrows extract …`).

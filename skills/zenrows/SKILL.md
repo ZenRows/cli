@@ -65,7 +65,7 @@ Run `zenrows status` for the live capability matrix. As of this toolkit:
 | --- | --- | --- |
 | Protected Fetch | `zenrows fetch` | available (`GET /v1/`) |
 | Extract (Autoparse/CSS/Markdown) | `zenrows extract` | available (same `/v1/`) |
-| Batch | `zenrows batch` | beta, invite-only (validate specs locally) |
+| Batch | `zenrows batch` | beta (validate specs locally) |
 | Browser | `zenrows browser` | experimental (Scraping Browser / MCP) |
 | MCP | `zenrows mcp` | available (remote + local server) |
 

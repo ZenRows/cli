@@ -1,5 +1,5 @@
 /**
- * `zenrows batch` — Batch Scraper API (status: beta, invite only).
+ * `zenrows batch` — Batch Scraper API (status: beta).
  *
  * Local (no key, always works): `estimate`/`create --dry-run`-style spec
  * validation + credit estimate. Cloud (needs a key + Batch beta access):
