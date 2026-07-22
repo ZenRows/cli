@@ -13,6 +13,6 @@ test("GA commands remain registered", async () => {
   // --help path returns 0 for a known command without side effects
   assert.equal(await main(["fetch", "--help"]), 0);
   assert.equal(await main(["account", "--help"]), 0);
-  // batch is registered again (beta, invite only) — --help exits 0
+  // batch is registered again (beta) — --help exits 0
   assert.equal(await main(["batch", "--help"]), 0);
 });

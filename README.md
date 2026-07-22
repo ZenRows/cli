@@ -38,7 +38,7 @@ that endpoint with extraction parameters, not a separate product.
 | --- | --- | --- |
 | `zenrows fetch` | Universal Scraper API — retrieve a protected page | **available** — `GET https://api.zenrows.com/v1/` |
 | `zenrows extract` | Universal Scraper API — structured extraction (Autoparse / CSS / Markdown) | **available** — same `/v1/` |
-| `zenrows batch` | Batch Scraper API — fan out over many URLs | beta (invite only) — cloud works with beta access; local validate/estimate always |
+| `zenrows batch` | Batch Scraper API — fan out over many URLs | beta — cloud works with beta access; local validate/estimate always |
 | `zenrows browser` | Scraping Browser (CDP) / MCP escalation | experimental |
 | `zenrows mcp` | MCP server config (remote + local) | **available** |
 | ZenRows CLI | this repo | available |
@@ -115,11 +115,11 @@ zenrows extract <url> --css '{"title":"h1","price":".price"}' --validate
 zenrows extract <url> --output markdown
 ```
 
-## 9. Batch (beta, invite only)
+## 9. Batch (beta)
 
 The ZenRows **Batch Scraper API** (`https://async.api.zenrows.com/v1`) fans a
 protected fetch/extract out over many URLs. It is a real product in
-**private/invite-only beta**: the cloud subcommands work once your API key has
+**beta**: the cloud subcommands work once your API key has
 beta access; without it the API returns `BATCH_ACCESS_DENIED`. Local spec
 validation + credit estimation always work (no key needed).
 

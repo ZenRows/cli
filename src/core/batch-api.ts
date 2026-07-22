@@ -163,7 +163,7 @@ function problemToError(status: number, body: string, method: string, path: stri
     return new ToolkitError({
       code: "BATCH_ACCESS_DENIED",
       message: "The Batch Scraper API rejected this request (access denied).",
-      likely_cause: `${cause}. The Batch Scraper API is in private beta and this account is not invited.`,
+      likely_cause: `${cause}. The Batch Scraper API is in beta and this account does not have beta access.`,
       next_action:
         "Request Batch Scraper API beta access from ZenRows. Meanwhile validate/estimate specs locally and fan out with `zenrows fetch` per URL.",
       suggested_commands: ["zenrows batch estimate jobs.jsonl"],

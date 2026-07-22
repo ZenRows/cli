@@ -21,12 +21,12 @@
     },
     "batch": {
       "key": "batch",
-      "label": "Batch (beta, invite only)",
+      "label": "Batch (beta)",
       "status": "beta",
       "command": "zenrows batch",
       "backend": "Batch Scraper API — https://async.api.zenrows.com/v1 (X-API-Key header; separate host from the scraper /v1/)",
       "requiresAuth": true,
-      "notes": "The ZenRows Batch Scraper API is a real product in private/invite-only beta. The cloud subcommands (create/status/results/cancel/wait/retry-failed) work WITH beta access; without it the API returns 403 → BATCH_ACCESS_DENIED. Local value always works with no key: `zenrows batch estimate` validates JSONL job specs and estimates credit cost."
+      "notes": "The ZenRows Batch Scraper API is a real product in beta. The cloud subcommands (create/status/results/cancel/wait/retry-failed) work WITH beta access; without it the API returns 403 → BATCH_ACCESS_DENIED. Local value always works with no key: `zenrows batch estimate` validates JSONL job specs and estimates credit cost."
     },
     "browser": {
       "key": "browser",

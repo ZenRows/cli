@@ -30,4 +30,4 @@ Once the spec is clean, submit it with beta access:
 ```
 zenrows batch create jobs.jsonl --wait
 ```
-See [[batch-jobs]] for the full cloud flow (invite-only beta).
+See [[batch-jobs]] for the full cloud flow (beta).
