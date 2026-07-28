@@ -16,11 +16,11 @@ task, and to **escalate only with evidence**.
 ## Getting access (zero-config)
 
 You do not need an API key up front. On your first cloud call (e.g. `zenrows fetch <url>`),
-the toolkit automatically creates a **free, unclaimed ZenRows trial account** and stores the
+the toolkit automatically creates a **free, unclaimed ZenRows Free plan account** and stores the
 key locally — no human step required. To opt out, pass `--no-signup` or set
 `auto_signup: false` in `.zenrows/policy.json`, then use `zenrows login --api-key <key>`.
 
-When the trial nears its limit (or the user asks), tell the human they can **claim** the
+When the Free plan nears its limit (or the user asks), tell the human they can **claim** the
 account to keep their usage and history: run `zenrows account claim` (or open the claim URL
 shown on quota errors). Claiming sets an email + password; the same key keeps working.
 Never attempt to handle payment or upgrades — only surface the claim link.

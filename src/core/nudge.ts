@@ -2,8 +2,9 @@
  * Proactive claim nudge.
  *
  * After a successful cloud call on an UNCLAIMED agent account, surface the claim
- * link BEFORE the account hits its usage wall — when usage is high or the trial
- * is nearly over — so the agent can hand the claim URL to a human in time.
+ * link BEFORE the account hits its usage wall — so the agent can hand the claim
+ * URL to a human in time. Free plan credits renew monthly; claiming is about
+ * ownership (email/password), not expiry.
  */
 import type { AgentAccount, ToolkitConfig } from "../types/index.ts";
 import { readAccount, writeAccount } from "./agent-account.ts";
@@ -13,29 +14,22 @@ import { fetchUsage } from "./usage.ts";
 
 /** How high usage must be (percent) before we nudge. */
 const USAGE_NUDGE_PERCENT = 80;
-/** Nudge when the trial ends within this window. */
-const TRIAL_NUDGE_MS = 3 * 24 * 60 * 60 * 1000;
 /** Minimum spacing between usage checks (throttle). */
 const USAGE_CHECK_THROTTLE_MS = 10 * 60 * 1000;
 
 /**
  * Build the claim-nudge message, or null if no nudge is warranted. Pure and
- * fully testable — takes the account, the current usage percent, and `now`.
+ * fully testable — takes the account and the current usage percent.
+ * `now` is kept for callers/tests; Free has no time-based claim nudge.
  */
 export function nudgeMessage(
   account: AgentAccount,
   usagePercent: number | undefined,
-  now: Date,
+  _now?: Date,
 ): string | null {
   if (!account.unclaimed) return null;
   if (typeof usagePercent === "number" && usagePercent >= USAGE_NUDGE_PERCENT) {
-    return `You've used ${usagePercent}% of your free ZenRows trial — claim your account to keep your usage & history: ${account.claimUrl}`;
-  }
-  if (account.trialEndsAt) {
-    const ends = new Date(account.trialEndsAt).getTime();
-    if (!Number.isNaN(ends) && ends - now.getTime() <= TRIAL_NUDGE_MS && ends - now.getTime() >= 0) {
-      return `Your ZenRows trial ends ${account.trialEndsAt} — claim your account to keep it: ${account.claimUrl}`;
-    }
+    return `You've used ${usagePercent}% of your ZenRows Free plan — claim your account to keep your usage & history: ${account.claimUrl}`;
   }
   return null;
 }

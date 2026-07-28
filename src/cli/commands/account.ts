@@ -5,8 +5,10 @@
  */
 import { fetchAccountStatus, readAccount, writeAccount } from "../../core/agent-account.ts";
 import { authState, resolveApiKey } from "../../core/auth.ts";
+import { loadConfig } from "../../core/config.ts";
 import { log } from "../../core/logger.ts";
 import { openUrl } from "../../core/open-url.ts";
+import { fetchUsage } from "../../core/usage.ts";
 import { parse, type Command, type RunContext } from "../command.ts";
 
 export const account: Command = {
@@ -51,15 +53,29 @@ export const account: Command = {
       return 0;
     }
 
-    // status
+    // status — cycle dates from subscriptions/self/details
+    let periodEndsAt: string | undefined;
+    if (auth.hasKey) {
+      const key = resolveApiKey().key;
+      if (key) {
+        try {
+          const usage = await fetchUsage(loadConfig().apiBase, key);
+          periodEndsAt = usage.period_ends_at;
+        } catch {
+          // offline / usage unavailable — status still useful without cycle dates
+        }
+      }
+    }
+
     if (ctx.json) {
-      log.out(JSON.stringify({ hasKey: auth.hasKey, account: acct ?? null }, null, 2));
+      log.out(JSON.stringify({ hasKey: auth.hasKey, account: acct ?? null, period_ends_at: periodEndsAt ?? null }, null, 2));
     } else if (acct) {
       log.info(`Account: ${acct.accountId} (${acct.unclaimed ? "unclaimed" : "claimed"})`);
-      if (acct.trialEndsAt) log.dim(`Trial ends: ${acct.trialEndsAt}`);
+      if (periodEndsAt) log.dim(`Billing period ends: ${periodEndsAt}`);
       if (acct.unclaimed) log.dim(`Claim it: ${acct.claimUrl}`);
     } else {
       log.info(auth.hasKey ? "Using a manually configured API key." : "No account yet. Run a command (e.g. `zenrows fetch <url>`) or `zenrows signup --agent`.");
+      if (periodEndsAt) log.dim(`Billing period ends: ${periodEndsAt}`);
     }
     return 0;
   },

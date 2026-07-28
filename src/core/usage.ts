@@ -95,7 +95,7 @@ export async function fetchUsage(
   if (res.status === 402 || (res.status >= 400 && isQuotaError(body))) {
     // Out of credits / over the usage limit — same "exhausted" state as the
     // scraper 402. Surface it as a credits error (claim link for an unclaimed
-    // trial, dashboard/upgrade otherwise) instead of a generic "retry".
+    // Free plan account, dashboard/upgrade otherwise) instead of a generic "retry".
     const acct = readAccount();
     throw quotaExhausted(url, acct?.unclaimed ? acct.claimUrl : undefined, {
       status: res.status,

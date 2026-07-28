@@ -109,8 +109,6 @@ export interface AgentAccount {
   unclaimed: boolean;
   /** URL a human opens to claim (set email + password). */
   claimUrl: string;
-  /** ISO-8601 trial end, if known. */
-  trialEndsAt?: string;
   /** ISO-8601 creation time (local). */
   createdAt: string;
   /** ISO-8601 timestamp of the last usage check (throttles the claim nudge). */

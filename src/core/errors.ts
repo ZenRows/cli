@@ -84,7 +84,7 @@ export function quotaExhausted(
   opts: { status?: number; detail?: string } = {},
 ): ToolkitError {
   const claimLine = claimUrl
-    ? `You are on a free trial. Claim your account to keep your usage and add credits: ${claimUrl}`
+    ? `You are on the ZenRows Free plan. Claim your account to keep your usage and add credits: ${claimUrl}`
     : `You are out of ZenRows credits. Add credits or upgrade your plan: ${DASHBOARD_URL}`;
   const detail = opts.detail ? `${opts.detail.replace(/\.\s*$/, "")}. ` : "";
   return new ToolkitError({

@@ -34,7 +34,7 @@ export const fetch_: Command = {
     "  --output <fmt>         html (default) | markdown | text | pdf",
     "  --screenshot           capture an above-the-fold screenshot",
     "  --out <file>           write the response body to a file",
-    "  --no-signup            do not auto-create a trial account if no key exists",
+    "  --no-signup            do not auto-create a Free plan account if no key exists",
     "  --json                 print a structured result",
   ].join("\n"),
   async run(argv: string[], ctx: RunContext): Promise<number> {
@@ -73,7 +73,7 @@ export const fetch_: Command = {
       values["no-signup"] ? { ...policy, auto_signup: false } : policy,
       {
         onProvision: (a) => {
-          log.info("No API key found — created a free ZenRows trial account for you.");
+          log.info("No API key found — created a ZenRows Free plan account for you.");
           log.dim(`Claim it anytime (keeps your usage): ${a.claimUrl}`);
         },
       },

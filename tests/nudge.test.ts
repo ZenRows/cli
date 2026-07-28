@@ -35,13 +35,6 @@ test("nudgeMessage: claimed account never nudges", () => {
   assert.equal(nudgeMessage(acct({ unclaimed: false }), 99, new Date("2026-07-11T00:00:00Z")), null);
 });
 
-test("nudgeMessage: unclaimed + trial within 1 day + low usage → message", () => {
-  const now = new Date("2026-07-11T00:00:00Z");
-  const msg = nudgeMessage(acct({ trialEndsAt: "2026-07-12T00:00:00Z" }), 10, now);
-  assert.ok(msg && msg.includes(CLAIM_URL));
-  assert.ok(msg.includes("2026-07-12T00:00:00Z"));
-});
-
 test("maybeNudgeClaim: records lastUsageCheckAt after a usage fetch", async () => {
   const { root, cleanup } = tempRoot();
   try {

@@ -118,7 +118,7 @@ export async function scrape(
         // fetch a key from a dashboard they never used.
         throw new ToolkitError({
           code: "AUTH_INVALID",
-          message: "The auto-provisioned trial key was rejected by the ZenRows API.",
+          message: "The auto-provisioned Free plan key was rejected by the ZenRows API.",
           likely_cause: `${cause}. The signup endpoint issued this key, but the scraping API did not accept it.`,
           next_action:
             "If you are testing against a local/staging backend, ensure `apiBase` (zenrows config) points at the same environment that issued the key. Otherwise re-provision with `zenrows signup --agent`, or claim the account: " +
@@ -139,7 +139,7 @@ export async function scrape(
     // ZenRows returns 402 with a JSON error envelope (e.g. AUTH004 "reached its
     // usage limit" / "Subscription has no credit available") when the account is
     // out of credits. This is NOT scraped content — surface it as a credits
-    // error (claim link for an unclaimed trial, dashboard/upgrade otherwise).
+    // error (claim link for an unclaimed Free plan, dashboard/upgrade otherwise).
     const acct = readAccount();
     throw quotaExhausted(redacted, acct?.unclaimed ? acct.claimUrl : undefined, {
       status: 402,
@@ -147,7 +147,7 @@ export async function scrape(
     });
   }
   if (res.status === 429) {
-    // A 429 is not always trial-credit exhaustion: it can also be a ZenRows
+    // A 429 is not always Free-plan credit exhaustion: it can also be a ZenRows
     // account concurrency cap or a target-site rate limit. Only nudge to
     // claim/add credits when the body indicates an actual account credit/quota
     // limit; otherwise advise a brief retry.
@@ -160,8 +160,8 @@ export async function scrape(
       code: "FETCH_FAILED",
       message: "Rate limited (HTTP 429).",
       likely_cause: detail
-        ? `${detail}. This looks like a concurrency cap or a target-site rate limit, not trial-credit exhaustion.`
-        : "A concurrency cap or a target-site rate limit was hit, not trial-credit exhaustion.",
+        ? `${detail}. This looks like a concurrency cap or a target-site rate limit, not Free-plan credit exhaustion.`
+        : "A concurrency cap or a target-site rate limit was hit, not Free-plan credit exhaustion.",
       next_action: "Wait a few seconds and retry. If it persists, lower concurrency / parallel requests.",
       suggested_commands: [`zenrows fetch ${params.url}`],
     });
@@ -260,9 +260,9 @@ function snippet(s: string): string {
  */
 /**
  * Decide whether a 429 body indicates a ZenRows *account* credit/quota limit
- * (trial exhausted, out of credits) rather than a concurrency cap or a
- * target-site rate limit. Only the former warrants the "claim / add credits"
- * nudge; concurrency and target 429s are handled generically.
+ * (out of credits) rather than a concurrency cap or a target-site rate limit.
+ * Only the former warrants the "claim / add credits" nudge; concurrency and
+ * target 429s are handled generically.
  */
 export function isQuotaError(body: string): boolean {
   let code = "";

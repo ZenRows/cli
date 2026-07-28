@@ -24,7 +24,7 @@ test("signupAgent parses a 201 response and sends provenance headers", async () 
   let sentHeaders: Record<string, string> = {};
   const fakeFetch = (async (_url: string, init?: RequestInit) => {
     sentHeaders = (init?.headers as Record<string, string>) ?? {};
-    return new Response(JSON.stringify({ apiKey: "zr-key", accountId: "u1", claimUrl: "https://x/claim/t", trialEndsAt: "2026-07-24T00:00:00Z" }),
+    return new Response(JSON.stringify({ apiKey: "zr-key", accountId: "u1", claimUrl: "https://x/claim/t" }),
       { status: 201, headers: { "content-type": "application/json" } });
   }) as unknown as typeof fetch;
 
@@ -139,7 +139,7 @@ test("fetchAccountStatus parses claim state and sends X-API-Key", async () => {
   let sentKey: unknown;
   const fakeFetch = (async (_url: string, init?: RequestInit) => {
     sentKey = (init?.headers as Record<string, string>)["X-API-Key"];
-    return new Response(JSON.stringify({ accountId: "u1", claimed: true, isAgent: false, trialEndsAt: null }),
+    return new Response(JSON.stringify({ accountId: "u1", claimed: true, isAgent: false }),
       { status: 200, headers: { "content-type": "application/json" } });
   }) as unknown as typeof fetch;
 

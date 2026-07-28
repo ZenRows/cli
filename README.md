@@ -52,12 +52,12 @@ matrix.
 
 ```bash
 npx -y @zenrows/cli init
-zenrows fetch https://httpbin.io/html # auto-provisions a free trial on first use
+zenrows fetch https://httpbin.io/html # auto-provisions a Free plan account on first use
 zenrows extract https://www.scrapingcourse.com/ecommerce/ --autoparse
 ```
 
 No API key up front: on your first cloud call the toolkit creates a free,
-unclaimed ZenRows trial account for you (see §6).
+unclaimed ZenRows Free plan account for you (see §6).
 
 ## 5. Install everything
 
@@ -73,15 +73,15 @@ manual instructions rather than silently skipping it.
 
 You do **not** need an API key to get started. On your first cloud call
 (e.g. `zenrows fetch <url>`), the toolkit automatically creates a **free,
-unclaimed ZenRows trial account**, stores the key in `.zenrows/secrets.json`
+unclaimed ZenRows Free plan account**, stores the key in `.zenrows/secrets.json`
 (0600, gitignored), and records the account in `.zenrows/account.json`
-(no secret — just the accountId, trial info, and a claim link).
+(no secret — just the accountId, Free-period info, and a claim link).
 
 When you (or your agent) want to keep the usage and history, **claim** the
 account — this sets an email + password; the same key keeps working:
 
 ```bash
-zenrows account status # show account + trial + claim link
+zenrows account status # show account + Free period + claim link
 zenrows account claim  # open the claim URL in the browser
 zenrows usage          # plan usage, credits & concurrency (does not count against your limit)
 ```
@@ -90,7 +90,7 @@ Opt out of auto-provisioning at any time:
 
 ```bash
 zenrows fetch <url> --no-signup # do not auto-create an account for this call
-zenrows signup --agent          # explicitly provision a trial account, headless
+zenrows signup --agent          # explicitly provision a Free plan account, headless
 zenrows login --api-key <key>   # use an existing key (stored 0600, gitignored)
 zenrows login --env             # use the ZENROWS_API_KEY environment variable
 ```
@@ -213,7 +213,7 @@ Reports write `input.json`, `results.json`, `report.md`, `failures.jsonl`,
 
 - API keys are never printed or written into run artifacts/assets.
 - Secrets live in `.zenrows/secrets.json` (0600, gitignored); logs are redacted.
-- `.zenrows/account.json` holds no secret — only the accountId, trial info, and
+- `.zenrows/account.json` holds no secret — only the accountId, Free-period info, and
   claim link.
 - `.zenrows/policy.json` enforces credit/page/concurrency limits and domain allow/deny.
 - Destructive `uninstall` requires `--yes`. Browser and experimental are off by

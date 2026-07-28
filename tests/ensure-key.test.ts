@@ -8,7 +8,7 @@ import { ensureApiKey } from "../src/core/ensure-key.ts";
 import { ToolkitError } from "../src/core/errors.ts";
 import { defaultPolicy } from "../src/core/policy.ts";
 
-const fakeSignup = async () => ({ apiKey: "zr-auto", accountId: "u9", claimUrl: "https://x/claim/tok", trialEndsAt: "2026-07-24T00:00:00Z" });
+const fakeSignup = async () => ({ apiKey: "zr-auto", accountId: "u9", claimUrl: "https://x/claim/tok" });
 
 test("auto-provisions and persists key + account when policy allows", async () => {
   const { root, cleanup } = tempRoot();

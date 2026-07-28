@@ -25,8 +25,8 @@ export const signup: Command = {
       if (account) { log.info("An agent account already exists. Claim it: " + account.claimUrl); return 0; }
       const res = await signupAgent();
       saveApiKey(res.apiKey);
-      writeAccount({ accountId: res.accountId, unclaimed: true, claimUrl: res.claimUrl, trialEndsAt: res.trialEndsAt, createdAt: new Date().toISOString() });
-      log.success("Created a free ZenRows trial account.");
+      writeAccount({ accountId: res.accountId, unclaimed: true, claimUrl: res.claimUrl, createdAt: new Date().toISOString() });
+      log.success("Created a ZenRows Free plan account.");
       log.dim(`Claim it anytime: ${res.claimUrl}`);
       if (ctx.json) log.out(JSON.stringify({ ok: true, accountId: res.accountId, claimUrl: res.claimUrl }, null, 2));
       return 0;

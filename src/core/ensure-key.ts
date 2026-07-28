@@ -2,7 +2,7 @@
  * Resolve-or-provision the ZenRows API key.
  *
  * When no key is configured and `policy.auto_signup` is enabled, this creates a
- * free unclaimed trial account (via the public signup endpoint), persists the
+ * free unclaimed Free plan account (via the public signup endpoint), persists the
  * key (0600) and the account metadata, and returns the key. Otherwise it defers
  * to `requireApiKey`, which throws AUTH_MISSING.
  */
@@ -29,7 +29,6 @@ export async function ensureApiKey(
     accountId: res.accountId,
     unclaimed: true,
     claimUrl: res.claimUrl,
-    trialEndsAt: res.trialEndsAt,
     createdAt: new Date().toISOString(),
   };
   writeAccount(account, opts.projectRoot);

@@ -199,7 +199,7 @@ function problemToError(status: number, body: string, method: string, path: stri
   if (status === 402) {
     // Out of credits ("Subscription has no credit available") — the same
     // exhausted state as the scraper/usage 402. Surface the credits error with
-    // a claim link (unclaimed trial) or dashboard/upgrade pointer, not a
+    // a claim link (unclaimed Free plan) or dashboard/upgrade pointer, not a
     // generic "fix the problem and retry".
     const acct = readAccount();
     return quotaExhausted(`${method} ${path}`, acct?.unclaimed ? acct.claimUrl : undefined, {

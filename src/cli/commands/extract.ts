@@ -32,7 +32,7 @@ export const extract: Command = {
     "  --manual --js-render --premium-proxy   manual fetch controls",
     "  --validate             fail if the result is not valid JSON",
     "  --out <file>           write output to a file",
-    "  --no-signup            do not auto-create a trial account if no key exists",
+    "  --no-signup            do not auto-create a Free plan account if no key exists",
     "  --json                 structured result",
   ].join("\n"),
   async run(argv: string[], ctx: RunContext): Promise<number> {
@@ -107,7 +107,7 @@ export const extract: Command = {
       values["no-signup"] ? { ...policy, auto_signup: false } : policy,
       {
         onProvision: (a) => {
-          log.info("No API key found — created a free ZenRows trial account for you.");
+          log.info("No API key found — created a ZenRows Free plan account for you.");
           log.dim(`Claim it anytime (keeps your usage): ${a.claimUrl}`);
         },
       },

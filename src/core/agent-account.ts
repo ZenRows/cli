@@ -1,9 +1,9 @@
 /**
  * Agent account persistence + public signup client.
  *
- * `account.json` records an auto-provisioned, unclaimed ZenRows trial account.
+ * `account.json` records an auto-provisioned, unclaimed ZenRows Free plan account.
  * It never holds the API key (that lives in secrets.json, 0600) — only the
- * accountId, the human-facing claim URL, and trial metadata.
+ * accountId, the human-facing claim URL, and claim metadata.
  */
 import { chmodSync } from "node:fs";
 import type { AgentAccount } from "../types/index.ts";
@@ -109,7 +109,6 @@ export interface SignupResponse {
   apiKey: string;
   accountId: string;
   claimUrl: string;
-  trialEndsAt?: string;
 }
 
 export async function signupAgent(
@@ -179,7 +178,6 @@ export interface AccountStatus {
   /** True once a human has claimed the account. */
   claimed: boolean;
   isAgent: boolean;
-  trialEndsAt?: string | null;
 }
 
 /**
