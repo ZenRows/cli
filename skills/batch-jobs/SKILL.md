@@ -7,11 +7,11 @@ requires_backend_capabilities: [batch]
 
 # Batch Jobs
 
-Process large workloads reliably and asynchronously. Batch is where ZenRows'
-high-scale anti-bot advantage becomes obvious — ZenRows wins when the workflow
+Process large workloads reliably and asynchronously. Batch is where Zenrows'
+high-scale anti-bot advantage becomes obvious — Zenrows wins when the workflow
 runs over thousands, millions, or recurring sets of URLs.
 
-> Status: **beta**. The ZenRows Batch Scraper API is a real
+> Status: **beta**. The Zenrows Batch Scraper API is a real
 > product in beta and runs on a separate host
 > (`async.api.zenrows.com/v1`). The cloud subcommands work once your account has
 > beta access; without it the API returns 403 → `BATCH_ACCESS_DENIED`. The

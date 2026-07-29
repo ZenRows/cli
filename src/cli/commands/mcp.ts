@@ -1,5 +1,5 @@
 /**
- * `zenrows mcp` — configure the ZenRows MCP server in agent clients.
+ * `zenrows mcp` — configure the Zenrows MCP server in agent clients.
  *   config --client <id> [--remote]   print a config snippet (and how to apply)
  *   install [--client <id>]           same as config; convenience alias
  *   status                            show MCP endpoints + supported clients
@@ -13,7 +13,7 @@ import { parse, asString, type Command, type RunContext } from "../command.ts";
 
 export const mcp: Command = {
   name: "mcp",
-  summary: "Configure the ZenRows MCP server (remote or local) in agent clients.",
+  summary: "Configure the Zenrows MCP server (remote or local) in agent clients.",
   usage: "zenrows mcp <config|install|status|uninstall> [--client <id>] [--remote]",
   help: [
     "Subcommands:",
@@ -59,7 +59,7 @@ export const mcp: Command = {
     if (sub === "uninstall") {
       if (!clientId) throw new ToolkitError({ code: "INVALID_USAGE", message: "Specify --client.", likely_cause: "Missing client.", next_action: "e.g. zenrows mcp uninstall --client cursor" });
       const { client } = buildMcpConfig(clientId, transport);
-      log.info(`To remove the ZenRows MCP server from ${client.label}:`);
+      log.info(`To remove the Zenrows MCP server from ${client.label}:`);
       if (client.format === "cli") log.out("claude mcp remove zenrows");
       else log.out(`Edit ${client.configFile} and delete the "zenrows" server entry.`);
       return 0;
@@ -79,7 +79,7 @@ function statusCmd(ctx: RunContext): number {
     log.out(JSON.stringify({ capability: cap, remote: REMOTE_URL, local: "npx -y @zenrows/mcp", clients: Object.values(MCP_CLIENTS) }, null, 2));
     return 0;
   }
-  log.info(c(ANSI.bold, "ZenRows MCP"));
+  log.info(c(ANSI.bold, "Zenrows MCP"));
   log.info(`status:  ${cap?.status}`);
   log.info(`remote:  ${REMOTE_URL}`);
   log.info(`local:   npx -y @zenrows/mcp  (env ZENROWS_API_KEY)`);

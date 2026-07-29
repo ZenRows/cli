@@ -1,5 +1,5 @@
 /**
- * Cross-platform "open this URL in the browser" helper + canonical ZenRows
+ * Cross-platform "open this URL in the browser" helper + canonical Zenrows
  * URLs. Falls back to printing the URL when no opener is available (e.g. CI).
  */
 import { spawn } from "node:child_process";

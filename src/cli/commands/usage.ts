@@ -8,6 +8,20 @@ import { log } from "../../core/logger.ts";
 import { fetchUsage } from "../../core/usage.ts";
 import { parse, type Command, type RunContext } from "../command.ts";
 
+/** Free plan still ships as plan_code=trial in R1; display the product name. */
+export function formatPlanName(name: string | undefined): string {
+  if (!name) return "—";
+  if (/^trial$/i.test(name.trim())) return "Free";
+  return name;
+}
+
+/** Stripe/Cashier may still report trialing for the Free row — surface as active. */
+export function formatPlanStatus(status: string | undefined): string {
+  if (!status) return "—";
+  if (/^trialing$/i.test(status.trim())) return "active";
+  return status;
+}
+
 export const usage: Command = {
   name: "usage",
   summary: "Show plan usage, credits, and concurrency for the current API key.",
@@ -26,8 +40,8 @@ export const usage: Command = {
     }
 
     const api = u.plan?.products?.api;
-    log.info(`Plan:    ${u.plan?.name ?? "—"}${u.plan?.recurrence ? ` (${u.plan.recurrence})` : ""}`);
-    log.info(`Status:  ${u.status ?? "—"}`);
+    log.info(`Plan:    ${formatPlanName(u.plan?.name)}${u.plan?.recurrence ? ` (${u.plan.recurrence})` : ""}`);
+    log.info(`Status:  ${formatPlanStatus(u.status)}`);
     if (u.usage !== undefined) {
       log.info(`Usage:   ${u.usage}${u.usage_percent !== undefined ? ` (${u.usage_percent}% of plan)` : ""}`);
     }

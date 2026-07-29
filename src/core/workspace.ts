@@ -94,9 +94,9 @@ export function ensureGitignore(paths: WorkspacePaths): void {
   const lines = new Set(current.split(/\r?\n/));
   const missing = required.filter((r) => !lines.has(r));
   if (missing.length === 0) return;
-  const header = current.includes("# ZenRows CLI")
+  const header = current.includes("# Zenrows CLI")
     ? ""
-    : "\n# ZenRows CLI (do not commit secrets or run artifacts)\n";
+    : "\n# Zenrows CLI (do not commit secrets or run artifacts)\n";
   const next = current.replace(/\s*$/, "") + header + missing.join("\n") + "\n";
   writeFileSync(paths.gitignore, next.replace(/^\n/, ""));
 }

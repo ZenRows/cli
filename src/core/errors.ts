@@ -84,12 +84,12 @@ export function quotaExhausted(
   opts: { status?: number; detail?: string } = {},
 ): ToolkitError {
   const claimLine = claimUrl
-    ? `You are on the ZenRows Free plan. Claim your account to keep your usage and add credits: ${claimUrl}`
-    : `You are out of ZenRows credits. Add credits or upgrade your plan: ${DASHBOARD_URL}`;
+    ? `You are on the Zenrows Free plan. Claim your account to keep your usage and add credits: ${claimUrl}`
+    : `You are out of Zenrows credits. Add credits or upgrade your plan: ${DASHBOARD_URL}`;
   const detail = opts.detail ? `${opts.detail.replace(/\.\s*$/, "")}. ` : "";
   return new ToolkitError({
     code: "POLICY_MAX_CREDITS_EXCEEDED",
-    message: "ZenRows request quota exhausted.",
+    message: "Zenrows request quota exhausted.",
     likely_cause: `${detail}HTTP ${opts.status ?? 429} for ${url}`,
     next_action: claimLine,
     suggested_commands: claimUrl ? [] : ["zenrows usage"],

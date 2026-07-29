@@ -53,3 +53,21 @@ test("clearApiKey removes the stored key and it is not present in the file", () 
     cleanup();
   }
 });
+
+test("resolveApiKey prefers secrets file over ZENROWS_API_KEY env", () => {
+  const { root, cleanup } = tempRoot();
+  const prev = process.env.ZENROWS_API_KEY;
+  process.env.ZENROWS_API_KEY = "zr_env_key";
+  try {
+    createWorkspace(root);
+    saveApiKey(FAKE, root);
+    assert.equal(resolveApiKey(root).source, "secrets-file");
+    clearApiKey(root);
+    assert.equal(resolveApiKey(root).source, "env");
+    assert.equal(resolveApiKey(root).key, "zr_env_key");
+  } finally {
+    if (prev !== undefined) process.env.ZENROWS_API_KEY = prev;
+    else delete process.env.ZENROWS_API_KEY;
+    cleanup();
+  }
+});

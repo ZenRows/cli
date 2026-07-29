@@ -7,7 +7,7 @@ status: available
 
 # Workflow: competitor intelligence
 
-A higher-level process built on the ZenRows **Universal Scraper API**: retrieve
+A higher-level process built on the Zenrows **Universal Scraper API**: retrieve
 protected pages with `zenrows fetch`, then turn them into structured data with
 `zenrows extract` (the same API's Autoparse / CSS / Markdown — not a separate
 product). Scheduling and scaling use the tools you already have (cron/CI, a

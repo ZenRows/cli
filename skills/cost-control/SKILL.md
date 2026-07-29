@@ -1,6 +1,6 @@
 ---
 name: cost-control
-description: Pick the cheapest reliable primitive and understand the ZenRows cost multipliers.
+description: Pick the cheapest reliable primitive and understand the Zenrows cost multipliers.
 version: 0.1.0
 requires_backend_capabilities: []
 ---
@@ -19,7 +19,7 @@ With `mode=auto` (Adaptive Stealth Mode) you are billed only for the
 configuration that **succeeds** — failed internal attempts are not charged.
 
 ## Tactics
-- Default to `mode=auto`; let ZenRows escalate only when needed.
+- Default to `mode=auto`; let Zenrows escalate only when needed.
 - Reduce response size with `--css` or `--output markdown` (avoids 413s too).
 - Validate on one page before scaling across many URLs.
 - Set guardrails in policy: `max_credits_per_run`, `max_pages_per_run`,

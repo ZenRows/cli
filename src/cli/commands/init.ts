@@ -64,7 +64,7 @@ export const init: Command = {
     const want = (flag: unknown) => all || flag === true;
     const root = asString(values.workspace);
 
-    log.info(c(ANSI.bold, "ZenRows CLI — init"));
+    log.info(c(ANSI.bold, "Zenrows CLI — init"));
 
     // 1. Workspace
     section("Workspace");

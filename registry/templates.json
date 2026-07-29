@@ -3,7 +3,7 @@
     {
       "name": "protected-fetch-node",
       "type": "template",
-      "description": "Minimal Node.js project calling the ZenRows Universal Scraper API.",
+      "description": "Minimal Node.js project calling the Zenrows Universal Scraper API.",
       "status": "available",
       "requires_backend_capabilities": ["protected_fetch"],
       "requires_auth": true,

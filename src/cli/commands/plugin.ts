@@ -1,7 +1,7 @@
 /**
  * `zenrows plugin` — install agent integrations (per-client config bundles).
  *
- * In V1 a "plugin" is the combination of the ZenRows MCP server config + the
+ * In V1 a "plugin" is the combination of the Zenrows MCP server config + the
  * core skills for a given agent client. We generate the MCP snippet and install
  * skills, and for clients we cannot auto-configure we print explicit manual
  * instructions (never silently skip — the hard rule).
@@ -14,7 +14,7 @@ import { parse, type Command, type RunContext } from "../command.ts";
 
 export const plugin: Command = {
   name: "plugin",
-  summary: "Install ZenRows agent integrations (MCP + skills) for a client.",
+  summary: "Install Zenrows agent integrations (MCP + skills) for a client.",
   usage: "zenrows plugin <list|install <client>|status|update|remove <client>>",
   help: `Clients: ${Object.keys(MCP_CLIENTS).join(", ")}`,
   run(argv: string[], ctx: RunContext): number {

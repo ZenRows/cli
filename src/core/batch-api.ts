@@ -1,5 +1,5 @@
 /**
- * Client for the ZenRows Batch Scraper API.
+ * Client for the Zenrows Batch Scraper API.
  *
  * A SEPARATE host from the Universal Scraper API (`api.zenrows.com/v1`): batch
  * jobs live at `https://async.api.zenrows.com/v1`. Auth is the `X-API-Key`
@@ -121,7 +121,7 @@ export async function batchRequest<T>(method: string, path: string, opts: Reques
     clearTimeout(timeout);
     throw new ToolkitError({
       code: "BACKEND_UNAVAILABLE",
-      message: "Could not reach the ZenRows Batch Scraper API.",
+      message: "Could not reach the Zenrows Batch Scraper API.",
       likely_cause: err instanceof Error ? err.message : String(err),
       next_action:
         "Check connectivity and retry. Override the host with ZENROWS_BATCH_API_BASE if you are testing against staging.",
@@ -142,7 +142,7 @@ export async function batchRequest<T>(method: string, path: string, opts: Reques
       code: "BATCH_FAILED",
       message: "The Batch API response was not valid JSON.",
       likely_cause: text.slice(0, 240),
-      next_action: "Retry, or inspect the job in the ZenRows dashboard.",
+      next_action: "Retry, or inspect the job in the Zenrows dashboard.",
     });
   }
 }
@@ -165,14 +165,14 @@ function problemToError(status: number, body: string, method: string, path: stri
       message: "The Batch Scraper API rejected this request (access denied).",
       likely_cause: `${cause}. The Batch Scraper API is in beta and this account does not have beta access.`,
       next_action:
-        "Request Batch Scraper API beta access from ZenRows. Meanwhile validate/estimate specs locally and fan out with `zenrows fetch` per URL.",
+        "Request Batch Scraper API beta access from Zenrows. Meanwhile validate/estimate specs locally and fan out with `zenrows fetch` per URL.",
       suggested_commands: ["zenrows batch estimate jobs.jsonl"],
     });
   }
   if (status === 401) {
     return new ToolkitError({
       code: "AUTH_INVALID",
-      message: "ZenRows rejected the API key for the Batch Scraper API.",
+      message: "Zenrows rejected the API key for the Batch Scraper API.",
       likely_cause: cause,
       next_action: "Re-check your key and log in again.",
       suggested_commands: ["zenrows login --api-key <your-key>"],
@@ -183,7 +183,7 @@ function problemToError(status: number, body: string, method: string, path: stri
       code: "BATCH_NOT_FOUND",
       message: "Batch job, run, or task not found.",
       likely_cause: `${cause}. The id may be wrong or the job is not owned by this account.`,
-      next_action: "Check the job id, or list your recent jobs in the ZenRows dashboard.",
+      next_action: "Check the job id, or list your recent jobs in the Zenrows dashboard.",
     });
   }
   if (status === 429) {

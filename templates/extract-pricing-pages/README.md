@@ -1,6 +1,6 @@
 # extract-pricing-pages
 
-Extract structured pricing fields from product pages with ZenRows Extract.
+Extract structured pricing fields from product pages with Zenrows Extract.
 
 ```bash
 # Autoparse (automatic structured JSON)

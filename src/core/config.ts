@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import type { ToolkitConfig } from "../types/index.ts";
 import { findWorkspace, readJson, workspacePaths, writeJson } from "./workspace.ts";
 
-/** Confirmed ZenRows Universal Scraper API base. */
+/** Confirmed Zenrows Universal Scraper API base. */
 export const DEFAULT_API_BASE = "https://api.zenrows.com/v1/";
 export const CONFIG_VERSION = "0.1.0";
 /**

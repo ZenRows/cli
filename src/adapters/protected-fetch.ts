@@ -1,9 +1,9 @@
 /**
- * Protected Fetch adapter → ZenRows Universal Scraper API (`GET /v1/`).
+ * Protected Fetch adapter → Zenrows Universal Scraper API (`GET /v1/`).
  *
  * Maps toolkit options to confirmed API parameters and enforces the
  * auto/manual contract: in Adaptive Stealth Mode (mode=auto), `js_render` and
- * `premium_proxy` are managed by ZenRows, so passing them manually without
+ * `premium_proxy` are managed by Zenrows, so passing them manually without
  * `--manual` is a PARAM_CONFLICT_AUTO_MANUAL error. `proxy_country` is allowed
  * alongside auto (per docs).
  */
@@ -80,7 +80,7 @@ export function validateAutoManual(opts: FetchOptions, config: ToolkitConfig): v
       code: "PARAM_CONFLICT_AUTO_MANUAL",
       message: `Cannot combine Adaptive Stealth Mode (mode=auto) with manually managed flags: ${managed.join(", ")}.`,
       likely_cause:
-        "In mode=auto, ZenRows manages js_render and premium_proxy automatically and escalates only when needed.",
+        "In mode=auto, Zenrows manages js_render and premium_proxy automatically and escalates only when needed.",
       next_action:
         "Either drop those flags to keep auto mode, or pass --manual to take full manual control.",
       suggested_commands: [

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { scrape } from "../src/core/http.ts";
 import { CLI_VERSION } from "../src/core/config.ts";
 
-// The exact shape ZenRows returns when an account is out of credits / over its
+// The exact shape Zenrows returns when an account is out of credits / over its
 // usage limit: HTTP 402 with a non-empty JSON error envelope.
 const AUTH004 = JSON.stringify({
   code: "AUTH004",
@@ -126,7 +126,7 @@ test("scrape maps REQS001 (forbidden domain) to a non-retryable DOMAIN_FORBIDDEN
   );
 });
 
-test("scrape still returns non-ZenRows 4xx bodies (allowed_status_codes / original_status)", async () => {
+test("scrape still returns non-Zenrows 4xx bodies (allowed_status_codes / original_status)", async () => {
   // A target site's own 404 (real page content) must NOT be swallowed as an
   // error — original_status / allowed_status_codes legitimately return it.
   await withFetch(

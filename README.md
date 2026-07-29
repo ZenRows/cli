@@ -1,10 +1,10 @@
-# ZenRows CLI
+# Zenrows CLI
 
-**ZenRows CLI is the open-source command-line, MCP, skills, templates,
+**Zenrows CLI is the open-source command-line, MCP, skills, templates,
 workflows, recipes, and evals layer for giving AI agents reliable access to
-protected web data through ZenRows cloud infrastructure.**
+protected web data through Zenrows cloud infrastructure.**
 
-It makes the ZenRows Universal Scraper API, Scraping Browser, and Residential
+It makes the Zenrows Universal Scraper API, Scraping Browser, and Residential
 Proxies installable and usable directly from AI agents and developer workflows —
 so an agent can reliably access protected web data without hand-rolling anti-bot
 handling, proxies, or browser rendering.
@@ -15,20 +15,20 @@ handling, proxies, or browser rendering.
 
 A single, dependency-light CLI (`zenrows`) plus an installable asset registry
 (skills, templates, workflows, recipes, evals) and MCP configuration for popular
-agent clients. It makes ZenRows installable, usable, testable, and distributable
+agent clients. It makes Zenrows installable, usable, testable, and distributable
 through AI agents, developers, and teams.
 
-## 2. Why ZenRows
+## 2. Why Zenrows
 
 Normal fetch fails. Generic scrapers fail. Browser-first tools are expensive.
-The ZenRows **Universal Scraper API** retrieves protected pages reliably and
+The Zenrows **Universal Scraper API** retrieves protected pages reliably and
 structures them, while the **Scraping Browser** is there for the rare cases that
-need a real browser. ZenRows wins when the workflow runs over thousands or
+need a real browser. Zenrows wins when the workflow runs over thousands or
 millions of URLs.
 
 ## 3. Product architecture
 
-The core product is the ZenRows **Universal Scraper API**
+The core product is the Zenrows **Universal Scraper API**
 (`GET https://api.zenrows.com/v1/`). The CLI exposes it two ways: `zenrows fetch`
 retrieves a protected page, and `zenrows extract` turns it into structured data
 (JSON / CSS / Markdown). Both call the same endpoint — `extract` is just
@@ -41,7 +41,7 @@ that endpoint with extraction parameters, not a separate product.
 | `zenrows batch` | Batch Scraper API — fan out over many URLs | beta — cloud works with beta access; local validate/estimate always |
 | `zenrows browser` | Scraping Browser (CDP) / MCP escalation | experimental |
 | `zenrows mcp` | MCP server config (remote + local) | **available** |
-| ZenRows CLI | this repo | available |
+| Zenrows CLI | this repo | available |
 
 The CLI maintains a **capability matrix** (`registry/capabilities.json`). Every
 command checks status before any cloud call, so the toolkit never fakes behavior
@@ -57,7 +57,7 @@ zenrows extract https://www.scrapingcourse.com/ecommerce/ --autoparse
 ```
 
 No API key up front: on your first cloud call the toolkit creates a free,
-unclaimed ZenRows Free plan account for you (see §6).
+unclaimed Zenrows Free plan account for you (see §6).
 
 ## 5. Install everything
 
@@ -73,7 +73,7 @@ manual instructions rather than silently skipping it.
 
 You do **not** need an API key to get started. On your first cloud call
 (e.g. `zenrows fetch <url>`), the toolkit automatically creates a **free,
-unclaimed ZenRows Free plan account**, stores the key in `.zenrows/secrets.json`
+unclaimed Zenrows Free plan account**, stores the key in `.zenrows/secrets.json`
 (0600, gitignored), and records the account in `.zenrows/account.json`
 (no secret — just the accountId, Free-period info, and a claim link).
 
@@ -117,7 +117,7 @@ zenrows extract <url> --output markdown
 
 ## 9. Batch (beta)
 
-The ZenRows **Batch Scraper API** (`https://async.api.zenrows.com/v1`) fans a
+The Zenrows **Batch Scraper API** (`https://async.api.zenrows.com/v1`) fans a
 protected fetch/extract out over many URLs. It is a real product in
 **beta**: the cloud subcommands work once your API key has
 beta access; without it the API returns `BATCH_ACCESS_DENIED`. Local spec
@@ -133,12 +133,12 @@ zenrows batch cancel <job-id>                        # stop an in-flight run
 
 `jobs.jsonl` is one JSON object per line, each with a `url` (plus optional
 per-line overrides like `js_render`, `premium_proxy`, `proxy_country`). Request
-beta access from ZenRows to run in the cloud; until then, validate/estimate
+beta access from Zenrows to run in the cloud; until then, validate/estimate
 locally or fan out with `zenrows fetch` per URL.
 
 ## 10. Browser Sessions
 
-Escalation only, gated by `policy.allow_browser`. Backed by the ZenRows Scraping
+Escalation only, gated by `policy.allow_browser`. Backed by the Zenrows Scraping
 Browser (CDP) and the `@zenrows/mcp` `browser_*` tools.
 
 ## 11. MCP
@@ -197,7 +197,7 @@ zenrows recipe run fetch-protected-page
 ## 17. Evals
 
 Reproducible, transparent benchmarks. **No competitor keys are bundled** and
-nothing is hardcoded to make ZenRows win — comparison evals require you to supply
+nothing is hardcoded to make Zenrows win — comparison evals require you to supply
 your own credentials.
 
 ```bash
@@ -232,5 +232,5 @@ Node 23.6+ runs the TypeScript sources directly for development.
 
 ---
 
-_ZenRows is building the protected web data infrastructure layer. The ZenRows
+_Zenrows is building the protected web data infrastructure layer. The Zenrows
 CLI is how that infrastructure becomes native to AI agents._

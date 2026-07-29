@@ -1,6 +1,6 @@
 # Security Policy
 
-We take the security of the ZenRows CLI seriously and appreciate
+We take the security of the Zenrows CLI seriously and appreciate
 responsible disclosure.
 
 ## Reporting a vulnerability

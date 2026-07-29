@@ -77,7 +77,7 @@ export function requireApiKey(projectRoot?: string): string {
   if (!key) {
     throw new ToolkitError({
       code: "AUTH_MISSING",
-      message: "No ZenRows API key configured.",
+      message: "No Zenrows API key configured.",
       likely_cause: "You have not logged in and ZENROWS_API_KEY is not set.",
       next_action: "Log in with your API key, then retry.",
       suggested_commands: [

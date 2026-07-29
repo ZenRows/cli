@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Minimal ZenRows Protected Fetch example (Adaptive Stealth Mode).
+// Minimal Zenrows Protected Fetch example (Adaptive Stealth Mode).
 // Usage: node index.mjs <url>
 const API_BASE = "https://api.zenrows.com/v1/";
 const apikey = process.env.ZENROWS_API_KEY;

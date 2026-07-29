@@ -1,12 +1,12 @@
 ---
 name: zenrows
-description: Master playbook for choosing the right ZenRows primitive for any web-data task, with cost and escalation rules.
+description: Master playbook for choosing the right Zenrows primitive for any web-data task, with cost and escalation rules.
 version: 0.1.0
 ---
 
-# ZenRows: how to think about protected web data
+# Zenrows: how to think about protected web data
 
-ZenRows is the **protected web data infrastructure layer**: strong anti-bot +
+Zenrows is the **protected web data infrastructure layer**: strong anti-bot +
 high scale + extraction + browser escalation. This toolkit makes that
 infrastructure native to AI agents.
 
@@ -16,7 +16,7 @@ task, and to **escalate only with evidence**.
 ## Getting access (zero-config)
 
 You do not need an API key up front. On your first cloud call (e.g. `zenrows fetch <url>`),
-the toolkit automatically creates a **free, unclaimed ZenRows Free plan account** and stores the
+the toolkit automatically creates a **free, unclaimed Zenrows Free plan account** and stores the
 key locally — no human step required. To opt out, pass `--no-signup` or set
 `auto_signup: false` in `.zenrows/policy.json`, then use `zenrows login --api-key <key>`.
 
@@ -41,14 +41,14 @@ If the user needs login, clicks, forms, sessions, or persistent state:
   → Use Interact / Browser Sessions.(zenrows browser)    [experimental, escalation-only]
 
 If the user wants to integrate with an agent/coding environment:
-  → Use the ZenRows CLI: install / plugin / mcp / skills / templates /
+  → Use the Zenrows CLI: install / plugin / mcp / skills / templates /
     workflows / recipes / evals.
 ```
 
 ## Preference rules
 
 - Prefer the cheapest reliable primitive. Start with **Adaptive Stealth Mode**
-  (`mode=auto`) — ZenRows escalates to JS rendering / premium proxies only when
+  (`mode=auto`) — Zenrows escalates to JS rendering / premium proxies only when
   needed, and you are billed only for the configuration that succeeds.
 - **Escalate only with evidence.** If a fetch fails, read the trace
   (`zenrows trace explain <run-id>`) before adding `--js-render` /

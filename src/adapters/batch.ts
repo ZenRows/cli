@@ -1,7 +1,7 @@
 /**
  * Batch Jobs adapter.
  *
- * Status: `beta` — the ZenRows Batch Scraper API is in beta.
+ * Status: `beta` — the Zenrows Batch Scraper API is in beta.
  * With beta access the cloud subcommands run for real (see `core/batch-api.ts`).
  * Without access the API returns 403 → BATCH_ACCESS_DENIED. This adapter owns
  * the local, no-network pieces: validating a JSONL job spec, estimating credit

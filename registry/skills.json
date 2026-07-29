@@ -3,7 +3,7 @@
     {
       "name": "zenrows",
       "type": "skill",
-      "description": "Master playbook: the ZenRows primitive decision tree and cost/escalation rules.",
+      "description": "Master playbook: the Zenrows primitive decision tree and cost/escalation rules.",
       "status": "available",
       "requires_backend_capabilities": [],
       "requires_auth": false,
@@ -14,7 +14,7 @@
     {
       "name": "protected-fetch",
       "type": "skill",
-      "description": "Use ZenRows Protected Fetch for anti-bot-protected page retrieval.",
+      "description": "Use Zenrows Protected Fetch for anti-bot-protected page retrieval.",
       "status": "available",
       "requires_backend_capabilities": ["protected_fetch"],
       "requires_auth": true,

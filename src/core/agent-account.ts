@@ -1,11 +1,11 @@
 /**
  * Agent account persistence + public signup client.
  *
- * `account.json` records an auto-provisioned, unclaimed ZenRows Free plan account.
+ * `account.json` records an auto-provisioned, unclaimed Zenrows Free plan account.
  * It never holds the API key (that lives in secrets.json, 0600) — only the
  * accountId, the human-facing claim URL, and claim metadata.
  */
-import { chmodSync } from "node:fs";
+import { chmodSync, existsSync, unlinkSync } from "node:fs";
 import type { AgentAccount } from "../types/index.ts";
 import { attributionEnabled, getOrCreateTelemetryId, loadConfig, CLI_VERSION } from "./config.ts";
 import { ToolkitError } from "./errors.ts";
@@ -105,6 +105,18 @@ export function writeAccount(acct: AgentAccount, projectRoot?: string): void {
   }
 }
 
+/** Remove local agent account metadata (used by `zenrows logout`). */
+export function clearAccount(projectRoot?: string): boolean {
+  const file = accountPath(projectRoot);
+  if (!existsSync(file)) return false;
+  try {
+    unlinkSync(file);
+  } catch {
+    return false;
+  }
+  return true;
+}
+
 export interface SignupResponse {
   apiKey: string;
   accountId: string;
@@ -145,7 +157,7 @@ export async function signupAgent(
   } catch (err) {
     throw new ToolkitError({
       code: "BACKEND_UNAVAILABLE",
-      message: "Could not reach the ZenRows signup endpoint.",
+      message: "Could not reach the Zenrows signup endpoint.",
       likely_cause: err instanceof Error ? err.message : String(err),
       next_action: "Check connectivity and retry, or sign up manually with: zenrows signup --no-open",
     });
@@ -155,10 +167,10 @@ export async function signupAgent(
     if (res.status === 429) {
       throw new ToolkitError({
         code: "SIGNUP_RATE_LIMITED",
-        message: "ZenRows blocked the auto-signup: too many new accounts from this network.",
+        message: "Zenrows blocked the auto-signup: too many new accounts from this network.",
         likely_cause: body.slice(0, 240) || "The signup endpoint is rate-limited for this IP.",
         next_action:
-          "Wait a few minutes and retry — the toolkit will try again automatically. If you already have a ZenRows API key, use it now with: zenrows login --api-key <key> (or set ZENROWS_API_KEY).",
+          "Wait a few minutes and retry — the toolkit will try again automatically. If you already have a Zenrows API key, use it now with: zenrows login --api-key <key> (or set ZENROWS_API_KEY).",
         suggested_commands: ["zenrows login --api-key <your-key>"],
       });
     }
@@ -213,7 +225,7 @@ export async function fetchAccountStatus(
       code: res.status === 401 || res.status === 403 ? "AUTH_INVALID" : "FETCH_FAILED",
       message: `Account status request failed (HTTP ${res.status}).`,
       likely_cause: body.slice(0, 240),
-      next_action: "Retry, or check the account in the ZenRows dashboard.",
+      next_action: "Retry, or check the account in the Zenrows dashboard.",
     });
   }
   return (await res.json()) as AccountStatus;

@@ -1,5 +1,5 @@
 /**
- * Resolve-or-provision the ZenRows API key.
+ * Resolve-or-provision the Zenrows API key.
  *
  * When no key is configured and `policy.auto_signup` is enabled, this creates a
  * free unclaimed Free plan account (via the public signup endpoint), persists the

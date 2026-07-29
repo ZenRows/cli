@@ -1,6 +1,6 @@
 # protected-fetch-node
 
-Minimal Node.js project that calls the ZenRows Universal Scraper API
+Minimal Node.js project that calls the Zenrows Universal Scraper API
 (Protected Fetch) directly.
 
 ```bash

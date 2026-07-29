@@ -106,9 +106,9 @@ function takeFlag(argv: string[], flag: string): boolean {
 }
 
 function printTopHelp(): void {
-  log.info(c(ANSI.bold, "zenrows") + " — ZenRows CLI");
+  log.info(c(ANSI.bold, "zenrows") + " — Zenrows CLI");
   log.info("The open-source CLI, MCP, skills, templates, workflows, recipes, and evals layer");
-  log.info("for giving AI agents reliable access to protected web data through ZenRows.");
+  log.info("for giving AI agents reliable access to protected web data through Zenrows.");
   log.info("");
   log.info(c(ANSI.bold, "Usage:") + " zenrows <command> [args] [--json] [--yes]");
   for (const g of GROUPS) {

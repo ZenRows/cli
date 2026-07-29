@@ -13,9 +13,9 @@ import { parse, asString, type Command, type RunContext } from "../command.ts";
 
 export const login: Command = {
   name: "login",
-  summary: "Configure your ZenRows API key (never printed or committed).",
+  summary: "Configure your Zenrows API key (never printed or committed).",
   usage: "zenrows login [--api-key <key> | --env | --browser]",
-  help: "Modes:\n  --api-key <key>   store key locally (recommended)\n  --env             use ZENROWS_API_KEY from the environment\n  --browser         open the ZenRows dashboard to get a key",
+  help: "Modes:\n  --api-key <key>   store key locally (recommended)\n  --env             use ZENROWS_API_KEY from the environment\n  --browser         open the Zenrows dashboard to get a key",
   async run(argv: string[], ctx: RunContext): Promise<number> {
     const { values } = parse(argv, {
       "api-key": { type: "string" },
@@ -24,7 +24,7 @@ export const login: Command = {
     });
 
     if (values.browser) {
-      log.step("Opening the ZenRows dashboard to create/copy your API key…");
+      log.step("Opening the Zenrows dashboard to create/copy your API key…");
       await openUrl(DASHBOARD_URL);
       log.info(`Then run:  zenrows login --api-key <your-key>`);
       log.dim(`Sign up:   ${SIGNUP_URL}`);

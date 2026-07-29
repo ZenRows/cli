@@ -1,5 +1,5 @@
 /**
- * Minimal HTTP client for the ZenRows Universal Scraper API (`/v1/`).
+ * Minimal HTTP client for the Zenrows Universal Scraper API (`/v1/`).
  *
  * Uses the global `fetch` (Node 18+). The API key is sent as the `apikey`
  * query parameter (per docs) and is registered as a secret so it is redacted
@@ -7,6 +7,7 @@
  */
 import { ToolkitError, quotaExhausted } from "./errors.ts";
 import { readAccount } from "./agent-account.ts";
+import { ENV_KEY, resolveApiKey } from "./auth.ts";
 import { registerSecret } from "./logger.ts";
 import { CLI_VERSION } from "./config.ts";
 
@@ -77,7 +78,7 @@ export async function scrape(
     const cause = err instanceof Error ? err.message : String(err);
     throw new ToolkitError({
       code: "BACKEND_UNAVAILABLE",
-      message: `Could not reach the ZenRows API.`,
+      message: `Could not reach the Zenrows API.`,
       likely_cause: `Network error or timeout: ${cause}`,
       next_action: "Check connectivity and retry. Verify api base in `zenrows config show`.",
       suggested_commands: ["zenrows status", "zenrows config show"],
@@ -91,9 +92,9 @@ export async function scrape(
   const raw = Buffer.from(await res.arrayBuffer());
   const body = raw.toString("utf8");
   // A binary body is only ever produced by a successful screenshot/PDF request.
-  // ZenRows error responses are always a JSON envelope (text), so exclude those.
+  // Zenrows error responses are always a JSON envelope (text), so exclude those.
   const wantedBinary = params.screenshot === true || params.response_type === "pdf";
-  const isBinary = wantedBinary && !isZenRowsErrorEnvelope(body);
+  const isBinary = wantedBinary && !isZenrowsErrorEnvelope(body);
   const result: ScraperResult = {
     status: res.status,
     body,
@@ -108,7 +109,7 @@ export async function scrape(
   };
 
   if (res.status === 401 || res.status === 403) {
-    // Distinguish ZenRows auth errors from target-site 403s. ZenRows auth
+    // Distinguish Zenrows auth errors from target-site 403s. Zenrows auth
     // failures surface AUTH00x codes in the body.
     if (/AUTH00\d|API key|apikey/i.test(body)) {
       const cause = `HTTP ${res.status}: ${zrErrorDetail(body) ?? snippet(body)}`;
@@ -118,7 +119,7 @@ export async function scrape(
         // fetch a key from a dashboard they never used.
         throw new ToolkitError({
           code: "AUTH_INVALID",
-          message: "The auto-provisioned Free plan key was rejected by the ZenRows API.",
+          message: "The auto-provisioned Free plan key was rejected by the Zenrows API.",
           likely_cause: `${cause}. The signup endpoint issued this key, but the scraping API did not accept it.`,
           next_action:
             "If you are testing against a local/staging backend, ensure `apiBase` (zenrows config) points at the same environment that issued the key. Otherwise re-provision with `zenrows signup --agent`, or claim the account: " +
@@ -126,17 +127,24 @@ export async function scrape(
           suggested_commands: ["zenrows status", "zenrows signup --agent"],
         });
       }
+      const { source } = resolveApiKey();
       throw new ToolkitError({
         code: "AUTH_INVALID",
-        message: "ZenRows rejected the API key.",
+        message: "Zenrows rejected the API key.",
         likely_cause: cause,
-        next_action: "Re-check your key in the ZenRows dashboard and log in again.",
-        suggested_commands: ["zenrows login --api-key <your-key>"],
+        next_action:
+          source === "env"
+            ? `This key came from ${ENV_KEY} in your environment. Unset it (\`unset ${ENV_KEY}\`) or replace the value, then retry — or log in with a valid key.`
+            : "Re-check your key in the Zenrows dashboard and log in again.",
+        suggested_commands:
+          source === "env"
+            ? [`unset ${ENV_KEY}`, "zenrows login --api-key <your-key>", "zenrows signup --agent"]
+            : ["zenrows login --api-key <your-key>"],
       });
     }
   }
-  if (res.status === 402 && isZenRowsErrorEnvelope(body)) {
-    // ZenRows returns 402 with a JSON error envelope (e.g. AUTH004 "reached its
+  if (res.status === 402 && isZenrowsErrorEnvelope(body)) {
+    // Zenrows returns 402 with a JSON error envelope (e.g. AUTH004 "reached its
     // usage limit" / "Subscription has no credit available") when the account is
     // out of credits. This is NOT scraped content — surface it as a credits
     // error (claim link for an unclaimed Free plan, dashboard/upgrade otherwise).
@@ -147,7 +155,7 @@ export async function scrape(
     });
   }
   if (res.status === 429) {
-    // A 429 is not always Free-plan credit exhaustion: it can also be a ZenRows
+    // A 429 is not always Free-plan credit exhaustion: it can also be a Zenrows
     // account concurrency cap or a target-site rate limit. Only nudge to
     // claim/add credits when the body indicates an actual account credit/quota
     // limit; otherwise advise a brief retry.
@@ -167,16 +175,16 @@ export async function scrape(
     });
   }
   if (isForbiddenDomain(body)) {
-    // REQS001 — ZenRows refuses this domain at the policy layer (returned as a
+    // REQS001 — Zenrows refuses this domain at the policy layer (returned as a
     // 4xx envelope). It's PERMANENT: js_render / premium_proxy / any retry will
     // fail identically, so say so rather than suggesting the generic retry.
     const detail = zrErrorDetail(body) ?? snippet(body);
     throw new ToolkitError({
       code: "DOMAIN_FORBIDDEN",
-      message: "ZenRows does not allow scraping this domain.",
-      likely_cause: `${detail}. This domain is blocked by ZenRows policy.`,
+      message: "Zenrows does not allow scraping this domain.",
+      likely_cause: `${detail}. This domain is blocked by Zenrows policy.`,
       next_action:
-        "This is a permanent policy block, not a transient failure — the same request will fail again with any parameters (--js-render, --premium-proxy, …). Use a different source, or contact ZenRows if you believe this domain should be allowed.",
+        "This is a permanent policy block, not a transient failure — the same request will fail again with any parameters (--js-render, --premium-proxy, …). Use a different source, or contact Zenrows if you believe this domain should be allowed.",
     });
   }
   if (res.status === 422 || res.status >= 500 || (res.status >= 400 && !looksLikeContent(result))) {
@@ -203,21 +211,21 @@ export async function scrape(
 
 function looksLikeContent(r: ScraperResult): boolean {
   // allowed_status_codes / original_status can legitimately return 4xx bodies
-  // (the target's real page content). But ZenRows' OWN error responses also
+  // (the target's real page content). But Zenrows' OWN error responses also
   // carry a non-empty JSON body — those are errors, not content, and must fail
   // loudly rather than be reported as a successful fetch.
-  if (isZenRowsErrorEnvelope(r.body)) return false;
+  if (isZenrowsErrorEnvelope(r.body)) return false;
   return r.body.length > 0;
 }
 
 /**
- * True when `body` is a ZenRows API error envelope (as opposed to scraped page
- * content). ZenRows errors carry a stable `code` (e.g. AUTH004, REQS002) and a
+ * True when `body` is a Zenrows API error envelope (as opposed to scraped page
+ * content). Zenrows errors carry a stable `code` (e.g. AUTH004, REQS002) and a
  * `type` pointing at the api-error-codes docs. A target site's returned body
  * (even a 4xx page) does not match this shape, so allowed_status_codes /
  * original_status content is preserved.
  */
-/** True when `body` is a ZenRows REQS001 "domain forbidden" error. */
+/** True when `body` is a Zenrows REQS001 "domain forbidden" error. */
 function isForbiddenDomain(body: string): boolean {
   try {
     const j = JSON.parse(body) as { code?: unknown };
@@ -227,7 +235,7 @@ function isForbiddenDomain(body: string): boolean {
   }
 }
 
-function isZenRowsErrorEnvelope(body: string): boolean {
+function isZenrowsErrorEnvelope(body: string): boolean {
   try {
     const j = JSON.parse(body) as { code?: unknown; type?: unknown };
     if (typeof j.code === "string" && /^[A-Z]+\d+$/.test(j.code)) return true;
@@ -253,13 +261,13 @@ function snippet(s: string): string {
 }
 
 /**
- * Extract a clean one-line detail from a ZenRows JSON error body
+ * Extract a clean one-line detail from a Zenrows JSON error body
  * (e.g. `(AUTH003) Invalid apikey provided`) instead of dumping a
  * truncated, mangled JSON string. Returns null if the body isn't the
  * expected JSON shape.
  */
 /**
- * Decide whether a 429 body indicates a ZenRows *account* credit/quota limit
+ * Decide whether a 429 body indicates a Zenrows *account* credit/quota limit
  * (out of credits) rather than a concurrency cap or a target-site rate limit.
  * Only the former warrants the "claim / add credits" nudge; concurrency and
  * target 429s are handled generically.

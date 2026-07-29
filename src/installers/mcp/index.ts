@@ -1,7 +1,7 @@
 /**
  * MCP client configuration generator.
  *
- * Confirmed from ZenRows docs:
+ * Confirmed from Zenrows docs:
  *   - Remote MCP:  https://mcp.zenrows.com/mcp
  *   - Local STDIO: npx -y @zenrows/mcp   (env: ZENROWS_API_KEY)
  *

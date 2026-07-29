@@ -29,7 +29,7 @@ export function nudgeMessage(
 ): string | null {
   if (!account.unclaimed) return null;
   if (typeof usagePercent === "number" && usagePercent >= USAGE_NUDGE_PERCENT) {
-    return `You've used ${usagePercent}% of your ZenRows Free plan — claim your account to keep your usage & history: ${account.claimUrl}`;
+    return `You've used ${usagePercent}% of your Zenrows Free plan — claim your account to keep your usage & history: ${account.claimUrl}`;
   }
   return null;
 }

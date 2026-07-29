@@ -1,6 +1,6 @@
 ---
 name: protected-fetch
-description: Use ZenRows Protected Fetch for anti-bot-protected page retrieval.
+description: Use Zenrows Protected Fetch for anti-bot-protected page retrieval.
 version: 0.1.0
 requires_backend_capabilities: [protected_fetch]
 ---
@@ -8,7 +8,7 @@ requires_backend_capabilities: [protected_fetch]
 # Protected Fetch
 
 Retrieve pages that normal fetch, generic scrapers, or naive browser tools
-cannot. This is the **core primitive** — backed by the ZenRows Universal Scraper
+cannot. This is the **core primitive** — backed by the Zenrows Universal Scraper
 API (`GET https://api.zenrows.com/v1/`).
 
 ## When to use

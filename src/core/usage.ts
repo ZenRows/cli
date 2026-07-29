@@ -1,5 +1,5 @@
 /**
- * Plan-usage client for the ZenRows Universal Scraper API.
+ * Plan-usage client for the Zenrows Universal Scraper API.
  *
  * Calls `GET {apiBase}/subscriptions/self/details` (auth via the `X-API-Key`
  * header — note: NOT the `apikey` query param the scraper uses). Per the docs,
@@ -9,6 +9,7 @@
 import { ToolkitError, quotaExhausted } from "./errors.ts";
 import { isQuotaError, zrErrorDetail } from "./http.ts";
 import { readAccount } from "./agent-account.ts";
+import { ENV_KEY, resolveApiKey } from "./auth.ts";
 import { registerSecret } from "./logger.ts";
 
 export interface UsageConcurrency {
@@ -74,7 +75,7 @@ export async function fetchUsage(
     clearTimeout(timeout);
     throw new ToolkitError({
       code: "BACKEND_UNAVAILABLE",
-      message: "Could not reach the ZenRows usage endpoint.",
+      message: "Could not reach the Zenrows usage endpoint.",
       likely_cause: err instanceof Error ? err.message : String(err),
       next_action: "Check connectivity and retry. Verify the API base with `zenrows config show`.",
       suggested_commands: ["zenrows status"],
@@ -86,10 +87,16 @@ export async function fetchUsage(
   if (res.status === 401 || res.status === 403) {
     throw new ToolkitError({
       code: "AUTH_INVALID",
-      message: "ZenRows rejected the API key for the usage request.",
+      message: "Zenrows rejected the API key for the usage request.",
       likely_cause: `HTTP ${res.status}: ${body.slice(0, 240)}`,
-      next_action: "Re-check your key and log in again.",
-      suggested_commands: ["zenrows login --api-key <your-key>"],
+      next_action:
+        resolveApiKey().source === "env"
+          ? `This key came from ${ENV_KEY} in your environment. Unset it (\`unset ${ENV_KEY}\`) or replace the value, then retry — or log in with a valid key.`
+          : "Re-check your key and log in again.",
+      suggested_commands:
+        resolveApiKey().source === "env"
+          ? [`unset ${ENV_KEY}`, "zenrows login --api-key <your-key>"]
+          : ["zenrows login --api-key <your-key>"],
     });
   }
   if (res.status === 402 || (res.status >= 400 && isQuotaError(body))) {
@@ -107,7 +114,7 @@ export async function fetchUsage(
       code: "FETCH_FAILED",
       message: `Usage request failed (HTTP ${res.status}).`,
       likely_cause: body.slice(0, 240) || "Unexpected error from the usage endpoint.",
-      next_action: "Retry, or check your usage in the ZenRows dashboard.",
+      next_action: "Retry, or check your usage in the Zenrows dashboard.",
     });
   }
   try {
@@ -117,7 +124,7 @@ export async function fetchUsage(
       code: "FETCH_FAILED",
       message: "The usage response was not valid JSON.",
       likely_cause: body.slice(0, 240),
-      next_action: "Retry, or check your usage in the ZenRows dashboard.",
+      next_action: "Retry, or check your usage in the Zenrows dashboard.",
     });
   }
 }

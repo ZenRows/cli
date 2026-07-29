@@ -15,7 +15,7 @@ import { parse, type Command, type RunContext } from "../command.ts";
 
 export const signup: Command = {
   name: "signup",
-  summary: "Create a ZenRows account / obtain an API key (opens the browser).",
+  summary: "Create a Zenrows account / obtain an API key (opens the browser).",
   usage: "zenrows signup [--agent] [--no-open]",
   async run(argv: string[], ctx: RunContext): Promise<number> {
     const { values } = parse(argv, { "no-open": { type: "boolean" }, agent: { type: "boolean" } });
@@ -26,13 +26,13 @@ export const signup: Command = {
       const res = await signupAgent();
       saveApiKey(res.apiKey);
       writeAccount({ accountId: res.accountId, unclaimed: true, claimUrl: res.claimUrl, createdAt: new Date().toISOString() });
-      log.success("Created a ZenRows Free plan account.");
+      log.success("Created a Zenrows Free plan account.");
       log.dim(`Claim it anytime: ${res.claimUrl}`);
       if (ctx.json) log.out(JSON.stringify({ ok: true, accountId: res.accountId, claimUrl: res.claimUrl }, null, 2));
       return 0;
     }
 
-    log.info("To use the toolkit you need a ZenRows account and an API key.");
+    log.info("To use the toolkit you need a Zenrows account and an API key.");
     log.info("1. Create a free account.");
     log.info("2. Copy your API key from the dashboard.");
     log.info("3. Run: zenrows login --api-key <your-key>");

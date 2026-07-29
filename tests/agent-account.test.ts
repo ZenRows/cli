@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tempRoot } from "./helpers.ts";
 import { createWorkspace } from "../src/core/workspace.ts";
-import { readAccount, writeAccount, signupAgent, resolveSignupUrl, SIGNUP_URL_ENV, DISCOVERY_URL_ENV, resolveAccountUrl, fetchAccountStatus, _resetDiscoveryCache } from "../src/core/agent-account.ts";
+import { readAccount, writeAccount, clearAccount, signupAgent, resolveSignupUrl, SIGNUP_URL_ENV, DISCOVERY_URL_ENV, resolveAccountUrl, fetchAccountStatus, _resetDiscoveryCache } from "../src/core/agent-account.ts";
 import { saveConfig } from "../src/core/config.ts";
 import { AGENT_SIGNUP_API_URL } from "../src/core/open-url.ts";
 import { ToolkitError } from "../src/core/errors.ts";
@@ -20,6 +20,19 @@ test("account.json round-trips", () => {
   }
 });
 
+test("clearAccount removes account.json", () => {
+  const { root, cleanup } = tempRoot();
+  try {
+    createWorkspace(root);
+    writeAccount({ accountId: "u1", unclaimed: true, claimUrl: "https://x/claim/t", createdAt: "2026-07-10T00:00:00Z" }, root);
+    assert.equal(clearAccount(root), true);
+    assert.equal(readAccount(root), null);
+    assert.equal(clearAccount(root), false);
+  } finally {
+    cleanup();
+  }
+});
+
 test("signupAgent parses a 201 response and sends provenance headers", async () => {
   let sentHeaders: Record<string, string> = {};
   const fakeFetch = (async (_url: string, init?: RequestInit) => {
@@ -32,7 +45,7 @@ test("signupAgent parses a 201 response and sends provenance headers", async () 
   assert.equal(res.apiKey, "zr-key");
   assert.equal(res.accountId, "u1");
   assert.equal(res.claimUrl, "https://x/claim/t");
-  // Anonymous provenance headers (shared contract with the ZenRows signup API).
+  // Anonymous provenance headers (shared contract with the Zenrows signup API).
   assert.ok(sentHeaders["X-ZR-Agent-Id"] && sentHeaders["X-ZR-Agent-Id"].length > 0);
   assert.equal(sentHeaders["X-ZR-Source"], "cli");
   assert.ok(typeof sentHeaders["X-ZR-Client"] === "string");

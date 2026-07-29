@@ -1,7 +1,7 @@
 # batch-jsonl-pipeline
 
 Scaffold for a high-scale workload expressed as a JSONL job spec, run on the
-ZenRows **Batch Scraper API**. One JSON object per line, each with a `url` (plus
+Zenrows **Batch Scraper API**. One JSON object per line, each with a `url` (plus
 optional per-line overrides like `js_render`, `premium_proxy`, `proxy_country`,
 `mode`, `autoparse`, and an `external_id` echoed back on each result).
 

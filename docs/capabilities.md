@@ -14,14 +14,14 @@ the single source of truth that prevents hallucinated execution.
 
 ## How each primitive was classified
 
-Classification is based on the public ZenRows documentation:
+Classification is based on the public Zenrows documentation:
 
 | Capability | Backend evidence | Status |
 | --- | --- | --- |
 | `protected_fetch` | Universal Scraper API `GET https://api.zenrows.com/v1/` with `mode`, `js_render`, `premium_proxy`, `proxy_country`, `wait`/`wait_for`, `js_instructions`, `response_type`, `screenshot`, `original_status`, … | available |
 | `extract` | Same `/v1/` endpoint via `autoparse`, `css_extractor`, `response_type=markdown\|plaintext` | available |
-| `batch` | ZenRows Batch Scraper API `https://async.api.zenrows.com/v1` (separate host, `X-API-Key` header) — real product in beta. Cloud subcommands (create/status/results/cancel/wait/retry-failed) work WITH beta access; without it the API returns 403 → `BATCH_ACCESS_DENIED`. Local JSONL spec validation + credit estimation work with no key. | beta |
-| `browser` | ZenRows Scraping Browser (CDP) + `@zenrows/mcp` `browser_*` tools; no managed REST sessions API | experimental |
+| `batch` | Zenrows Batch Scraper API `https://async.api.zenrows.com/v1` (separate host, `X-API-Key` header) — real product in beta. Cloud subcommands (create/status/results/cancel/wait/retry-failed) work WITH beta access; without it the API returns 403 → `BATCH_ACCESS_DENIED`. Local JSONL spec validation + credit estimation work with no key. | beta |
+| `browser` | Zenrows Scraping Browser (CDP) + `@zenrows/mcp` `browser_*` tools; no managed REST sessions API | experimental |
 | `mcp` | Hosted `https://mcp.zenrows.com/mcp` + local `npx -y @zenrows/mcp` | available |
 
 ## Important honesty note

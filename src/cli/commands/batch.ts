@@ -18,7 +18,7 @@ import { printError, writeOut } from "../output.ts";
 
 export const batch: Command = {
   name: "batch",
-  summary: "Run JSONL batch jobs on the ZenRows Batch Scraper API (beta).",
+  summary: "Run JSONL batch jobs on the Zenrows Batch Scraper API (beta).",
   usage: "zenrows batch <estimate|create <file.jsonl>|status <id>|results <id>|cancel <id>|wait <id>|retry-failed <id>>",
   help: [
     "Local (no key):",

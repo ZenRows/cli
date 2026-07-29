@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in improving the ZenRows CLI!
+Thanks for your interest in improving the Zenrows CLI!
 
 The full contributor guide — project layout, how to add capabilities, skills,
 templates, workflows, and how to run the tests — lives in

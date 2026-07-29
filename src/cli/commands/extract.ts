@@ -107,7 +107,7 @@ export const extract: Command = {
       values["no-signup"] ? { ...policy, auto_signup: false } : policy,
       {
         onProvision: (a) => {
-          log.info("No API key found — created a ZenRows Free plan account for you.");
+          log.info("No API key found — created a Zenrows Free plan account for you.");
           log.dim(`Claim it anytime (keeps your usage): ${a.claimUrl}`);
         },
       },

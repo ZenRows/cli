@@ -1,7 +1,7 @@
 /**
- * Shared types for the ZenRows CLI.
+ * Shared types for the Zenrows CLI.
  *
- * The toolkit is the open-source adoption / distribution layer for the ZenRows
+ * The toolkit is the open-source adoption / distribution layer for the Zenrows
  * protected web data platform. These types model the local workspace, the
  * capability matrix, and the installable asset registry — not the cloud
  * infrastructure itself.
@@ -55,7 +55,7 @@ export interface RegistryAsset {
 }
 
 export interface ToolkitConfig {
-  /** ZenRows REST API base, confirmed: https://api.zenrows.com/v1/ */
+  /** Zenrows REST API base, confirmed: https://api.zenrows.com/v1/ */
   apiBase: string;
   /** Default fetch mode. "auto" = Adaptive Stealth Mode. */
   defaultMode: "auto" | "manual";
@@ -99,7 +99,7 @@ export interface Policy {
   blocked_domains: string[];
   redact_secrets: boolean;
   telemetry: "anonymous" | "off";
-  /** Auto-create an unclaimed ZenRows account on first cloud call when no key exists. */
+  /** Auto-create an unclaimed Zenrows account on first cloud call when no key exists. */
   auto_signup: boolean;
 }
 
@@ -116,7 +116,7 @@ export interface AgentAccount {
 }
 
 export interface Secrets {
-  /** ZenRows API key. Never written to run artifacts or printed. */
+  /** Zenrows API key. Never written to run artifacts or printed. */
   apiKey?: string;
 }
 

@@ -41,6 +41,15 @@ test("fetchUsage throws AUTH_INVALID on 401", async () => {
   );
 });
 
+test("formatPlanName maps Trial → Free", async () => {
+  const { formatPlanName, formatPlanStatus } = await import("../src/cli/commands/usage.ts");
+  assert.equal(formatPlanName("Trial"), "Free");
+  assert.equal(formatPlanName("TRIAL"), "Free");
+  assert.equal(formatPlanName("Build"), "Build");
+  assert.equal(formatPlanStatus("TRIALING"), "active");
+  assert.equal(formatPlanStatus("active"), "active");
+});
+
 test("fetchUsage maps a 402 (over usage limit) to POLICY_MAX_CREDITS_EXCEEDED", async () => {
   const fakeFetch = (async () =>
     new Response(
