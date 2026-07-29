@@ -13,7 +13,7 @@ export const CONFIG_VERSION = "0.1.0";
  * entrypoint) so core modules — telemetry, signup provenance — can read it
  * without an import cycle. `VERSION` in `cli/index.ts` re-exports this.
  */
-export const CLI_VERSION = "0.1.2";
+export const CLI_VERSION = "0.1.3";
 /** Env var to override the Universal Scraper API base (local/staging testing). */
 export const API_BASE_ENV = "ZENROWS_API_BASE";
 /**
