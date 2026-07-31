@@ -1,23 +1,23 @@
 {
-  "$comment": "Honest capability matrix derived from confirmed Zenrows docs. Every command checks status here before attempting a cloud call. 'available' = a documented endpoint exists today; 'planned' = no documented endpoint yet (local spec / unavailable behavior only); 'experimental' = exists but gated behind policy.",
+  "$comment": "Capability matrix for the Zenrows CLI. Every command consults this file before attempting a cloud call, so the CLI never fakes behavior for primitives the backend does not expose. Status values and classification rationale live in docs/capabilities.md; entries must stay in sync with the Capability type in src/types/index.ts.",
   "capabilities": {
     "protected_fetch": {
       "key": "protected_fetch",
       "label": "Protected Fetch",
       "status": "available",
       "command": "zenrows fetch",
-      "backend": "GET https://api.zenrows.com/v1/",
+      "backend": "Fetch — GET https://api.zenrows.com/v1/",
       "requiresAuth": true,
-      "notes": "Fetch and Extract. Confirmed params: mode=auto (Adaptive Stealth), js_render, premium_proxy, proxy_country, wait, wait_for, js_instructions, custom_headers, session_id, original_status, allowed_status_codes, block_resources, response_type, screenshot."
+      "notes": "Supported params: mode=auto (Adaptive Stealth), js_render, premium_proxy, proxy_country, wait, wait_for, js_instructions, custom_headers, session_id, original_status, allowed_status_codes, block_resources, response_type, screenshot."
     },
     "extract": {
       "key": "extract",
       "label": "Extract (Autoparse / CSS / Markdown)",
-      "status": "available",
+      "status": "beta",
       "command": "zenrows extract",
-      "backend": "GET https://api.zenrows.com/v1/ (autoparse, css_extractor, response_type)",
+      "backend": "Extract — GET https://api.zenrows.com/v1/ (autoparse, css_extractor, response_type)",
       "requiresAuth": true,
-      "notes": "Structured extraction runs on the same /v1/ endpoint via autoparse=true, css_extractor, and response_type=markdown|plaintext. There is no separate /extract endpoint."
+      "notes": "Structured extraction on the Extract /v1/ endpoint via extract=auto, css_extractor, and response_type=markdown|plaintext."
     },
     "batch": {
       "key": "batch",
@@ -26,25 +26,25 @@
       "command": "zenrows batch",
       "backend": "Batch — https://async.api.zenrows.com/v1 (X-API-Key header; separate host from the Fetch/Extract /v1/)",
       "requiresAuth": true,
-      "notes": "The Zenrows Batch is a real product in beta. The cloud subcommands (create/status/results/cancel/wait/retry-failed) work WITH beta access; without it the API returns 403 → BATCH_ACCESS_DENIED. Local value always works with no key: `zenrows batch estimate` validates JSONL job specs and estimates credit cost."
+      "notes": "Batch is in beta. The cloud subcommands (create/status/results/cancel/wait/retry-failed) require beta access; without it the API returns 403 (BATCH_ACCESS_DENIED). `zenrows batch estimate` works locally with no API key: it validates JSONL job specs and estimates credit cost."
     },
     "browser": {
       "key": "browser",
       "label": "Browser Sessions",
-      "status": "experimental",
+      "status": "available",
       "command": "zenrows browser",
       "backend": "Browser Sessions (CDP) + @zenrows/mcp browser tools",
       "requiresAuth": true,
-      "notes": "Zenrows Browser Sessions and the @zenrows/mcp browser_* tools exist. There is no managed REST 'sessions' API in the public docs, so this is gated as experimental and escalation-only (policy.allow_browser=false by default)."
+      "notes": "Browser Sessions (CDP) and the @zenrows/mcp browser_* tools exist, but there is no managed REST sessions API in the public docs. Gated behind policy.allow_browser (off by default) and intended as an escalation path only."
     },
     "mcp": {
       "key": "mcp",
       "label": "MCP",
       "status": "available",
       "command": "zenrows mcp",
-      "backend": "remote https://mcp.zenrows.com/mcp + local npx -y @zenrows/mcp",
+      "backend": "Remote https://mcp.zenrows.com/mcp + local `npx -y @zenrows/mcp`",
       "requiresAuth": true,
-      "notes": "Both a hosted remote MCP server and a local STDIO server (@zenrows/mcp, ZENROWS_API_KEY env) are documented."
+      "notes": "Hosted remote MCP server plus a local STDIO server (`npx -y @zenrows/mcp`, authenticated via the ZENROWS_API_KEY environment variable)."
     }
   }
 }
