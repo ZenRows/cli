@@ -1,5 +1,5 @@
 /**
- * Minimal HTTP client for the Zenrows Universal Scraper API (`/v1/`).
+ * Minimal HTTP client for the Zenrows Fetch and Extract API (`/v1/`).
  *
  * Uses the global `fetch` (Node 18+). The API key is sent as the `apikey`
  * query parameter (per docs) and is registered as a secret so it is redacted
@@ -54,7 +54,7 @@ function buildUrl(apiBase: string, apiKey: string, params: ScraperParams): { ful
   return { full, redacted: redactedUrl.toString() };
 }
 
-/** Perform a Universal Scraper API request. Throws ToolkitError on failure. */
+/** Perform a Fetch and Extract API request. Throws ToolkitError on failure. */
 export async function scrape(
   apiBase: string,
   apiKey: string,

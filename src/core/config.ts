@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import type { ToolkitConfig } from "../types/index.ts";
 import { findWorkspace, readJson, workspacePaths, writeJson } from "./workspace.ts";
 
-/** Confirmed Zenrows Universal Scraper API base. */
+/** Confirmed Zenrows Fetch and Extract API base. */
 export const DEFAULT_API_BASE = "https://api.zenrows.com/v1/";
 export const CONFIG_VERSION = "0.1.0";
 /**
@@ -14,7 +14,7 @@ export const CONFIG_VERSION = "0.1.0";
  * without an import cycle. `VERSION` in `cli/index.ts` re-exports this.
  */
 export const CLI_VERSION = "1.0.0";
-/** Env var to override the Universal Scraper API base (local/staging testing). */
+/** Env var to override the Fetch and Extract API base (local/staging testing). */
 export const API_BASE_ENV = "ZENROWS_API_BASE";
 /**
  * Env var to opt out of anonymous attribution. The toolkit never POSTs to a

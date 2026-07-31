@@ -9,7 +9,7 @@ requires_backend_capabilities: []
 
 Prefer the **cheapest reliable** configuration; escalate only with evidence.
 
-## Cost multipliers (Universal Scraper API)
+## Cost multipliers (Fetch and Extract)
 - Basic request: **1×**
 - JS rendering (`js_render`): **5×**
 - Premium proxies (`premium_proxy`): **10×**

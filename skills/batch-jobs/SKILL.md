@@ -1,6 +1,6 @@
 ---
 name: batch-jobs
-description: Scale protected fetch/extract over many URLs via the Batch Scraper API (beta). Cloud create/status/results/cancel/wait/retry-failed work with beta access; estimate/validate run locally with no key.
+description: Scale protected fetch/extract over many URLs via Batch (beta). Cloud create/status/results/cancel/wait/retry-failed work with beta access; estimate/validate run locally with no key.
 version: 0.1.0
 requires_backend_capabilities: [batch]
 ---
@@ -11,7 +11,7 @@ Process large workloads reliably and asynchronously. Batch is where Zenrows'
 high-scale anti-bot advantage becomes obvious — Zenrows wins when the workflow
 runs over thousands, millions, or recurring sets of URLs.
 
-> Status: **beta**. The Zenrows Batch Scraper API is a real
+> Status: **beta**. The Zenrows **Batch** is a real
 > product in beta and runs on a separate host
 > (`async.api.zenrows.com/v1`). The cloud subcommands work once your account has
 > beta access; without it the API returns 403 → `BATCH_ACCESS_DENIED`. The

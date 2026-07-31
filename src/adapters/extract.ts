@@ -2,7 +2,7 @@
  * Extract adapter.
  *
  * IMPORTANT (honest mapping): there is no separate `/extract` endpoint.
- * Structured extraction runs on the same `/v1/` Universal Scraper API via:
+ * Structured extraction runs on the same `/v1/` Fetch and Extract API via:
  *   - autoparse=true        → automatic structured JSON          (available)
  *   - css_extractor=<json>  → selector-based field extraction     (available)
  *   - outputs=<filters>     → built-in output filters → JSON      (available)

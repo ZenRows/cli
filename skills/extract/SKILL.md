@@ -11,7 +11,7 @@ Convert protected pages into structured data. The value is **protected page
 access + extraction**, not generic LLM parsing.
 
 > Honest note: there is no separate `/extract` endpoint. Extraction runs on the
-> same Universal Scraper API (`/v1/`) via `autoparse`, `css_extractor`, and
+> same Fetch and Extract API (`/v1/`) via `autoparse`, `css_extractor`, and
 > `response_type`.
 
 ## Methods (available today)

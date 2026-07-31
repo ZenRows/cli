@@ -8,8 +8,8 @@ requires_backend_capabilities: [protected_fetch]
 # Protected Fetch
 
 Retrieve pages that normal fetch, generic scrapers, or naive browser tools
-cannot. This is the **core primitive** — backed by the Zenrows Universal Scraper
-API (`GET https://api.zenrows.com/v1/`).
+cannot. This is the **core primitive** — backed by Zenrows **Fetch**
+(`GET https://api.zenrows.com/v1/`).
 
 ## When to use
 - You have a known URL and want its content (HTML, Markdown, text, or a PDF).

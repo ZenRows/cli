@@ -4,8 +4,8 @@
 workflows, recipes, and evals layer for giving AI agents reliable access to
 protected web data through Zenrows cloud infrastructure.**
 
-It makes the Zenrows Universal Scraper API, Scraping Browser, and Residential
-Proxies installable and usable directly from AI agents and developer workflows —
+It makes the four Zenrows primitives — Fetch, Extract, Batch, and Browser
+Sessions — installable and usable directly from AI agents and developer workflows —
 so an agent can reliably access protected web data without hand-rolling anti-bot
 handling, proxies, or browser rendering.
 
@@ -21,14 +21,14 @@ through AI agents, developers, and teams.
 ## 2. Why Zenrows
 
 Normal fetch fails. Generic scrapers fail. Browser-first tools are expensive.
-The Zenrows **Universal Scraper API** retrieves protected pages reliably and
-structures them, while the **Scraping Browser** is there for the rare cases that
+Zenrows **Fetch** retrieves protected pages reliably and **Extract** structures
+them, while **Browser Sessions** are there for the rare cases that
 need a real browser. Zenrows wins when the workflow runs over thousands or
 millions of URLs.
 
 ## 3. Product architecture
 
-The core product is the Zenrows **Universal Scraper API**
+The core product is Zenrows **Fetch and Extract**
 (`GET https://api.zenrows.com/v1/`). The CLI exposes it two ways: `zenrows fetch`
 retrieves a protected page, and `zenrows extract` turns it into structured data
 (JSON / CSS / Markdown). Both call the same endpoint — `extract` is just
@@ -36,10 +36,10 @@ that endpoint with extraction parameters, not a separate product.
 
 | Command | What it does | Status (this build) |
 | --- | --- | --- |
-| `zenrows fetch` | Universal Scraper API — retrieve a protected page | **available** — `GET https://api.zenrows.com/v1/` |
-| `zenrows extract` | Universal Scraper API — structured extraction (Autoparse / CSS / Markdown) | **available** — same `/v1/` |
-| `zenrows batch` | Batch Scraper API — fan out over many URLs | beta — cloud works with beta access; local validate/estimate always |
-| `zenrows browser` | Scraping Browser (CDP) / MCP escalation | experimental |
+| `zenrows fetch` | Fetch — retrieve a protected page | **available** — `GET https://api.zenrows.com/v1/` |
+| `zenrows extract` | Extract — structured extraction (Autoparse / CSS / Markdown) | **available** — same `/v1/` |
+| `zenrows batch` | Batch — fan out over many URLs | beta — cloud works with beta access; local validate/estimate always |
+| `zenrows browser` | Browser Sessions (CDP) / MCP escalation | experimental |
 | `zenrows mcp` | MCP server config (remote + local) | **available** |
 | Zenrows CLI | this repo | available |
 
@@ -117,7 +117,7 @@ zenrows extract <url> --output markdown
 
 ## 9. Batch (beta)
 
-The Zenrows **Batch Scraper API** (`https://async.api.zenrows.com/v1`) fans a
+Zenrows **Batch** (`https://async.api.zenrows.com/v1`) fans a
 protected fetch/extract out over many URLs. It is a real product in
 **beta**: the cloud subcommands work once your API key has
 beta access; without it the API returns `BATCH_ACCESS_DENIED`. Local spec
@@ -138,8 +138,8 @@ locally or fan out with `zenrows fetch` per URL.
 
 ## 10. Browser Sessions
 
-Escalation only, gated by `policy.allow_browser`. Backed by the Zenrows Scraping
-Browser (CDP) and the `@zenrows/mcp` `browser_*` tools.
+Escalation only, gated by `policy.allow_browser`. Backed by Zenrows Browser
+Sessions (CDP) and the `@zenrows/mcp` `browser_*` tools.
 
 ## 11. MCP
 

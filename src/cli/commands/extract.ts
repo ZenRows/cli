@@ -1,8 +1,8 @@
 /**
- * `zenrows extract <url> [flags]` → Extract on the Universal Scraper API.
+ * `zenrows extract <url> [flags]` → Extract (structured extraction on `/v1/`).
  *
  * Deterministic methods (available today): --autoparse (default), --css <json>,
- * --output markdown|text. All run on the same /v1/ Universal Scraper API.
+ * --output markdown|text. All run on the same /v1/ Fetch and Extract API.
  */
 import { ensureApiKey } from "../../core/ensure-key.ts";
 import { maybeNudgeClaim } from "../../core/nudge.ts";
@@ -173,7 +173,7 @@ export const extract: Command = {
   },
 };
 
-/** Universal Scraper API `outputs` filters (docs.zenrows.com output-filters). */
+/** Fetch and Extract `outputs` filters (docs.zenrows.com output-filters). */
 const OUTPUT_FILTERS = [
   "emails",
   "phone_numbers",

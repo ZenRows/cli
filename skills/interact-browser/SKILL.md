@@ -14,7 +14,7 @@ or Extract is insufficient.
 
 > Status: **experimental**, gated behind `policy.allow_browser` (default false).
 > There is no managed REST "sessions" API; browser workflows run through the
-> Zenrows **Scraping Browser** (CDP — connect Playwright/Puppeteer) and the
+> Zenrows **Browser Sessions** (CDP — connect Playwright/Puppeteer) and the
 > `@zenrows/mcp` `browser_*` tools (navigate, click, fill, screenshot, …).
 
 ## Rules

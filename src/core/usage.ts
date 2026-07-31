@@ -1,5 +1,5 @@
 /**
- * Plan-usage client for the Zenrows Universal Scraper API.
+ * Plan-usage client for the Zenrows Fetch and Extract API.
  *
  * Calls `GET {apiBase}/subscriptions/self/details` (auth via the `X-API-Key`
  * header — note: NOT the `apikey` query param the scraper uses). Per the docs,

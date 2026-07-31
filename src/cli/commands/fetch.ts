@@ -1,5 +1,5 @@
 /**
- * `zenrows fetch <url> [flags]` → Protected Fetch (Universal Scraper API).
+ * `zenrows fetch <url> [flags]` → Protected Fetch.
  *
  * Defaults to Adaptive Stealth Mode (mode=auto). `--manual` switches to manual
  * control. Writes a secret-free run artifact under .zenrows/runs/.
@@ -18,7 +18,7 @@ import { printError, writeOut } from "../output.ts";
 
 export const fetch_: Command = {
   name: "fetch",
-  summary: "Retrieve a protected page (Protected Fetch / Universal Scraper API).",
+  summary: "Retrieve a protected page (Fetch).",
   usage: "zenrows fetch <url> [--manual] [--js-render] [--premium-proxy] [--output md|text|html] [flags]",
   help: [
     "Flags:",

@@ -36,7 +36,7 @@
     {
       "name": "batch-jobs",
       "type": "skill",
-      "description": "Scale protected fetch/extract over many URLs with the Batch Scraper API (beta): submit/track/collect jobs with beta access; validate + estimate specs locally with no key.",
+      "description": "Scale protected fetch/extract over many URLs with Batch (beta): submit/track/collect jobs with beta access; validate + estimate specs locally with no key.",
       "status": "beta",
       "requires_backend_capabilities": ["batch"],
       "requires_auth": true,
@@ -47,7 +47,7 @@
     {
       "name": "interact-browser",
       "type": "skill",
-      "description": "Escalate to a browser (Scraping Browser / MCP) only when fetch/extract cannot do the job.",
+      "description": "Escalate to a browser (Browser Sessions / MCP) only when fetch/extract cannot do the job.",
       "status": "experimental",
       "requires_backend_capabilities": ["browser"],
       "requires_auth": true,

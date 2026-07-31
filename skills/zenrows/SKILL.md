@@ -66,14 +66,14 @@ Run `zenrows status` for the live capability matrix. As of this toolkit:
 | Protected Fetch | `zenrows fetch` | available (`GET /v1/`) |
 | Extract (Autoparse/CSS/Markdown) | `zenrows extract` | available (same `/v1/`) |
 | Batch | `zenrows batch` | beta (validate specs locally) |
-| Browser | `zenrows browser` | experimental (Scraping Browser / MCP) |
+| Browser | `zenrows browser` | experimental (Browser Sessions / MCP) |
 | MCP | `zenrows mcp` | available (remote + local server) |
 
-Protected Fetch and Extract are the same Universal Scraper API used two ways.
+Protected Fetch and Extract are the same API (`GET /v1/`) used two ways.
 The command consults the capability matrix before any cloud call — it never
 fakes success.
 
-## Cost model (Universal Scraper API)
+## Cost model (Fetch and Extract)
 
 Relative multipliers: basic **1×**, JS rendering **5×**, premium proxies **10×**,
 both **25×**. `mode=auto` charges only for the configuration that succeeds.

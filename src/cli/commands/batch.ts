@@ -1,5 +1,5 @@
 /**
- * `zenrows batch` — Batch Scraper API (status: beta).
+ * `zenrows batch` — Batch API (status: beta).
  *
  * Local (no key, always works): `estimate`/`create --dry-run`-style spec
  * validation + credit estimate. Cloud (needs a key + Batch beta access):
@@ -18,7 +18,7 @@ import { printError, writeOut } from "../output.ts";
 
 export const batch: Command = {
   name: "batch",
-  summary: "Run JSONL batch jobs on the Zenrows Batch Scraper API (beta).",
+  summary: "Run JSONL batch jobs on Zenrows Batch (beta).",
   usage: "zenrows batch <estimate|create <file.jsonl>|status <id>|results <id>|cancel <id>|wait <id>|retry-failed <id>>",
   help: [
     "Local (no key):",
