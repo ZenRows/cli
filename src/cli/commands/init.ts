@@ -18,6 +18,7 @@ import { createWorkspace } from "../../core/workspace.ts";
 import { installAsset, loadRegistry } from "../../core/registry.ts";
 import { buildMcpConfig, MCP_CLIENTS } from "../../installers/mcp/index.ts";
 import { runFetch } from "../../adapters/protected-fetch.ts";
+import { formatRequestCost } from "../../core/http.ts";
 import { loadCapabilities } from "../../core/capabilities.ts";
 import type { AssetType } from "../../types/index.ts";
 import { parse, asString, type Command, type RunContext } from "../command.ts";
@@ -131,7 +132,7 @@ export const init: Command = {
         try {
           const apiKey = requireApiKey(root);
           const { result } = await runFetch({ url: SMOKE_URL }, loadConfig(root), loadPolicy(root), apiKey);
-          log.success(`Protected Fetch OK — HTTP ${result.status}, ${result.body.length} bytes, cost $${(result.costUsd ?? 0).toFixed(4)}.`);
+          log.success(`Protected Fetch OK — HTTP ${result.status}, ${result.body.length} bytes, ${formatRequestCost(result.costUsd, result.costCredits)}.`);
         } catch (err) {
           log.warn(`Test fetch did not pass: ${err instanceof Error ? err.message : String(err)}`);
           log.dim("This is non-fatal for init. Check `zenrows status --check`.");
@@ -145,6 +146,7 @@ export const init: Command = {
     section("Next steps");
     log.info("  zenrows status                 # verify everything");
     log.info("  zenrows fetch <url>            # Protected Fetch (auto mode)");
+    log.info("  zenrows extract <url>");
     log.info("  zenrows extract <url> --autoparse");
     log.info("  zenrows mcp config --client claude-code");
     log.info("  zenrows skill list");

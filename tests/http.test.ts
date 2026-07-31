@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { scrape } from "../src/core/http.ts";
+import { scrape, formatRequestCost } from "../src/core/http.ts";
 import { CLI_VERSION } from "../src/core/config.ts";
 
 // The exact shape Zenrows returns when an account is out of credits / over its
@@ -70,6 +70,31 @@ test("scrape marks ordinary text responses as non-binary", async () => {
   );
 });
 
+test("scrape parses X-Request-Cost and X-Request-Credits headers", async () => {
+  await withFetch(
+    () =>
+      new Response("<html>ok</html>", {
+        status: 200,
+        headers: {
+          "content-type": "text/html",
+          "x-request-cost": "0.0018125",
+          "x-request-credits": "5",
+        },
+      }),
+    async () => {
+      const r = await scrape("https://api.zenrows.com/v1/", "k", { url: "https://x" });
+      assert.equal(r.costUsd, 0.0018125);
+      assert.equal(r.costCredits, 5);
+    },
+  );
+});
+
+test("formatRequestCost includes credits when present", () => {
+  assert.equal(formatRequestCost(0.0004, 1), "cost $0.0004 · 1 credit");
+  assert.equal(formatRequestCost(0.0091, 25), "cost $0.0091 · 25 credits");
+  assert.equal(formatRequestCost(0.0004, null), "cost $0.0004");
+});
+
 test("scrape sends a User-Agent carrying the current CLI version", async () => {
   let seenUA: string | undefined;
   const orig = globalThis.fetch;
@@ -83,6 +108,58 @@ test("scrape sends a User-Agent carrying the current CLI version", async () => {
     globalThis.fetch = orig;
   }
   assert.equal(seenUA, `zenrows-cli/${CLI_VERSION}`);
+});
+
+test("scrape maps AUTH010 on extract=auto to EXTRACT_DOMAIN_NOT_ENABLED", async () => {
+  const AUTH010 = JSON.stringify({
+    code: "AUTH010",
+    detail: "This domain is not enabled for Extract.",
+    status: 402,
+    title: "Feature is not included in plan (AUTH010)",
+    type: "https://docs.zenrows.com/api-error-codes#AUTH010",
+  });
+  await withFetch(
+    () => new Response(AUTH010, { status: 402, headers: { "content-type": "application/json" } }),
+    async () => {
+      await assert.rejects(
+        () =>
+          scrape("https://api.zenrows.com/v1/", "test-key", {
+            url: "https://example.net",
+            extract: "auto",
+          }),
+        (err: unknown) => {
+          assert.ok(err && typeof err === "object" && "code" in err);
+          assert.equal((err as { code: string }).code, "EXTRACT_DOMAIN_NOT_ENABLED");
+          return true;
+        },
+      );
+    },
+  );
+});
+
+test("scrape treats AUTH010 without extract as a credits/plan error, not EXTRACT_DOMAIN", async () => {
+  // AUTH010 is also used for other plan-gated features; only map it to
+  // EXTRACT_DOMAIN_NOT_ENABLED when the request asked for extract=auto.
+  const AUTH010 = JSON.stringify({
+    code: "AUTH010",
+    detail: "Feature is not included in plan.",
+    status: 402,
+    title: "Feature is not included in plan (AUTH010)",
+    type: "https://docs.zenrows.com/api-error-codes#AUTH010",
+  });
+  await withFetch(
+    () => new Response(AUTH010, { status: 402, headers: { "content-type": "application/json" } }),
+    async () => {
+      await assert.rejects(
+        () => scrape("https://api.zenrows.com/v1/", "test-key", { url: "https://example.net" }),
+        (err: unknown) => {
+          assert.ok(err && typeof err === "object" && "code" in err);
+          assert.equal((err as { code: string }).code, "POLICY_MAX_CREDITS_EXCEEDED");
+          return true;
+        },
+      );
+    },
+  );
 });
 
 test("scrape treats a 402 credit/quota response as an error, not success", async () => {

@@ -1,9 +1,9 @@
 # Eval: extract-smoke
 
-Reproducible smoke test for Extract (Autoparse).
+Reproducible smoke test for Extract (`extract=auto`).
 
-- **Target:** `https://www.scrapingcourse.com/ecommerce/` (public scraping demo)
-- **Config:** `autoparse=true`
+- **Target:** `https://www.owler.com/company/meltwater` (enabled domain, real company page)
+- **Config:** `extract=auto`
 - **Success criteria:** HTTP 2xx and a non-empty body
 - **Cost:** ~1× basic request
 

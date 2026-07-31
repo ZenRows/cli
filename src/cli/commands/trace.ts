@@ -21,6 +21,7 @@ interface RunRecord {
   result?: Record<string, unknown>;
   error?: { code?: string; message?: string; likely_cause?: string; next_action?: string; suggested_commands?: string[] };
   costUsd?: number | null;
+  costCredits?: number | null;
 }
 
 export const trace: Command = {
@@ -107,7 +108,7 @@ function explain(rec: RunRecord, ctx: RunContext): number {
   log.info(c(ANSI.bold, `Trace explain · ${rec.runId}`));
   log.info(`what happened:   ${what}`);
   log.info(`failure reason:  ${reason}`);
-  log.info(`evidence:        status=${rec.status} cost=$${(rec.costUsd ?? 0).toFixed(4)} cap=${rec.capability}`);
+  log.info(`evidence:        status=${rec.status} cost=$${(rec.costUsd ?? 0).toFixed(4)}${rec.costCredits != null ? ` · ${rec.costCredits} credit${rec.costCredits === 1 ? "" : "s"}` : ""} cap=${rec.capability}`);
   log.info(`next action:     ${nextAction}`);
   log.info("suggested:");
   suggested.forEach((s) => process.stderr.write("  " + c(ANSI.cyan, "$ " + s) + "\n"));

@@ -1,8 +1,9 @@
 /**
  * `zenrows extract <url> [flags]` → Extract (structured extraction on `/v1/`).
  *
- * Deterministic methods (available today): --autoparse (default), --css <json>,
- * --output markdown|text. All run on the same /v1/ Fetch and Extract API.
+ * Default: `extract=auto` (site-tailored Extract, open beta). If the domain is
+ * not enabled (AUTH010), falls back once to Autoparse. Opt into Autoparse
+ * directly with `--autoparse`. Other methods: `--css`, `--outputs`, `--output`.
  */
 import { ensureApiKey } from "../../core/ensure-key.ts";
 import { maybeNudgeClaim } from "../../core/nudge.ts";
@@ -13,16 +14,18 @@ import { log } from "../../core/logger.ts";
 import { newRunId, writeRun } from "../../core/artifacts.ts";
 import { ToolkitError } from "../../core/errors.ts";
 import { runExtract, type ExtractMethod, type ExtractOptions } from "../../adapters/extract.ts";
+import { formatRequestCost } from "../../core/http.ts";
 import { parse, asString, asNumber, type Command, type RunContext } from "../command.ts";
 import { printError, writeOut } from "../output.ts";
 
 export const extract: Command = {
   name: "extract",
-  summary: "Turn a protected page into structured data (Autoparse / CSS / Markdown).",
+  summary: "Turn a protected page into structured data (Extract / Autoparse / CSS / Markdown).",
   usage: "zenrows extract <url> [--autoparse | --css <json> | --outputs <filters> | --output md|text] [flags]",
   help: [
-    "Methods (available today, on /v1/):",
-    "  --autoparse            automatic structured JSON (default)",
+    "Methods:",
+    "  (default)              extract=auto — site-tailored Extract (open beta); falls back to Autoparse if the domain is not enabled",
+    "  --autoparse            general-purpose Autoparse (any domain, no Extract fallback)",
     "  --css <json>           CSS selector map, e.g. '{\"title\":\"h1\",\"price\":\".price\"}'",
     "  --outputs <list>       built-in output filters → JSON: emails, phone_numbers, headings,",
     "                         images, audios, videos, links, menus, hashtags, metadata, tables,",
@@ -60,7 +63,7 @@ export const extract: Command = {
         message: "Missing URL.",
         likely_cause: "No positional <url> was provided.",
         next_action: "Usage: zenrows extract <url> [flags]",
-        suggested_commands: ['zenrows extract https://example.com --autoparse'],
+        suggested_commands: ["zenrows extract https://example.com", "zenrows extract https://example.com --autoparse"],
       });
     }
 
@@ -115,13 +118,17 @@ export const extract: Command = {
 
     const runId = newRunId();
     const startedAt = new Date().toISOString();
-    log.step(`Extract ${url} (method=${opts.method ?? "autoparse"})…`);
+    log.step(`Extract ${url} (method=${opts.method ?? "extract"})…`);
 
     try {
       const outcome = await runExtract(opts, config, policy, apiKey);
       const finishedAt = new Date().toISOString();
       const safeParams = { ...outcome.params };
       delete (safeParams as Record<string, unknown>).apikey;
+
+      if (outcome.fellBackToAutoparse) {
+        log.info("Extract not enabled for this domain — fell back to Autoparse.");
+      }
 
       const runDir = writeRun(
         {
@@ -132,9 +139,14 @@ export const extract: Command = {
           startedAt,
           finishedAt,
           status: "ok",
-          request: { ...safeParams, method: outcome.method },
+          request: {
+            ...safeParams,
+            method: outcome.method,
+            fellBackToAutoparse: outcome.fellBackToAutoparse ?? false,
+          },
           result: { httpStatus: outcome.result.status, bytes: outcome.result.body.length, parsed: outcome.data !== undefined },
           costUsd: outcome.result.costUsd,
+          costCredits: outcome.result.costCredits,
           requestId: outcome.result.requestId,
         },
         { "output.txt": outcome.result.body },
@@ -145,11 +157,30 @@ export const extract: Command = {
         writeOut(values.out as string, payload);
         log.success(`Wrote output → ${values.out}`);
       }
-      log.success(`Extracted via ${outcome.method} · ${outcome.result.body.length} bytes · cost $${(outcome.result.costUsd ?? 0).toFixed(4)} · run ${runId}`);
+      const via = outcome.fellBackToAutoparse ? `${outcome.method} (fallback)` : outcome.method;
+      log.success(
+        `Extracted via ${via} · ${outcome.result.body.length} bytes · ${formatRequestCost(outcome.result.costUsd, outcome.result.costCredits)} · run ${runId}`,
+      );
       if (runDir) log.dim(`  artifact: ${runDir}`);
 
       if (ctx.json || values.json) {
-        log.out(JSON.stringify({ ok: true, runId, method: outcome.method, httpStatus: outcome.result.status, data: outcome.data ?? null, bytes: outcome.result.body.length, costUsd: outcome.result.costUsd }, null, 2));
+        log.out(
+          JSON.stringify(
+            {
+              ok: true,
+              runId,
+              method: outcome.method,
+              fellBackToAutoparse: outcome.fellBackToAutoparse ?? false,
+              httpStatus: outcome.result.status,
+              data: outcome.data ?? null,
+              bytes: outcome.result.body.length,
+              costUsd: outcome.result.costUsd,
+              costCredits: outcome.result.costCredits,
+            },
+            null,
+            2,
+          ),
+        );
       } else if (!values.out) {
         log.out(payload);
       }
@@ -164,7 +195,7 @@ export const extract: Command = {
         startedAt,
         finishedAt: new Date().toISOString(),
         status: "error",
-        request: { url, method },
+        request: { url, method: method ?? "extract" },
         error: err instanceof ToolkitError ? err.toJSON() : { message: String(err) },
       });
       printError(err, ctx.json || values.json === true);

@@ -37,7 +37,7 @@ that endpoint with extraction parameters, not a separate product.
 | Command | What it does | Status (this build) |
 | --- | --- | --- |
 | `zenrows fetch` | Fetch — retrieve a protected page | **available** — `GET https://api.zenrows.com/v1/` |
-| `zenrows extract` | Extract — structured extraction (Autoparse / CSS / Markdown) | **available** — same `/v1/` |
+| `zenrows extract` | Extract — `extract=auto` (domain-gated open beta; falls back to Autoparse) / CSS / Markdown | **beta** — same `/v1/` |
 | `zenrows batch` | Batch — fan out over many URLs | beta — cloud works with beta access; local validate/estimate always |
 | `zenrows browser` | Browser Sessions (CDP) / MCP escalation | experimental |
 | `zenrows mcp` | MCP server config (remote + local) | **available** |
@@ -53,7 +53,8 @@ matrix.
 ```bash
 npx -y @zenrows/cli init
 zenrows fetch https://httpbin.io/html # auto-provisions a Free plan account on first use
-zenrows extract https://www.scrapingcourse.com/ecommerce/ --autoparse
+zenrows extract https://www.owler.com/company/meltwater # extract=auto on an enabled domain
+zenrows extract https://www.scrapingcourse.com/ecommerce/ --autoparse # Autoparse (any domain)
 ```
 
 No API key up front: on your first cloud call the toolkit creates a free,
@@ -110,7 +111,8 @@ zenrows fetch <url> --proxy-country us --wait-for ".price"
 ## 8. Extract
 
 ```bash
-zenrows extract <url> --autoparse
+zenrows extract https://www.owler.com/company/meltwater                # extract=auto (enabled domain)
+zenrows extract https://www.scrapingcourse.com/ecommerce/ --autoparse   # Autoparse (any domain)
 zenrows extract <url> --css '{"title":"h1","price":".price"}' --validate
 zenrows extract <url> --output markdown
 ```
