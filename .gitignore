@@ -17,3 +17,5 @@ dist/
 .idea/
 .vscode/*
 !.vscode/mcp.json
+
+cli-test-report/

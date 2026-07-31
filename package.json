@@ -33,6 +33,7 @@
   },
   "files": [
     "dist",
+    "!dist/tests",
     "registry",
     "skills",
     "templates",
@@ -48,6 +49,7 @@
     "test": "npm run build && node --test --import ./dist/tests/setup.js dist/tests/*.test.js",
     "typecheck": "tsc --noEmit",
     "build": "rm -rf dist && tsc && chmod +x dist/bin/zenrows.js",
+    "prepack": "npm run build",
     "version": "node scripts/sync-version.mjs && git add src/core/config.ts"
   },
   "devDependencies": {
