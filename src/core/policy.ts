@@ -10,7 +10,7 @@ export function defaultPolicy(): Policy {
     max_credits_per_run: 10000,
     max_pages_per_run: 1000,
     max_concurrency: 20,
-    allow_browser: false,
+    allow_browser: true,
     allow_experimental: false,
     allowed_domains: [],
     blocked_domains: [],
@@ -93,14 +93,16 @@ export function assertExperimentalAllowed(policy: Policy, command: string): void
   }
 }
 
-/** Throw if browser escalation is disabled by policy. */
+/** Throw if browser sessions have been disabled by policy (they are on by default). */
 export function assertBrowserAllowed(policy: Policy): void {
   if (!policy.allow_browser) {
     throw new ToolkitError({
-      code: "POLICY_EXPERIMENTAL_DISABLED",
+      code: "POLICY_BROWSER_DISABLED",
       message: "Browser sessions are disabled by policy.",
-      likely_cause: "policy.allow_browser is false (the safe default — browser is escalation-only).",
-      next_action: "Set allow_browser=true in policy.json only if Protected Fetch / Extract cannot do the job.",
+      likely_cause: "policy.allow_browser is false — browser was opted out in this workspace.",
+      next_action:
+        "Re-enable with `zenrows policy set allow_browser true`. Note: browser is escalation-only — prefer fetch/extract, which cost less, for most cases.",
+      suggested_commands: ["zenrows policy set allow_browser true"],
     });
   }
 }

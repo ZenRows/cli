@@ -13,7 +13,7 @@
     "extract": {
       "key": "extract",
       "label": "Extract (Autoparse / CSS / Markdown)",
-      "status": "beta",
+      "status": "available",
       "command": "zenrows extract",
       "backend": "Extract — GET https://api.zenrows.com/v1/ (autoparse, css_extractor, response_type)",
       "requiresAuth": true,
@@ -33,9 +33,9 @@
       "label": "Browser Sessions",
       "status": "available",
       "command": "zenrows browser",
-      "backend": "Browser Sessions (CDP) + @zenrows/mcp browser tools",
+      "backend": "Browser Sessions REST API — https://mcp.zenrows.com/browser/sessions/* (Bearer auth; same backend as @zenrows/mcp browser_* tools)",
       "requiresAuth": true,
-      "notes": "Browser Sessions (CDP) and the @zenrows/mcp browser_* tools exist, but there is no managed REST sessions API in the public docs. Gated behind policy.allow_browser (off by default) and intended as an escalation path only."
+      "notes": "Browser Sessions is a GA Zenrows product (formerly Scraping Browser). Drives its managed REST API directly (create/verb/close over HTTP with Authorization: Bearer) — no CDP client or browser dependency needed. Escalation-only: prefer fetch/extract (they cost less) for the vast majority of cases. On by default; opt out with policy.allow_browser=false. Sessions bill by bandwidth + session time and auto-terminate after 15 minutes. For raw CDP control, `zenrows browser connect` prints the wss://browser.zenrows.com endpoint for your own Playwright/Puppeteer."
     },
     "mcp": {
       "key": "mcp",

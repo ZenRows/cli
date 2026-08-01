@@ -7,7 +7,7 @@ test("capability matrix loads with the honest classifications", () => {
   const caps = loadCapabilities();
   assert.equal(caps.protected_fetch?.status, "available");
   assert.equal(caps.extract?.status, "available");
-  assert.equal(caps.browser?.status, "experimental");
+  assert.equal(caps.browser?.status, "available"); // GA product (formerly Scraping Browser)
   assert.equal(caps.mcp?.status, "available");
   // Batch is a real product in beta.
   assert.equal(caps.batch?.status, "beta");
@@ -21,7 +21,7 @@ test("isUsable true for available, false for absent capabilities", () => {
 
 test("assertUsable passes for available + experimental, throws for absent", () => {
   assert.doesNotThrow(() => assertUsable("protected_fetch"));
-  assert.doesNotThrow(() => assertUsable("browser")); // experimental is allowed (policy gates it)
+  assert.doesNotThrow(() => assertUsable("browser")); // available (billing/escalation handled by docs, opt-out via policy)
   assert.throws(() => assertUsable("batch"), (e: unknown) => e instanceof ToolkitError && e.code === "CAPABILITY_UNAVAILABLE"); // beta is not usable
 });
 

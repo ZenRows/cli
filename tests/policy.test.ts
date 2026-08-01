@@ -28,10 +28,15 @@ test("empty policy allows any valid host but rejects malformed URLs", () => {
   assert.throws(() => assertDomainAllowed("not-a-url", pol), (e: unknown) => e instanceof ToolkitError && e.code === "INVALID_USAGE");
 });
 
-test("experimental + browser gated off by default", () => {
+test("experimental gated off by default; browser on by default (opt-out)", () => {
   const pol = defaultPolicy();
   assert.equal(pol.allow_experimental, false);
-  assert.equal(pol.allow_browser, false);
+  assert.equal(pol.allow_browser, true);
   assert.throws(() => assertExperimentalAllowed(pol, "zenrows browser"), (e: unknown) => e instanceof ToolkitError && e.code === "POLICY_EXPERIMENTAL_DISABLED");
-  assert.throws(() => assertBrowserAllowed(pol), (e: unknown) => e instanceof ToolkitError);
+  // Browser is a GA product, on by default — the gate only fires if opted out.
+  assert.doesNotThrow(() => assertBrowserAllowed(pol));
+  assert.throws(
+    () => assertBrowserAllowed({ ...pol, allow_browser: false }),
+    (e: unknown) => e instanceof ToolkitError && e.code === "POLICY_BROWSER_DISABLED",
+  );
 });
