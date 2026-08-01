@@ -47,7 +47,7 @@
     {
       "name": "interact-browser",
       "type": "skill",
-      "description": "Escalate to a browser (Browser Sessions / MCP) only when fetch/extract cannot do the job.",
+      "description": "Escalate to Browser Sessions (REST API / MCP browser_*) only when fetch/extract cannot do the job.",
       "status": "experimental",
       "requires_backend_capabilities": ["browser"],
       "requires_auth": true,

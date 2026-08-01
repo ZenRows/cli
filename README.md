@@ -39,7 +39,7 @@ that endpoint with extraction parameters, not a separate product.
 | `zenrows fetch` | Fetch — retrieve a protected page | **available** — `GET https://api.zenrows.com/v1/` |
 | `zenrows extract` | Extract — structured extraction (Autoparse / CSS / Markdown) | **available** — same `/v1/` |
 | `zenrows batch` | Batch — fan out over many URLs | beta — cloud works with beta access; local validate/estimate always |
-| `zenrows browser` | Browser Sessions (CDP) / MCP escalation | experimental |
+| `zenrows browser` | Browser Sessions REST API (same backend as MCP `browser_*`) | **available** — escalation-only; bills by bandwidth + time |
 | `zenrows mcp` | MCP server config (remote + local) | **available** |
 | Zenrows CLI | this repo | available |
 
@@ -138,8 +138,17 @@ locally or fan out with `zenrows fetch` per URL.
 
 ## 10. Browser Sessions
 
-Escalation only, gated by `policy.allow_browser`. Backed by Zenrows Browser
-Sessions (CDP) and the `@zenrows/mcp` `browser_*` tools.
+Escalation only — **prefer `fetch`/`extract` for the vast majority of cases**;
+they cost less. Use the browser for logins, forms, and multi-step JS flows that
+Protected Fetch can't handle. Drives the managed Browser Sessions REST API
+(`mcp.zenrows.com/browser/sessions/*`, same backend as the `@zenrows/mcp`
+`browser_*` tools). `zenrows browser connect` prints the raw CDP wss URL for
+bring-your-own Playwright/Puppeteer.
+
+**Billing & lifecycle:** sessions bill by **bandwidth + session time** and
+**auto-terminate after 15 minutes** — `run <script.json>` closes automatically;
+close interactive sessions with `zenrows browser close`. On by default; opt out
+with `zenrows policy set allow_browser false`.
 
 ## 11. MCP
 
