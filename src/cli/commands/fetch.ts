@@ -13,6 +13,7 @@ import { log } from "../../core/logger.ts";
 import { newRunId, writeRun } from "../../core/artifacts.ts";
 import { ToolkitError } from "../../core/errors.ts";
 import { runFetch, type FetchOptions, type ResponseFormat } from "../../adapters/protected-fetch.ts";
+import { formatRequestCost } from "../../core/http.ts";
 import { parse, asString, asNumber, type Command, type RunContext } from "../command.ts";
 import { printError, writeOut } from "../output.ts";
 
@@ -131,6 +132,7 @@ export const fetch_: Command = {
             finalUrl: result.finalUrl,
           },
           costUsd: result.costUsd,
+          costCredits: result.costCredits,
           requestId: result.requestId,
         },
         { [artifactName]: result.isBinary ? result.raw : result.body },
@@ -141,11 +143,11 @@ export const fetch_: Command = {
         log.success(`Wrote ${bytes} bytes → ${values.out}`);
       }
 
-      log.success(`HTTP ${result.status} · ${bytes} bytes · cost $${(result.costUsd ?? 0).toFixed(4)} · run ${runId}`);
+      log.success(`HTTP ${result.status} · ${bytes} bytes · ${formatRequestCost(result.costUsd, result.costCredits)} · run ${runId}`);
       if (runDir) log.dim(`  artifact: ${runDir}`);
 
       if (ctx.json || values.json) {
-        log.out(JSON.stringify({ ok: true, runId, mode, httpStatus: result.status, bytes, costUsd: result.costUsd, requestId: result.requestId, finalUrl: result.finalUrl }, null, 2));
+        log.out(JSON.stringify({ ok: true, runId, mode, httpStatus: result.status, bytes, costUsd: result.costUsd, costCredits: result.costCredits, requestId: result.requestId, finalUrl: result.finalUrl }, null, 2));
       } else if (!values.out) {
         if (result.isBinary) {
           // Never dump raw binary to the terminal — it corrupts the session and

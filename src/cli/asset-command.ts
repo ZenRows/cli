@@ -400,10 +400,22 @@ function writeEvalReport(asset: RegistryAsset, spec: { description?: string }, r
   mkdirSync(join(dir, "traces"), { recursive: true });
   const passed = results.filter((r) => r.ok).length;
   const totalCost = results.reduce((a, r) => a + (r.costUsd ?? 0), 0);
+  const totalCredits = results.reduce((a, r) => a + (r.costCredits ?? 0), 0);
 
   writeFileSync(join(dir, "input.json"), JSON.stringify({ eval: asset.name, spec }, null, 2) + "\n");
   writeFileSync(join(dir, "results.json"), JSON.stringify({ runId, passed, total: results.length, results: results.map(safeResult) }, null, 2) + "\n");
-  writeFileSync(join(dir, "cost.json"), JSON.stringify({ totalCostUsd: totalCost, perStep: results.map((r) => r.costUsd ?? 0) }, null, 2) + "\n");
+  writeFileSync(
+    join(dir, "cost.json"),
+    JSON.stringify(
+      {
+        totalCostUsd: totalCost,
+        totalCredits,
+        perStep: results.map((r) => ({ costUsd: r.costUsd ?? 0, costCredits: r.costCredits ?? 0 })),
+      },
+      null,
+      2,
+    ) + "\n",
+  );
   const failures = results.filter((r) => !r.ok).map((r) => JSON.stringify(safeResult(r))).join("\n");
   writeFileSync(join(dir, "failures.jsonl"), failures ? failures + "\n" : "");
   const report = [
@@ -412,6 +424,7 @@ function writeEvalReport(asset: RegistryAsset, spec: { description?: string }, r
     `- run id: \`${runId}\``,
     `- success rate: ${passed}/${results.length}`,
     `- approx cost (USD): ${totalCost.toFixed(4)}`,
+    `- approx credits: ${totalCredits}`,
     "",
     "## Targets & results",
     ...results.map(
@@ -443,6 +456,7 @@ function safeResult(r: StepResult) {
     status: r.status,
     bytes: r.bytes,
     costUsd: r.costUsd,
+    costCredits: r.costCredits,
     estimatedCredits: r.estimatedCredits,
     requestId: r.requestId,
     failureReason: r.failureReason,

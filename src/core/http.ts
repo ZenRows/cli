@@ -29,6 +29,8 @@ export interface ScraperResult {
   contentType: string;
   /** Cost in USD reported by X-Request-Cost, if present. */
   costUsd: number | null;
+  /** Credits consumed, reported by X-Request-Credits, if present. */
+  costCredits: number | null;
   requestId: string | null;
   finalUrl: string | null;
   concurrencyRemaining: number | null;
@@ -102,6 +104,7 @@ export async function scrape(
     isBinary,
     contentType: res.headers.get("content-type") ?? "",
     costUsd: parseCost(res.headers.get("x-request-cost")),
+    costCredits: numOrNull(res.headers.get("x-request-credits")),
     requestId: res.headers.get("x-request-id"),
     finalUrl: res.headers.get("zr-final-url"),
     concurrencyRemaining: numOrNull(res.headers.get("concurrency-remaining")),
@@ -144,6 +147,19 @@ export async function scrape(
     }
   }
   if (res.status === 402 && isZenrowsErrorEnvelope(body)) {
+    // AUTH010 on extract=auto means the target domain is not in the Extract
+    // beta — distinct from credit exhaustion (AUTH004). Let the extract
+    // adapter fall back to autoparse.
+    if (params.extract !== undefined && zrErrorCode(body) === "AUTH010") {
+      throw new ToolkitError({
+        code: "EXTRACT_DOMAIN_NOT_ENABLED",
+        message: "Extract is not enabled for this domain yet.",
+        likely_cause: zrErrorDetail(body) ?? "This domain is not part of the Extract open beta.",
+        next_action:
+          "Retry with --autoparse for general-purpose extraction on any site, or contact Zenrows support to enable this domain for Extract.",
+        suggested_commands: [`zenrows extract ${params.url} --autoparse`],
+      });
+    }
     // Zenrows returns 402 with a JSON error envelope (e.g. AUTH004 "reached its
     // usage limit" / "Subscription has no credit available") when the account is
     // out of credits. This is NOT scraped content — surface it as a credits
@@ -256,16 +272,18 @@ function numOrNull(v: string | null): number | null {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
+
+/** Human cost line for CLI success logs: `$0.0004 · 1 credit`. */
+export function formatRequestCost(costUsd: number | null | undefined, costCredits: number | null | undefined): string {
+  const usd = `$${((costUsd ?? 0)).toFixed(4)}`;
+  if (costCredits == null) return `cost ${usd}`;
+  const unit = costCredits === 1 ? "credit" : "credits";
+  return `cost ${usd} · ${costCredits} ${unit}`;
+}
 function snippet(s: string): string {
   return s.slice(0, 240).replace(/\s+/g, " ").trim();
 }
 
-/**
- * Extract a clean one-line detail from a Zenrows JSON error body
- * (e.g. `(AUTH003) Invalid apikey provided`) instead of dumping a
- * truncated, mangled JSON string. Returns null if the body isn't the
- * expected JSON shape.
- */
 /**
  * Decide whether a 429 body indicates a Zenrows *account* credit/quota limit
  * (out of credits) rather than a concurrency cap or a target-site rate limit.
@@ -290,6 +308,20 @@ export function isQuotaError(body: string): boolean {
   );
 }
 
+/** Uppercased Zenrows error `code` from a JSON envelope, or null. */
+export function zrErrorCode(body: string): string | null {
+  try {
+    const j = JSON.parse(body) as { code?: unknown };
+    return typeof j.code === "string" ? j.code.toUpperCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Clean one-line detail from a Zenrows JSON error body
+ * (e.g. `(AUTH003) Invalid apikey provided`).
+ */
 export function zrErrorDetail(body: string): string | null {
   try {
     const j = JSON.parse(body) as { code?: string; title?: string; detail?: string };

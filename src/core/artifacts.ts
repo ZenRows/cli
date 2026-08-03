@@ -23,6 +23,8 @@ export interface RunMeta {
   result?: Record<string, unknown>;
   error?: unknown;
   costUsd?: number | null;
+  /** Credits consumed (X-Request-Credits), when the API reported them. */
+  costCredits?: number | null;
   requestId?: string | null;
 }
 

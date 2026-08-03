@@ -22,12 +22,12 @@ simple per-URL loop).
    ```
 2. **Validate extraction** on one page (available).
    ```
-   zenrows extract https://competitor.example/p/123 --autoparse --validate
+   zenrows extract https://competitor.example/p/123 --validate
    ```
 3. **Scale** across the collected URLs — loop the validated extract step over
    each URL (from your own script, cron, or CI):
    ```
-   zenrows extract https://competitor.example/p/124 --autoparse --validate
+   zenrows extract https://competitor.example/p/124 --validate
    ```
    > For large or recurring lists, **Batch** (`zenrows batch`) is
    > the managed alternative — one job submits many URLs, retries transient

@@ -32,7 +32,7 @@ If the user has a known URL and wants page content:
   → Use Protected Fetch.            (zenrows fetch <url>)
 
 If the user has a known URL and wants structured data:
-  → Use Extract.                    (zenrows extract <url> --autoparse | --css)
+  → Use Extract.                    (zenrows extract <url> | --autoparse | --css)
 
 If the user has many URLs:
   → Fan out fetch/extract per URL   (validate on one page first, then iterate).
