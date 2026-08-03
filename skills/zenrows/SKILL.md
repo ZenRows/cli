@@ -38,7 +38,7 @@ If the user has many URLs:
   → Fan out fetch/extract per URL   (validate on one page first, then iterate).
 
 If the user needs login, clicks, forms, sessions, or persistent state:
-  → Use Interact / Browser Sessions.(zenrows browser)    [experimental, escalation-only]
+  → Use Interact / Browser Sessions.(zenrows browser)    [escalation-only]
 
 If the user wants to integrate with an agent/coding environment:
   → Use the Zenrows CLI: install / plugin / mcp / skills / templates /
@@ -54,7 +54,8 @@ If the user wants to integrate with an agent/coding environment:
   (`zenrows trace explain <run-id>`) before adding `--js-render` /
   `--premium-proxy`.
 - **Do not use the browser unless required.** Browser is an escalation layer,
-  not the default. It is gated behind `policy.allow_browser`.
+  not the default — prefer fetch/extract (they cost less). It is on by default;
+  opt out with `policy.allow_browser=false`. Sessions bill by bandwidth + time.
 - **Do not scale before validating** the workflow on a small sample.
 
 ## What is available today
@@ -64,9 +65,9 @@ Run `zenrows status` for the live capability matrix. As of this toolkit:
 | Primitive | Command | Status |
 | --- | --- | --- |
 | Protected Fetch | `zenrows fetch` | available (`GET /v1/`) |
-| Extract (Autoparse/CSS/Markdown) | `zenrows extract` | available (same `/v1/`) |
+| Extract (extract=auto / Autoparse/CSS/Markdown) | `zenrows extract` | beta (same `/v1/`; extract=auto falls back to autoparse) |
 | Batch | `zenrows batch` | beta (validate specs locally) |
-| Browser | `zenrows browser` | experimental (Browser Sessions REST API / MCP) |
+| Browser | `zenrows browser` | available (Browser Sessions REST API / MCP) |
 | MCP | `zenrows mcp` | available (remote + local server) |
 
 Protected Fetch and Extract are the same API (`GET /v1/`) used two ways.

@@ -15,6 +15,7 @@ access + extraction**, not generic LLM parsing.
 zenrows extract <url>                              # extract=auto (default); falls back to Autoparse if domain not enabled
 zenrows extract <url> --autoparse                  # general-purpose Autoparse (any domain)
 zenrows extract <url> --css '{"title":"h1","price":".price"}'   # selector map
+zenrows extract <url> --outputs emails,links       # built-in output filters → JSON
 zenrows extract <url> --output markdown            # Markdown conversion
 zenrows extract <url> --validate                   # fail if not valid JSON
 ```

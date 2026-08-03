@@ -114,6 +114,7 @@ zenrows fetch <url> --proxy-country us --wait-for ".price"
 zenrows extract https://www.owler.com/company/meltwater                # extract=auto (enabled domain)
 zenrows extract https://www.scrapingcourse.com/ecommerce/ --autoparse   # Autoparse (any domain)
 zenrows extract <url> --css '{"title":"h1","price":".price"}' --validate
+zenrows extract <url> --outputs emails,links                            # built-in output filters → JSON
 zenrows extract <url> --output markdown
 ```
 
