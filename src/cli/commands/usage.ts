@@ -35,7 +35,7 @@ export const usage: Command = {
     const u = await fetchUsage(config.apiBase, apiKey);
 
     if (ctx.json) {
-      log.out(JSON.stringify(u, null, 2));
+      log.out(JSON.stringify({ ok: true, ...u }, null, 2));
       return 0;
     }
 

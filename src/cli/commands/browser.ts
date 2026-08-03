@@ -243,7 +243,7 @@ function infoCmd(ctx: RunContext): number {
   const policy = loadPolicy();
   assertBrowserAllowed(policy); // throws POLICY_BROWSER_DISABLED (→ exit 2) only if opted out
   if (ctx.json) {
-    log.out(JSON.stringify({ capability: "browser", escalationOnly: true, backend: "REST session API (mcp.zenrows.com/browser/sessions)" }, null, 2));
+    log.out(JSON.stringify({ ok: true, capability: "browser", escalationOnly: true, backend: "REST session API (mcp.zenrows.com/browser/sessions)" }, null, 2));
     return 0;
   }
   log.info(c(ANSI.bold, "Browser sessions (escalation-only)"));

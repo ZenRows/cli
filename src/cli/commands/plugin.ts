@@ -21,7 +21,7 @@ export const plugin: Command = {
     const [sub, name] = argv;
     if (!sub || sub === "list") {
       if (ctx.json) {
-        log.out(JSON.stringify({ clients: Object.values(MCP_CLIENTS) }, null, 2));
+        log.out(JSON.stringify({ ok: true, clients: Object.values(MCP_CLIENTS) }, null, 2));
         return 0;
       }
       log.info(c(ANSI.bold, "Installable agent plugins:"));
@@ -33,7 +33,7 @@ export const plugin: Command = {
     if (sub === "status") {
       const skills = listInstalled("skill");
       if (ctx.json) {
-        log.out(JSON.stringify({ installedSkills: skills }, null, 2));
+        log.out(JSON.stringify({ ok: true, installedSkills: skills }, null, 2));
         return 0;
       }
       log.info(`Installed skills: ${skills.join(", ") || "none"}`);
