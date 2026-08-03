@@ -11,6 +11,10 @@ import { join } from "node:path";
 import { log, ANSI, c } from "../../core/logger.ts";
 import { estimateCredits, toJobBody, validateJsonl } from "../../adapters/batch.ts";
 import { requireApiKey } from "../../core/auth.ts";
+import { ensureApiKey } from "../../core/ensure-key.ts";
+import { assertUsable } from "../../core/capabilities.ts";
+import { assertDomainAllowed, assertWithinLimits, loadPolicy } from "../../core/policy.ts";
+import { newRunId, writeRun } from "../../core/artifacts.ts";
 import { createJob, downloadResults, getJob, listResults, rerunJob, stopJob, waitForJob, type Job } from "../../core/batch-api.ts";
 import { asNumber, asString, parse, type Command, type RunContext } from "../command.ts";
 import { ToolkitError } from "../../core/errors.ts";
@@ -30,6 +34,7 @@ export const batch: Command = {
     "    --proxy-country <cc>           job-level: geo-target (needs --premium-proxy)",
     "    --output <fmt>                 job-level response_type (markdown|plaintext|pdf)",
     "    --wait                         poll until the run finishes",
+    "    --no-signup                    do not auto-create a Free plan account if no key exists",
     "  status <id>                      show run status + stats",
     "  results <id> [--status s]        list results (successful|failed|all); paginated",
     "    --out <file>                   write results as JSONL instead of printing",
@@ -101,11 +106,15 @@ async function createCmd(rest: string[], ctx: RunContext): Promise<number> {
     "proxy-country": { type: "string" },
     output: { type: "string" },
     wait: { type: "boolean" },
+    "no-signup": { type: "boolean" },
     json: { type: "boolean" },
   });
   const json = ctx.json || values.json === true;
   const file = positionals[0];
   if (!file) throw needFile();
+
+  // Capability gate first — a beta-disabled backend never gets a spec read.
+  assertUsable("batch");
 
   const v = validateJsonl(file);
   if (v.errors.length) {
@@ -120,6 +129,15 @@ async function createCmd(rest: string[], ctx: RunContext): Promise<number> {
     });
   }
 
+  // Pre-flight governance — all local, before any network call:
+  //  1. every task URL must pass the allow/deny domain policy,
+  //  2. the run must fit the batch-only page/credit caps (a batch is the one
+  //     primitive that fans out into many requests, so the caps bind here).
+  const policy = loadPolicy();
+  for (const job of v.jobs) assertDomainAllowed(job.url, policy);
+  const est = estimateCredits(v.jobs);
+  assertWithinLimits({ pages: v.validJobs, credits: est.credits }, policy, "batch");
+
   const jobParams: Record<string, unknown> = {};
   if (values["js-render"] === true) jobParams.js_render = true;
   if (values["premium-proxy"] === true) jobParams.premium_proxy = true;
@@ -130,18 +148,54 @@ async function createCmd(rest: string[], ctx: RunContext): Promise<number> {
 
   // toJobBody validates proxy_country/premium_proxy BEFORE any HTTP call.
   const body = toJobBody(v.jobs, jobParams);
-  const apiKey = requireApiKey();
+  const apiKey = await ensureApiKey(
+    values["no-signup"] ? { ...policy, auto_signup: false } : policy,
+    {
+      onProvision: (a) => {
+        log.info("No API key found — created a Zenrows Free plan account for you.");
+        log.dim(`Claim it anytime (keeps your usage): ${a.claimUrl}`);
+      },
+    },
+  );
 
-  log.step(`Submitting batch job (${body.tasks.length} tasks)…`);
-  const job = await createJob(body, { apiKey });
-  const finished = values.wait === true ? await waitForJob(job.job_id, { apiKey }) : job;
-  printJob(finished, json, `Submitted job ${job.job_id}`);
-  return 0;
+  const runId = newRunId();
+  const startedAt = new Date().toISOString();
+  log.step(`Submitting batch job (${body.tasks.length} tasks, ~${est.credits} credits)…`);
+  try {
+    const job = await createJob(body, { apiKey });
+    const finished = values.wait === true ? await waitForJob(job.job_id, { apiKey }) : job;
+    const runDir = writeRun({
+      runId,
+      command: "zenrows batch create",
+      capability: "batch",
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      status: "ok",
+      request: { file, tasks: body.tasks.length, estimatedCredits: est.credits, jobParams },
+      result: { jobId: job.job_id, status: finished.latest_run?.status ?? "unknown" },
+    });
+    printJob(finished, json, `Submitted job ${job.job_id}`);
+    if (runDir && !json) log.dim(`  artifact: ${runDir}`);
+    return 0;
+  } catch (err) {
+    writeRun({
+      runId,
+      command: "zenrows batch create",
+      capability: "batch",
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      status: "error",
+      request: { file, tasks: body.tasks.length, estimatedCredits: est.credits, jobParams },
+      error: err instanceof ToolkitError ? err.toJSON() : { message: String(err) },
+    });
+    throw err;
+  }
 }
 
 async function statusCmd(rest: string[], ctx: RunContext): Promise<number> {
   const { positionals } = parse(rest, {});
   const id = requireId(positionals[0]);
+  assertUsable("batch");
   const apiKey = requireApiKey();
   const job = await getJob(id, { apiKey });
   printJob(job, ctx.json, `Job ${id}`);
@@ -158,6 +212,7 @@ async function resultsCmd(rest: string[], ctx: RunContext): Promise<number> {
   const json = ctx.json || values.json === true;
   const id = requireId(positionals[0]);
   const status = normalizeResultStatus(asString(values.status));
+  assertUsable("batch");
   const apiKey = requireApiKey();
 
   const rows = await listResults(id, { apiKey, status });
@@ -220,6 +275,7 @@ async function resultsCmd(rest: string[], ctx: RunContext): Promise<number> {
 async function cancelCmd(rest: string[], ctx: RunContext): Promise<number> {
   const { positionals } = parse(rest, {});
   const id = requireId(positionals[0]);
+  assertUsable("batch");
   const apiKey = requireApiKey();
   const job = await stopJob(id, { apiKey });
   printJob(job, ctx.json, `Stopped job ${id}`);
@@ -230,6 +286,7 @@ async function waitCmd(rest: string[], ctx: RunContext): Promise<number> {
   const { values, positionals } = parse(rest, { timeout: { type: "string" }, json: { type: "boolean" } });
   const json = ctx.json || values.json === true;
   const id = requireId(positionals[0]);
+  assertUsable("batch");
   const apiKey = requireApiKey();
   const job = await waitForJob(id, { apiKey, timeoutMs: asNumber(values.timeout) });
   printJob(job, json, `Job ${id} finished`);
@@ -239,6 +296,7 @@ async function waitCmd(rest: string[], ctx: RunContext): Promise<number> {
 async function retryCmd(rest: string[], ctx: RunContext): Promise<number> {
   const { positionals } = parse(rest, {});
   const id = requireId(positionals[0]);
+  assertUsable("batch");
   const apiKey = requireApiKey();
   // "Reruns and retrying failures": POST /jobs/{id}/rerun?status=failed replays
   // only the failures; already-successful tasks carry over.
