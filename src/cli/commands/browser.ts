@@ -17,7 +17,7 @@
 import { readFileSync } from "node:fs";
 import { ensureApiKey } from "../../core/ensure-key.ts";
 import { assertUsable } from "../../core/capabilities.ts";
-import { loadPolicy, assertBrowserAllowed } from "../../core/policy.ts";
+import { loadPolicy, assertBrowserAllowed, assertDomainAllowed } from "../../core/policy.ts";
 import { log, ANSI, c } from "../../core/logger.ts";
 import { newRunId, writeRun } from "../../core/artifacts.ts";
 import { ToolkitError } from "../../core/errors.ts";
@@ -256,6 +256,11 @@ function infoCmd(ctx: RunContext): number {
   return 0;
 }
 
+/** Enforce policy.allowed_domains / blocked_domains on a navigation target (parity with fetch/extract). */
+function assertUrlAllowed(url: string): void {
+  assertDomainAllowed(url, loadPolicy());
+}
+
 function proxyFrom(v: Record<string, unknown>): SessionProxyOpts {
   return { proxy_country: asString(v["proxy-country"]), proxy_region: asString(v["proxy-region"]) };
 }
@@ -277,6 +282,7 @@ async function openCmd(rest: string[], ctx: RunContext): Promise<number> {
       suggested_commands: ["zenrows browser open https://example.com"],
     });
   }
+  assertUrlAllowed(url);
   const apiKey = await gate(rest);
   const runId = newRunId();
   const startedAt = new Date().toISOString();
@@ -356,6 +362,7 @@ async function verbCmd(sub: string, rest: string[], ctx: RunContext): Promise<nu
   });
   const sessionId = requireSession(values);
   if (spec.required) requireFlags(values, spec.required);
+  if ((sub === "navigate" || sub === "new-tab") && asString(values.url)) assertUrlAllowed(asString(values.url)!);
   const apiKey = await gate(rest);
   const result = await sessionCall(apiKey, sessionId, spec.verb, {
     method: spec.method ?? "POST",
@@ -566,6 +573,7 @@ async function runScriptCmd(rest: string[], ctx: RunContext): Promise<number> {
       if (action === "select" && typeof body.value === "string") {
         body = { ...body, value: normalizeSelectValue(body.value) };
       }
+      if ((action === "navigate" || action === "new_tab") && typeof body.url === "string") assertUrlAllowed(body.url);
       const method = GET_ACTIONS.has(action) ? "GET" : "POST";
       try {
         const result = await sessionCall<Record<string, unknown>>(apiKey, session.session_id, action, {

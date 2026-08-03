@@ -174,7 +174,9 @@ test("open closes the session when navigate fails (no leak)", async () => {
       return { status: 200, body: { ok: true } };
     });
     try {
-      const code = await browser.run(["open", "not-a-url"], ctx);
+      // valid URL (passes domain policy) so the stubbed 400 simulates a
+      // server-side navigate failure after the session was created.
+      const code = await browser.run(["open", "https://example.com"], ctx);
       assert.equal(code, 1);
       const seq = stub.calls.map((c) => `${c.method} ${c.path}`);
       assert.deepEqual(seq, [
@@ -217,4 +219,28 @@ test("select wraps plain --value into option[value=…] before POSTing", async (
       globalThis.fetch = orig;
     }
   });
+});
+
+test("browser open enforces blocked_domains before any network call", async () => {
+  const { root, cleanup } = tempRoot();
+  const cwd = process.cwd();
+  createWorkspace(root);
+  savePolicy({ ...defaultPolicy(), blocked_domains: ["blocked.example"] }, root);
+  saveApiKey("0".repeat(41), root);
+  process.chdir(root);
+  let fetched = false;
+  const orig = globalThis.fetch;
+  globalThis.fetch = (async () => {
+    fetched = true;
+    return new Response("{}", { status: 200, headers: { "content-type": "application/json" } });
+  }) as unknown as typeof fetch;
+  try {
+    const code = await browser.run(["open", "https://blocked.example/p"], ctx);
+    assert.equal(code, 1);
+    assert.equal(fetched, false, "blocked domain must be rejected before any network call");
+  } finally {
+    globalThis.fetch = orig;
+    process.chdir(cwd);
+    cleanup();
+  }
 });
