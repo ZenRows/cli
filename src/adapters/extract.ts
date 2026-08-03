@@ -41,6 +41,20 @@ export interface ExtractOutcome extends FetchOutcome {
   html?: string;
   /** True when Extract fell back to Autoparse because the domain is not enabled. */
   fellBackToAutoparse?: boolean;
+  /**
+   * True when a structured method returned no data (null / empty object / empty
+   * array / non-JSON). Lets callers warn instead of reporting a silent success.
+   */
+  empty?: boolean;
+}
+
+/** True when a parsed extraction result carries no usable structured data. */
+function isEmptyData(data: unknown): boolean {
+  if (data === null || data === undefined) return true;
+  if (Array.isArray(data)) return data.length === 0;
+  if (typeof data === "object") return Object.keys(data as object).length === 0;
+  if (typeof data === "string") return data.trim() === "";
+  return false;
 }
 
 export async function runExtract(
@@ -102,16 +116,16 @@ async function runExtractOnce(
   };
 
   const outcome = await runFetch(fetchOpts, config, policy, apiKey);
-  const { data, html } = parseExtractBody(method, outcome.result.body, opts);
+  const { data, html, empty } = parseExtractBody(method, outcome.result.body, opts);
 
-  return { ...outcome, method, data, html };
+  return { ...outcome, method, data, html, empty };
 }
 
 function parseExtractBody(
   method: ExtractMethod,
   body: string,
   opts: Pick<ExtractOptions, "validate" | "url">,
-): { data?: unknown; html?: string } {
+): { data?: unknown; html?: string; empty?: boolean } {
   if (method !== "extract" && method !== "autoparse" && method !== "css" && method !== "outputs") {
     return {};
   }
@@ -130,19 +144,35 @@ function parseExtractBody(
         suggested_commands: [`zenrows extract ${opts.url} --manual --js-render`],
       });
     }
-    return {};
+    return { empty: true };
   }
 
+  let data: unknown = parsed;
+  let html: string | undefined;
   // extract=auto beta shape: { parsed, html }. Prefer `parsed` for callers.
   if (method === "extract" && parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
     const envelope = parsed as { parsed?: unknown; html?: unknown };
     if ("parsed" in envelope) {
-      return {
-        data: envelope.parsed,
-        html: typeof envelope.html === "string" ? envelope.html : undefined,
-      };
+      data = envelope.parsed;
+      html = typeof envelope.html === "string" ? envelope.html : undefined;
     }
   }
 
-  return { data: parsed };
+  const empty = isEmptyData(data);
+  // ACT-1514: an empty result must not read as a silent success. Under
+  // --validate it's an error; otherwise the command surfaces a warning.
+  if (opts.validate && empty) {
+    throw new ToolkitError({
+      code: "EXTRACT_VALIDATION_FAILED",
+      message: "Extraction returned no structured data.",
+      likely_cause:
+        "The domain returned an empty result — the page may render content via JavaScript, or this layout isn't auto-extractable.",
+      next_action: "Retry with --manual --js-render, or use --css with explicit selectors.",
+      suggested_commands: [
+        `zenrows extract ${opts.url} --manual --js-render`,
+        `zenrows extract ${opts.url} --css '{"title":"h1"}'`,
+      ],
+    });
+  }
+  return { data, html, empty };
 }
