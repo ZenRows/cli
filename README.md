@@ -227,8 +227,8 @@ Reports write `input.json`, `results.json`, `report.md`, `failures.jsonl`,
 - `.zenrows/account.json` holds no secret — only the accountId, Free-period info, and
   claim link.
 - `.zenrows/policy.json` enforces credit/page/concurrency limits and domain allow/deny.
-- Destructive `uninstall` requires `--yes`. Browser and experimental are off by
-  default.
+- Destructive `uninstall` requires `--yes`. Browser is on by default; opt out with
+  `zenrows policy set allow_browser false`. Experimental features are off by default.
 
 ## 19. Capability matrix
 

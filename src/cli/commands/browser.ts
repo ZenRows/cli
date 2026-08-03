@@ -1,5 +1,5 @@
 /**
- * `zenrows browser` — Browser Sessions (status: experimental, gated).
+ * `zenrows browser` — Browser Sessions (status: available).
  *
  * Browser is an ESCALATION layer, not the default. It drives the Zenrows managed
  * REST session API (https://mcp.zenrows.com/browser/sessions/*, Bearer auth) —
@@ -246,7 +246,7 @@ function infoCmd(ctx: RunContext): number {
     log.out(JSON.stringify({ capability: "browser", escalationOnly: true, backend: "REST session API (mcp.zenrows.com/browser/sessions)" }, null, 2));
     return 0;
   }
-  log.info(c(ANSI.bold, "Browser sessions (experimental, escalation-only)"));
+  log.info(c(ANSI.bold, "Browser sessions (escalation-only)"));
   log.info("Prefer fetch / extract first. Use the browser for logins, clicks, forms, and persistent state.");
   log.info("");
   log.info("  zenrows browser open <url>          start a session");
