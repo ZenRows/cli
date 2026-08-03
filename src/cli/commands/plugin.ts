@@ -9,7 +9,7 @@
 import { log, ANSI, c } from "../../core/logger.ts";
 import { ToolkitError } from "../../core/errors.ts";
 import { buildMcpConfig, MCP_CLIENTS } from "../../installers/mcp/index.ts";
-import { installAsset, listInstalled, loadRegistry } from "../../core/registry.ts";
+import { assetRunnable, installAsset, listInstalled, loadRegistry } from "../../core/registry.ts";
 import { parse, type Command, type RunContext } from "../command.ts";
 
 export const plugin: Command = {
@@ -53,8 +53,9 @@ export const plugin: Command = {
         });
       }
       const { client: spec, snippet } = buildMcpConfig(client, "stdio");
-      // Install the core/available skills into the workspace as the agent payload.
-      const skills = loadRegistry("skill").filter((s) => s.status === "available");
+      // Install the usable skills (available + open-beta) as the agent payload —
+      // beta is usable, so core skills like extract/batch ship too.
+      const skills = loadRegistry("skill").filter(assetRunnable);
       for (const s of skills) installAsset(s);
       log.success(`Installed ${skills.length} core skill(s) for ${spec.label}.`);
       log.info("");
@@ -67,7 +68,7 @@ export const plugin: Command = {
       return 0;
     }
     if (sub === "update") {
-      const skills = loadRegistry("skill").filter((s) => s.status === "available");
+      const skills = loadRegistry("skill").filter(assetRunnable);
       for (const s of skills) installAsset(s);
       log.success(`Refreshed ${skills.length} core skill(s).`);
       return 0;
