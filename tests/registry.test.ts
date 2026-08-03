@@ -47,5 +47,7 @@ test("assetRunnable reflects backend capability status", () => {
   const fetchRecipe = loadRegistry("recipe").find((r) => r.name === "fetch-protected-page")!;
   assert.equal(assetRunnable(fetchRecipe), true); // needs protected_fetch (available)
   const batchSkill = loadRegistry("skill").find((s) => s.name === "batch-jobs")!;
-  assert.equal(assetRunnable(batchSkill), false); // needs batch (beta = not cloud-runnable)
+  assert.equal(assetRunnable(batchSkill), true); // needs batch (open beta = usable)
+  const extractSkill = loadRegistry("skill").find((s) => s.name === "extract")!;
+  assert.equal(assetRunnable(extractSkill), true); // needs extract (open beta = usable)
 });

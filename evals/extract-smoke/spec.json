@@ -1,10 +1,10 @@
 {
-  "description": "Smoke test: Extract returns structured output for a known-good ecommerce demo.",
+  "description": "Smoke test: Extract (extract=auto) returns structured output for an enabled company page.",
   "steps": [
     {
       "kind": "extract",
-      "url": "https://www.scrapingcourse.com/ecommerce/",
-      "options": { "method": "autoparse", "jsRender": false },
+      "url": "https://www.owler.com/company/meltwater",
+      "options": { "method": "extract", "jsRender": false },
       "expect": { "minLength": 2 }
     }
   ]

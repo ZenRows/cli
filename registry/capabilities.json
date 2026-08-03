@@ -12,12 +12,12 @@
     },
     "extract": {
       "key": "extract",
-      "label": "Extract (Autoparse / CSS / Markdown)",
+      "label": "Extract (extract=auto / Autoparse / CSS / Markdown)",
       "status": "beta",
       "command": "zenrows extract",
-      "backend": "Extract — GET https://api.zenrows.com/v1/ (autoparse, css_extractor, response_type)",
+      "backend": "Extract — GET https://api.zenrows.com/v1/ (extract=auto, autoparse, css_extractor, outputs, response_type)",
       "requiresAuth": true,
-      "notes": "Structured extraction on the Extract /v1/ endpoint via extract=auto, css_extractor, and response_type=markdown|plaintext."
+      "notes": "Open beta. Default is extract=auto (domain-gated); CLI falls back to autoparse on AUTH010. Autoparse / CSS / outputs / markdown work on any domain."
     },
     "batch": {
       "key": "batch",
@@ -26,7 +26,7 @@
       "command": "zenrows batch",
       "backend": "Batch — https://async.api.zenrows.com/v1 (X-API-Key header; separate host from the Fetch/Extract /v1/)",
       "requiresAuth": true,
-      "notes": "Batch is in beta. The cloud subcommands (create/status/results/cancel/wait/retry-failed) require beta access; without it the API returns 403 (BATCH_ACCESS_DENIED). `zenrows batch estimate` works locally with no API key: it validates JSONL job specs and estimates credit cost."
+      "notes": "Open beta. Cloud subcommands (create/status/results/cancel/wait/retry-failed) call the Batch API; `zenrows batch estimate` works locally with no API key."
     },
     "browser": {
       "key": "browser",
