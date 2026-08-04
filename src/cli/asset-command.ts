@@ -121,7 +121,7 @@ function listCmd(type: AssetType, _argv: string[], ctx: RunContext): number {
   if (ctx.json) {
     log.out(
       JSON.stringify(
-        { type, assets: assets.map((a) => ({ ...a, installed: installed.has(a.name), runnable: assetRunnable(a) })) },
+        { ok: true, type, assets: assets.map((a) => ({ ...a, installed: installed.has(a.name), runnable: assetRunnable(a) })) },
         null,
         2,
       ),
@@ -145,7 +145,7 @@ function listCmd(type: AssetType, _argv: string[], ctx: RunContext): number {
 function installCmd(type: AssetType, argv: string[], ctx: RunContext): number {
   const all = argv.includes("--all");
   const targets = all
-    ? loadRegistry(type).filter((a) => a.status === "available" || a.status === "experimental")
+    ? loadRegistry(type).filter(assetRunnable) // everything whose backend deps are usable (incl. beta) — matches `plugin install`
     : argv.filter((a) => !a.startsWith("-")).map((name) => requireAsset(type, name));
   if (targets.length === 0) {
     throw new ToolkitError({

@@ -41,6 +41,7 @@ export const status: Command = {
       log.out(
         JSON.stringify(
           {
+            ok: true,
             auth: { hasKey: auth.hasKey, source: auth.source, masked: auth.masked ?? null },
             workspace: { initialized: Boolean(ws), root: ws?.root ?? null, dir: ws?.dir ?? null },
             backend: { apiBase: cfg.apiBase, reachable },
