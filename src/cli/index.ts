@@ -94,10 +94,8 @@ export async function main(rawArgv: string[]): Promise<number> {
     return await cmd.run(argv, ctx);
   } catch (err) {
     printError(err, json);
-    // Any error exits 1. We do not overload the exit code to signal error kind:
-    // the capability-gated commands catch internally and return 1 already, so a
-    // CAPABILITY_UNAVAILABLE→2 mapping here never fired. Machine consumers read
-    // the precise `error.code` from --json output instead.
+    // Any error exits 1 — the exit code doesn't encode error kind. Machine
+    // consumers read the precise `error.code` from the --json output instead.
     return 1;
   }
 }
