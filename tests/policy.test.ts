@@ -4,6 +4,7 @@ import {
   assertBrowserAllowed,
   assertDomainAllowed,
   assertExperimentalAllowed,
+  assertWithinLimits,
   defaultPolicy,
 } from "../src/core/policy.ts";
 import { ToolkitError } from "../src/core/errors.ts";
@@ -38,5 +39,28 @@ test("experimental gated off by default; browser on by default (opt-out)", () =>
   assert.throws(
     () => assertBrowserAllowed({ ...pol, allow_browser: false }),
     (e: unknown) => e instanceof ToolkitError && e.code === "POLICY_BROWSER_DISABLED",
+  );
+});
+
+test("assertWithinLimits allows runs within the caps (and no-ops on omitted fields)", () => {
+  const pol = { ...defaultPolicy(), max_pages_per_run: 100, max_credits_per_run: 500 };
+  assert.doesNotThrow(() => assertWithinLimits({ pages: 100, credits: 500 }, pol)); // at the cap, ok
+  assert.doesNotThrow(() => assertWithinLimits({ pages: 10 }, pol)); // credits omitted
+  assert.doesNotThrow(() => assertWithinLimits({}, pol)); // nothing to check
+});
+
+test("assertWithinLimits rejects a run over the page cap", () => {
+  const pol = { ...defaultPolicy(), max_pages_per_run: 100 };
+  assert.throws(
+    () => assertWithinLimits({ pages: 101 }, pol, "batch"),
+    (e: unknown) => e instanceof ToolkitError && e.code === "POLICY_LIMIT_EXCEEDED",
+  );
+});
+
+test("assertWithinLimits rejects a run over the credit cap", () => {
+  const pol = { ...defaultPolicy(), max_credits_per_run: 500 };
+  assert.throws(
+    () => assertWithinLimits({ pages: 1, credits: 501 }, pol, "batch"),
+    (e: unknown) => e instanceof ToolkitError && e.code === "POLICY_LIMIT_EXCEEDED",
   );
 });

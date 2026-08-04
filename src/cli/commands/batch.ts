@@ -11,6 +11,10 @@ import { join } from "node:path";
 import { log, ANSI, c } from "../../core/logger.ts";
 import { estimateCredits, toJobBody, validateJsonl } from "../../adapters/batch.ts";
 import { requireApiKey } from "../../core/auth.ts";
+import { ensureApiKey } from "../../core/ensure-key.ts";
+import { assertUsable } from "../../core/capabilities.ts";
+import { assertDomainAllowed, assertWithinLimits, loadPolicy } from "../../core/policy.ts";
+import { newRunId, writeRun } from "../../core/artifacts.ts";
 import { createJob, downloadResults, getJob, listResults, rerunJob, stopJob, waitForJob, type Job } from "../../core/batch-api.ts";
 import { asNumber, asString, parse, type Command, type RunContext } from "../command.ts";
 import { ToolkitError } from "../../core/errors.ts";
@@ -28,8 +32,9 @@ export const batch: Command = {
     "    --js-render                    job-level: render JavaScript",
     "    --premium-proxy                job-level: use residential IPs",
     "    --proxy-country <cc>           job-level: geo-target (needs --premium-proxy)",
-    "    --output <fmt>                 job-level response_type (markdown|plaintext|pdf)",
-    "    --wait                         poll until the run finishes",
+    "    --output <fmt>                 job-level response_type (markdown|plaintext|pdf|html)",
+    "    --follow                       poll until the run finishes (alias: --wait)",
+    "    --no-signup                    do not auto-create a Free plan account if no key exists",
     "  status <id>                      show run status + stats",
     "  results <id> [--status s]        list results (successful|failed|all); paginated",
     "    --out <file>                   write results as JSONL instead of printing",
@@ -79,7 +84,7 @@ function estimateCmd(rest: string[], ctx: RunContext): number {
   const v = validateJsonl(file);
   const est = estimateCredits(v.jobs);
   if (ctx.json) {
-    log.out(JSON.stringify({ ...v, estimatedCredits: est.credits }, null, 2));
+    log.out(JSON.stringify({ ok: v.errors.length === 0, ...v, estimatedCredits: est.credits }, null, 2));
   } else {
     log.info(c(ANSI.bold, `Job spec: ${file}`));
     log.info(`valid jobs: ${v.validJobs}/${v.totalLines}`);
@@ -100,12 +105,20 @@ async function createCmd(rest: string[], ctx: RunContext): Promise<number> {
     "premium-proxy": { type: "boolean" },
     "proxy-country": { type: "string" },
     output: { type: "string" },
-    wait: { type: "boolean" },
+    follow: { type: "boolean" },
+    wait: { type: "boolean" }, // back-compat alias for --follow
+    "no-signup": { type: "boolean" },
     json: { type: "boolean" },
   });
+  // `--follow` is the clear name (poll until the run finishes); `--wait` is kept
+  // as an alias because fetch/extract use `--wait <ms>` for a different meaning.
+  const follow = values.follow === true || values.wait === true;
   const json = ctx.json || values.json === true;
   const file = positionals[0];
   if (!file) throw needFile();
+
+  // Capability gate first — a beta-disabled backend never gets a spec read.
+  assertUsable("batch");
 
   const v = validateJsonl(file);
   if (v.errors.length) {
@@ -120,6 +133,15 @@ async function createCmd(rest: string[], ctx: RunContext): Promise<number> {
     });
   }
 
+  // Pre-flight governance — all local, before any network call:
+  //  1. every task URL must pass the allow/deny domain policy,
+  //  2. the run must fit the batch-only page/credit caps (a batch is the one
+  //     primitive that fans out into many requests, so the caps bind here).
+  const policy = loadPolicy();
+  for (const job of v.jobs) assertDomainAllowed(job.url, policy);
+  const est = estimateCredits(v.jobs);
+  assertWithinLimits({ pages: v.validJobs, credits: est.credits }, policy, "batch");
+
   const jobParams: Record<string, unknown> = {};
   if (values["js-render"] === true) jobParams.js_render = true;
   if (values["premium-proxy"] === true) jobParams.premium_proxy = true;
@@ -130,18 +152,54 @@ async function createCmd(rest: string[], ctx: RunContext): Promise<number> {
 
   // toJobBody validates proxy_country/premium_proxy BEFORE any HTTP call.
   const body = toJobBody(v.jobs, jobParams);
-  const apiKey = requireApiKey();
+  const apiKey = await ensureApiKey(
+    values["no-signup"] ? { ...policy, auto_signup: false } : policy,
+    {
+      onProvision: (a) => {
+        log.info("No API key found — created a Zenrows Free plan account for you.");
+        log.dim(`Claim it anytime (keeps your usage): ${a.claimUrl}`);
+      },
+    },
+  );
 
-  log.step(`Submitting batch job (${body.tasks.length} tasks)…`);
-  const job = await createJob(body, { apiKey });
-  const finished = values.wait === true ? await waitForJob(job.job_id, { apiKey }) : job;
-  printJob(finished, json, `Submitted job ${job.job_id}`);
-  return 0;
+  const runId = newRunId();
+  const startedAt = new Date().toISOString();
+  log.step(`Submitting batch job (${body.tasks.length} tasks, ~${est.credits} credits)…`);
+  try {
+    const job = await createJob(body, { apiKey });
+    const finished = follow ? await waitForJob(job.job_id, { apiKey }) : job;
+    const runDir = writeRun({
+      runId,
+      command: "zenrows batch create",
+      capability: "batch",
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      status: "ok",
+      request: { file, tasks: body.tasks.length, estimatedCredits: est.credits, jobParams },
+      result: { jobId: job.job_id, status: finished.latest_run?.status ?? "unknown" },
+    });
+    printJob(finished, json, `Submitted job ${job.job_id}`);
+    if (runDir && !json) log.dim(`  artifact: ${runDir}`);
+    return 0;
+  } catch (err) {
+    writeRun({
+      runId,
+      command: "zenrows batch create",
+      capability: "batch",
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      status: "error",
+      request: { file, tasks: body.tasks.length, estimatedCredits: est.credits, jobParams },
+      error: err instanceof ToolkitError ? err.toJSON() : { message: String(err) },
+    });
+    throw err;
+  }
 }
 
 async function statusCmd(rest: string[], ctx: RunContext): Promise<number> {
   const { positionals } = parse(rest, {});
   const id = requireId(positionals[0]);
+  assertUsable("batch");
   const apiKey = requireApiKey();
   const job = await getJob(id, { apiKey });
   printJob(job, ctx.json, `Job ${id}`);
@@ -158,6 +216,7 @@ async function resultsCmd(rest: string[], ctx: RunContext): Promise<number> {
   const json = ctx.json || values.json === true;
   const id = requireId(positionals[0]);
   const status = normalizeResultStatus(asString(values.status));
+  assertUsable("batch");
   const apiKey = requireApiKey();
 
   const rows = await listResults(id, { apiKey, status });
@@ -220,6 +279,7 @@ async function resultsCmd(rest: string[], ctx: RunContext): Promise<number> {
 async function cancelCmd(rest: string[], ctx: RunContext): Promise<number> {
   const { positionals } = parse(rest, {});
   const id = requireId(positionals[0]);
+  assertUsable("batch");
   const apiKey = requireApiKey();
   const job = await stopJob(id, { apiKey });
   printJob(job, ctx.json, `Stopped job ${id}`);
@@ -230,6 +290,7 @@ async function waitCmd(rest: string[], ctx: RunContext): Promise<number> {
   const { values, positionals } = parse(rest, { timeout: { type: "string" }, json: { type: "boolean" } });
   const json = ctx.json || values.json === true;
   const id = requireId(positionals[0]);
+  assertUsable("batch");
   const apiKey = requireApiKey();
   const job = await waitForJob(id, { apiKey, timeoutMs: asNumber(values.timeout) });
   printJob(job, json, `Job ${id} finished`);
@@ -239,6 +300,7 @@ async function waitCmd(rest: string[], ctx: RunContext): Promise<number> {
 async function retryCmd(rest: string[], ctx: RunContext): Promise<number> {
   const { positionals } = parse(rest, {});
   const id = requireId(positionals[0]);
+  assertUsable("batch");
   const apiKey = requireApiKey();
   // "Reruns and retrying failures": POST /jobs/{id}/rerun?status=failed replays
   // only the failures; already-successful tasks carry over.
@@ -284,8 +346,19 @@ function normalizeOutput(v?: string): string | undefined {
     pdf: "pdf",
     html: "", // raw HTML is the default; no response_type
   };
-  const mapped = map[v.toLowerCase()];
-  return mapped ? mapped : undefined;
+  const key = v.toLowerCase();
+  if (!(key in map)) {
+    // Fail loudly rather than silently dropping an unrecognized format (house rule).
+    throw new ToolkitError({
+      code: "INVALID_USAGE",
+      message: `Unknown --output format: ${v}.`,
+      likely_cause: "Only markdown | plaintext | pdf | html are supported for batch --output.",
+      next_action: "Use --output md|markdown | text|plaintext | pdf | html (html = raw HTML, the default).",
+      suggested_commands: ["zenrows batch create jobs.jsonl --output markdown"],
+    });
+  }
+  const mapped = map[key];
+  return mapped ? mapped : undefined; // html → undefined (no response_type)
 }
 
 function requireId(id: string | undefined): string {

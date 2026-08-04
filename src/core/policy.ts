@@ -93,6 +93,39 @@ export function assertExperimentalAllowed(policy: Policy, command: string): void
   }
 }
 
+/**
+ * Throw if a run exceeds the policy's numeric caps.
+ *
+ * These caps are meaningful for *multi-request* runs (batch): a single `fetch`
+ * or `extract` is one request, so its adapters do not call this. `pages` is the
+ * task count; `credits` is the locally-estimated credit cost. Either may be
+ * omitted when not applicable.
+ */
+export function assertWithinLimits(
+  requested: { pages?: number; credits?: number },
+  policy: Policy,
+  context = "run",
+): void {
+  if (requested.pages !== undefined && requested.pages > policy.max_pages_per_run) {
+    throw new ToolkitError({
+      code: "POLICY_LIMIT_EXCEEDED",
+      message: `This ${context} submits ${requested.pages} page(s), over the policy cap of ${policy.max_pages_per_run}.`,
+      likely_cause: "policy.max_pages_per_run bounds how many URLs a single run may submit.",
+      next_action: `Split the job into runs of ≤${policy.max_pages_per_run} page(s), or raise max_pages_per_run in policy.json.`,
+      suggested_commands: ["zenrows policy show"],
+    });
+  }
+  if (requested.credits !== undefined && requested.credits > policy.max_credits_per_run) {
+    throw new ToolkitError({
+      code: "POLICY_LIMIT_EXCEEDED",
+      message: `This ${context} is estimated at ${requested.credits} credit(s), over the policy cap of ${policy.max_credits_per_run}.`,
+      likely_cause: "policy.max_credits_per_run bounds the estimated credit cost of a single run.",
+      next_action: "Reduce the job size or per-task cost (e.g. drop premium_proxy/js_render), or raise max_credits_per_run in policy.json.",
+      suggested_commands: ["zenrows policy show"],
+    });
+  }
+}
+
 /** Throw if browser sessions have been disabled by policy (they are on by default). */
 export function assertBrowserAllowed(policy: Policy): void {
   if (!policy.allow_browser) {

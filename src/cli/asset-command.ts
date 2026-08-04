@@ -173,7 +173,7 @@ function explainCmd(type: AssetType, argv: string[], ctx: RunContext): number {
   if (!name) throw usageErr(type, "explain <name>");
   const asset = requireAsset(type, name);
   if (ctx.json) {
-    log.out(JSON.stringify({ ...asset, runnable: assetRunnable(asset) }, null, 2));
+    log.out(JSON.stringify({ ok: true, ...asset, runnable: assetRunnable(asset) }, null, 2));
     return 0;
   }
   log.info(c(ANSI.bold, `${asset.name}  (${asset.type}, ${asset.status})`));
@@ -257,7 +257,7 @@ function validateSkill(argv: string[], ctx: RunContext): number {
     if (/apikey=|ZENROWS_API_KEY=[A-Za-z0-9]/.test(body)) errors.push("SKILL.md may contain a secret");
   }
   if (ctx.json) {
-    log.out(JSON.stringify({ name, valid: errors.length === 0, errors }, null, 2));
+    log.out(JSON.stringify({ ok: errors.length === 0, name, valid: errors.length === 0, errors }, null, 2));
   } else if (errors.length === 0) {
     log.success(`Skill "${name}" is valid.`);
   } else {
