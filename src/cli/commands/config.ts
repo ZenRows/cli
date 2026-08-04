@@ -74,7 +74,7 @@ export const config: Command = {
 };
 
 function out(cfg: ToolkitConfig, _ctx: RunContext): number {
-  log.out(JSON.stringify(cfg, null, 2));
+  log.out(JSON.stringify({ ok: true, ...cfg }, null, 2));
   return 0;
 }
 function unknownKey(key?: string): ToolkitError {

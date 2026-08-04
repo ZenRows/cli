@@ -44,7 +44,7 @@ export const mcp: Command = {
       }
       const { client, snippet } = buildMcpConfig(clientId, transport);
       if (ctx.json) {
-        log.out(JSON.stringify({ client: client.id, transport, configFile: client.configFile, autoConfigurable: client.autoConfigurable, snippet }, null, 2));
+        log.out(JSON.stringify({ ok: true, client: client.id, transport, configFile: client.configFile, autoConfigurable: client.autoConfigurable, snippet }, null, 2));
         return 0;
       }
       log.info(c(ANSI.bold, `MCP config for ${client.label} (${transport})`));
@@ -76,7 +76,7 @@ export const mcp: Command = {
 function statusCmd(ctx: RunContext): number {
   const cap = loadCapabilities().mcp;
   if (ctx.json) {
-    log.out(JSON.stringify({ capability: cap, remote: REMOTE_URL, local: "npx -y @zenrows/mcp", clients: Object.values(MCP_CLIENTS) }, null, 2));
+    log.out(JSON.stringify({ ok: true, capability: cap, remote: REMOTE_URL, local: "npx -y @zenrows/mcp", clients: Object.values(MCP_CLIENTS) }, null, 2));
     return 0;
   }
   log.info(c(ANSI.bold, "Zenrows MCP"));

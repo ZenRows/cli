@@ -21,6 +21,7 @@ interface RunRecord {
   result?: Record<string, unknown>;
   error?: { code?: string; message?: string; likely_cause?: string; next_action?: string; suggested_commands?: string[] };
   costUsd?: number | null;
+  costCredits?: number | null;
 }
 
 export const trace: Command = {
@@ -40,7 +41,7 @@ export const trace: Command = {
     const rec = loadRun(runId);
 
     if (sub === "inspect") {
-      log.out(JSON.stringify(rec, null, 2));
+      log.out(JSON.stringify({ ok: true, ...rec }, null, 2));
       return 0;
     }
     if (sub === "export") {
@@ -51,7 +52,7 @@ export const trace: Command = {
     if (sub === "replay") {
       const cmd = rebuildCommand(rec);
       if (ctx.json) {
-        log.out(JSON.stringify({ runId, replay: cmd }, null, 2));
+        log.out(JSON.stringify({ ok: true, runId, replay: cmd }, null, 2));
       } else {
         log.info("Replay this run with:");
         log.out(cmd);
@@ -101,13 +102,13 @@ function explain(rec: RunRecord, ctx: RunContext): number {
       : [rebuildCommand(rec) + " --manual --js-render --premium-proxy"];
 
   if (ctx.json) {
-    log.out(JSON.stringify({ runId: rec.runId, what_happened: what, likely_failure_reason: reason, evidence: rec, recommended_next_action: nextAction, suggested_commands: suggested }, null, 2));
+    log.out(JSON.stringify({ ok: true, runId: rec.runId, what_happened: what, likely_failure_reason: reason, evidence: rec, recommended_next_action: nextAction, suggested_commands: suggested }, null, 2));
     return 0;
   }
   log.info(c(ANSI.bold, `Trace explain · ${rec.runId}`));
   log.info(`what happened:   ${what}`);
   log.info(`failure reason:  ${reason}`);
-  log.info(`evidence:        status=${rec.status} cost=$${(rec.costUsd ?? 0).toFixed(4)} cap=${rec.capability}`);
+  log.info(`evidence:        status=${rec.status} cost=$${(rec.costUsd ?? 0).toFixed(4)}${rec.costCredits != null ? ` · ${rec.costCredits} credit${rec.costCredits === 1 ? "" : "s"}` : ""} cap=${rec.capability}`);
   log.info(`next action:     ${nextAction}`);
   log.info("suggested:");
   suggested.forEach((s) => process.stderr.write("  " + c(ANSI.cyan, "$ " + s) + "\n"));

@@ -1,5 +1,5 @@
 /**
- * Protected Fetch adapter → Zenrows Universal Scraper API (`GET /v1/`).
+ * Protected Fetch adapter → Zenrows Fetch (`GET /v1/`).
  *
  * Maps toolkit options to confirmed API parameters and enforces the
  * auto/manual contract: in Adaptive Stealth Mode (mode=auto), `js_render` and
@@ -34,7 +34,12 @@ export interface FetchOptions {
   cssExtractor?: string;
   autoparse?: boolean;
   /**
-   * Comma-separated Universal Scraper API output filters (e.g. "emails,links",
+   * Site-tailored Extract (`extract=auto`). Open beta, domain-gated.
+   * Takes precedence over autoparse / css_extractor / outputs / response_type.
+   */
+  extract?: boolean;
+  /**
+   * Comma-separated Fetch and Extract output filters (e.g. "emails,links",
    * or "*" for all available fields). Returns structured JSON. Standalone: not combined with
    * autoparse / css_extractor / response_type.
    */
@@ -112,6 +117,7 @@ export function buildParams(opts: FetchOptions, config: ToolkitConfig): ScraperP
   if (opts.sessionId !== undefined) params.session_id = opts.sessionId;
   if (opts.originalStatus) params.original_status = true;
   if (opts.allowedStatusCodes) params.allowed_status_codes = opts.allowedStatusCodes;
+  if (opts.extract) params.extract = "auto";
   if (opts.autoparse) params.autoparse = true;
   if (opts.cssExtractor) params.css_extractor = opts.cssExtractor;
   if (opts.outputs) params.outputs = opts.outputs;

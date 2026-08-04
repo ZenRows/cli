@@ -7,7 +7,7 @@ status: available
 
 # Workflow: competitor intelligence
 
-A higher-level process built on the Zenrows **Universal Scraper API**: retrieve
+A higher-level process built on Zenrows **Fetch and Extract**: retrieve
 protected pages with `zenrows fetch`, then turn them into structured data with
 `zenrows extract` (the same API's Autoparse / CSS / Markdown — not a separate
 product). Scheduling and scaling use the tools you already have (cron/CI, a
@@ -20,16 +20,16 @@ simple per-URL loop).
    ```
    zenrows fetch https://competitor.example/products
    ```
-2. **Validate extraction** on one page (available).
+2. **Validate extraction** on one page (extract is beta; extract=auto falls back to autoparse).
    ```
-   zenrows extract https://competitor.example/p/123 --autoparse --validate
+   zenrows extract https://competitor.example/p/123 --validate
    ```
 3. **Scale** across the collected URLs — loop the validated extract step over
    each URL (from your own script, cron, or CI):
    ```
-   zenrows extract https://competitor.example/p/124 --autoparse --validate
+   zenrows extract https://competitor.example/p/124 --validate
    ```
-   > For large or recurring lists, the **Batch Scraper API** (`zenrows batch`) is
+   > For large or recurring lists, **Batch** (`zenrows batch`) is
    > the managed alternative — one job submits many URLs, retries transient
    > failures, and stores results, so you don't operate the loop yourself. It's
    > in beta; you can request access and validate/estimate a spec

@@ -26,7 +26,7 @@
       "name": "extract",
       "type": "skill",
       "description": "Turn protected pages into structured data with Autoparse / CSS / Markdown.",
-      "status": "available",
+      "status": "beta",
       "requires_backend_capabilities": ["extract"],
       "requires_auth": true,
       "version": "0.1.0",
@@ -36,7 +36,7 @@
     {
       "name": "batch-jobs",
       "type": "skill",
-      "description": "Scale protected fetch/extract over many URLs with the Batch Scraper API (beta): submit/track/collect jobs with beta access; validate + estimate specs locally with no key.",
+      "description": "Scale protected fetch/extract over many URLs with Batch (beta): submit/track/collect jobs with beta access; validate + estimate specs locally with no key.",
       "status": "beta",
       "requires_backend_capabilities": ["batch"],
       "requires_auth": true,
@@ -47,8 +47,8 @@
     {
       "name": "interact-browser",
       "type": "skill",
-      "description": "Escalate to a browser (Scraping Browser / MCP) only when fetch/extract cannot do the job.",
-      "status": "experimental",
+      "description": "Escalate to Browser Sessions (REST API / MCP browser_*) only when fetch/extract cannot do the job.",
+      "status": "available",
       "requires_backend_capabilities": ["browser"],
       "requires_auth": true,
       "version": "0.1.0",

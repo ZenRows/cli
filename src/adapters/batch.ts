@@ -1,7 +1,7 @@
 /**
  * Batch Jobs adapter.
  *
- * Status: `beta` — the Zenrows Batch Scraper API is in beta.
+ * Status: `beta` — the Zenrows Batch API is in beta.
  * With beta access the cloud subcommands run for real (see `core/batch-api.ts`).
  * Without access the API returns 403 → BATCH_ACCESS_DENIED. This adapter owns
  * the local, no-network pieces: validating a JSONL job spec, estimating credit
@@ -176,7 +176,7 @@ function assertProxyCountryPremium(params: Record<string, unknown>, where: strin
     code: "PARAM_PROXY_COUNTRY_REQUIRES_PREMIUM",
     message: `proxy_country needs premium proxies (or mode=auto) — ${where}.`,
     likely_cause:
-      "The Batch Scraper API only geolocates the proxy when premium_proxy=true, or in Adaptive Stealth Mode (mode=auto).",
+      "Batch only geolocates the proxy when premium_proxy=true, or in Adaptive Stealth Mode (mode=auto).",
     next_action:
       "Add premium_proxy (10x cost) alongside proxy_country, or set mode=auto — geo-targeting works there without the flag.",
     suggested_commands: ["zenrows batch create jobs.jsonl --premium-proxy --proxy-country us"],

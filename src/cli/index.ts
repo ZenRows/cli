@@ -94,7 +94,9 @@ export async function main(rawArgv: string[]): Promise<number> {
     return await cmd.run(argv, ctx);
   } catch (err) {
     printError(err, json);
-    return err instanceof ToolkitError && err.code === "CAPABILITY_UNAVAILABLE" ? 2 : 1;
+    // Any error exits 1 — the exit code doesn't encode error kind. Machine
+    // consumers read the precise `error.code` from the --json output instead.
+    return 1;
   }
 }
 

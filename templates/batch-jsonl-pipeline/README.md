@@ -1,7 +1,7 @@
 # batch-jsonl-pipeline
 
 Scaffold for a high-scale workload expressed as a JSONL job spec, run on the
-Zenrows **Batch Scraper API**. One JSON object per line, each with a `url` (plus
+Zenrows **Batch**. One JSON object per line, each with a `url` (plus
 optional per-line overrides like `js_render`, `premium_proxy`, `proxy_country`,
 `mode`, `autoparse`, and an `external_id` echoed back on each result).
 
@@ -13,7 +13,7 @@ zenrows batch estimate jobs.example.jsonl    # validate the spec + estimate cred
 
 ## Cloud (needs a key + Batch beta access)
 
-The Batch Scraper API is in **beta**. With beta access the
+Batch is in **beta**. With beta access the
 cloud subcommands run for real; without it the API returns `BATCH_ACCESS_DENIED`.
 
 ```bash

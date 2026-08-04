@@ -1,9 +1,9 @@
 /**
- * Client for the Zenrows Batch Scraper API.
+ * Client for the Zenrows Batch API.
  *
- * A SEPARATE host from the Universal Scraper API (`api.zenrows.com/v1`): batch
+ * A SEPARATE host from Fetch and Extract (`api.zenrows.com/v1`): batch
  * jobs live at `https://async.api.zenrows.com/v1`. Auth is the `X-API-Key`
- * header (same key as the scraper API), never the `apikey` query param. Bodies
+ * header (same key as Fetch and Extract), never the `apikey` query param. Bodies
  * are JSON; errors come back as `application/problem+json` (RFC 7807) with a
  * stable `code` we branch on. The key is registered as a secret so it is
  * redacted from any logged output. `fetchImpl` is injectable for tests, mirroring
@@ -20,7 +20,7 @@ import { ToolkitError, quotaExhausted } from "./errors.ts";
 import { readAccount } from "./agent-account.ts";
 import { registerSecret } from "./logger.ts";
 
-/** Confirmed Batch Scraper API base (no trailing slash). */
+/** Confirmed Batch API base (no trailing slash). */
 export const DEFAULT_BATCH_API_BASE = "https://async.api.zenrows.com/v1";
 /** Env var to override the Batch API base (local/staging testing). */
 export const BATCH_API_BASE_ENV = "ZENROWS_BATCH_API_BASE";
@@ -121,7 +121,7 @@ export async function batchRequest<T>(method: string, path: string, opts: Reques
     clearTimeout(timeout);
     throw new ToolkitError({
       code: "BACKEND_UNAVAILABLE",
-      message: "Could not reach the Zenrows Batch Scraper API.",
+      message: "Could not reach the Zenrows Batch API.",
       likely_cause: err instanceof Error ? err.message : String(err),
       next_action:
         "Check connectivity and retry. Override the host with ZENROWS_BATCH_API_BASE if you are testing against staging.",
@@ -162,17 +162,17 @@ function problemToError(status: number, body: string, method: string, path: stri
   if (status === 403) {
     return new ToolkitError({
       code: "BATCH_ACCESS_DENIED",
-      message: "The Batch Scraper API rejected this request (access denied).",
-      likely_cause: `${cause}. The Batch Scraper API is in beta and this account does not have beta access.`,
+      message: "The Batch API rejected this request (access denied).",
+      likely_cause: `${cause}. The Batch API is in beta and this account does not have beta access.`,
       next_action:
-        "Request Batch Scraper API beta access from Zenrows. Meanwhile validate/estimate specs locally and fan out with `zenrows fetch` per URL.",
+        "Request Batch API beta access from Zenrows. Meanwhile validate/estimate specs locally and fan out with `zenrows fetch` per URL.",
       suggested_commands: ["zenrows batch estimate jobs.jsonl"],
     });
   }
   if (status === 401) {
     return new ToolkitError({
       code: "AUTH_INVALID",
-      message: "Zenrows rejected the API key for the Batch Scraper API.",
+      message: "Zenrows rejected the API key for the Batch API.",
       likely_cause: cause,
       next_action: "Re-check your key and log in again.",
       suggested_commands: ["zenrows login --api-key <your-key>"],

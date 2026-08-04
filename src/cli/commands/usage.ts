@@ -1,6 +1,6 @@
 /**
  * `zenrows usage` — show plan usage, credits, and concurrency for the current
- * API key, via the Universal Scraper API's `subscriptions/self/details`.
+ * API key, via the Fetch and Extract API's `subscriptions/self/details`.
  */
 import { requireApiKey } from "../../core/auth.ts";
 import { loadConfig } from "../../core/config.ts";
@@ -35,7 +35,7 @@ export const usage: Command = {
     const u = await fetchUsage(config.apiBase, apiKey);
 
     if (ctx.json) {
-      log.out(JSON.stringify(u, null, 2));
+      log.out(JSON.stringify({ ok: true, ...u }, null, 2));
       return 0;
     }
 

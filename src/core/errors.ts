@@ -16,12 +16,15 @@ export type ErrorCode =
   | "PARAM_PROXY_COUNTRY_REQUIRES_PREMIUM"
   | "POLICY_BLOCKED_DOMAIN"
   | "POLICY_MAX_CREDITS_EXCEEDED"
+  | "POLICY_LIMIT_EXCEEDED"
   | "POLICY_EXPERIMENTAL_DISABLED"
+  | "POLICY_BROWSER_DISABLED"
   | "SIGNUP_RATE_LIMITED"
   | "DOMAIN_FORBIDDEN"
   | "FETCH_FAILED"
   | "FETCH_EMPTY_RESPONSE"
   | "EXTRACT_FAILED"
+  | "EXTRACT_DOMAIN_NOT_ENABLED"
   | "EXTRACT_VALIDATION_FAILED"
   | "BROWSER_UNAVAILABLE"
   | "BATCH_ACCESS_DENIED"
@@ -93,21 +96,5 @@ export function quotaExhausted(
     likely_cause: `${detail}HTTP ${opts.status ?? 429} for ${url}`,
     next_action: claimLine,
     suggested_commands: claimUrl ? [] : ["zenrows usage"],
-  });
-}
-
-/** Build the canonical "this capability is not configured" error. */
-export function capabilityUnavailable(
-  capabilityLabel: string,
-  command: string,
-  suggested: string[],
-): ToolkitError {
-  return new ToolkitError({
-    code: "CAPABILITY_UNAVAILABLE",
-    message: `${capabilityLabel} is not configured for this backend yet.`,
-    likely_cause: `The cloud primitive behind \`${command}\` is not enabled for this account or has not shipped.`,
-    next_action:
-      "Use a local spec / validation path, or escalate to a confirmed primitive (Protected Fetch / Extract).",
-    suggested_commands: suggested,
   });
 }

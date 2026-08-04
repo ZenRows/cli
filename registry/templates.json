@@ -3,7 +3,7 @@
     {
       "name": "protected-fetch-node",
       "type": "template",
-      "description": "Minimal Node.js project calling the Zenrows Universal Scraper API.",
+      "description": "Minimal Node.js project calling Zenrows Fetch.",
       "status": "available",
       "requires_backend_capabilities": ["protected_fetch"],
       "requires_auth": true,
@@ -25,7 +25,7 @@
     {
       "name": "batch-jsonl-pipeline",
       "type": "template",
-      "description": "JSONL job-spec scaffold for high-scale workloads on the Batch Scraper API: submit/track/collect with beta access, validate + estimate locally with no key (beta).",
+      "description": "JSONL job-spec scaffold for high-scale workloads on Batch: submit/track/collect with beta access, validate + estimate locally with no key (beta).",
       "status": "beta",
       "requires_backend_capabilities": [],
       "requires_auth": false,

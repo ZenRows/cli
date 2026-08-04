@@ -28,6 +28,9 @@ export function getCapability(key: string): Capability | undefined {
 const USABLE: ReadonlySet<CapabilityStatus> = new Set<CapabilityStatus>([
   "available",
   "available-but-needs-confirmation",
+  // Open beta: any key can call; product-specific limits (e.g. Extract domain
+  // coverage, Batch 403) are handled by the adapters / API errors, not here.
+  "beta",
 ]);
 
 export function isUsable(key: string): boolean {

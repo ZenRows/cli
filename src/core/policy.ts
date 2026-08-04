@@ -10,7 +10,7 @@ export function defaultPolicy(): Policy {
     max_credits_per_run: 10000,
     max_pages_per_run: 1000,
     max_concurrency: 20,
-    allow_browser: false,
+    allow_browser: true,
     allow_experimental: false,
     allowed_domains: [],
     blocked_domains: [],
@@ -93,14 +93,49 @@ export function assertExperimentalAllowed(policy: Policy, command: string): void
   }
 }
 
-/** Throw if browser escalation is disabled by policy. */
+/**
+ * Throw if a run exceeds the policy's numeric caps.
+ *
+ * These caps are meaningful for *multi-request* runs (batch): a single `fetch`
+ * or `extract` is one request, so its adapters do not call this. `pages` is the
+ * task count; `credits` is the locally-estimated credit cost. Either may be
+ * omitted when not applicable.
+ */
+export function assertWithinLimits(
+  requested: { pages?: number; credits?: number },
+  policy: Policy,
+  context = "run",
+): void {
+  if (requested.pages !== undefined && requested.pages > policy.max_pages_per_run) {
+    throw new ToolkitError({
+      code: "POLICY_LIMIT_EXCEEDED",
+      message: `This ${context} submits ${requested.pages} page(s), over the policy cap of ${policy.max_pages_per_run}.`,
+      likely_cause: "policy.max_pages_per_run bounds how many URLs a single run may submit.",
+      next_action: `Split the job into runs of ≤${policy.max_pages_per_run} page(s), or raise max_pages_per_run in policy.json.`,
+      suggested_commands: ["zenrows policy show"],
+    });
+  }
+  if (requested.credits !== undefined && requested.credits > policy.max_credits_per_run) {
+    throw new ToolkitError({
+      code: "POLICY_LIMIT_EXCEEDED",
+      message: `This ${context} is estimated at ${requested.credits} credit(s), over the policy cap of ${policy.max_credits_per_run}.`,
+      likely_cause: "policy.max_credits_per_run bounds the estimated credit cost of a single run.",
+      next_action: "Reduce the job size or per-task cost (e.g. drop premium_proxy/js_render), or raise max_credits_per_run in policy.json.",
+      suggested_commands: ["zenrows policy show"],
+    });
+  }
+}
+
+/** Throw if browser sessions have been disabled by policy (they are on by default). */
 export function assertBrowserAllowed(policy: Policy): void {
   if (!policy.allow_browser) {
     throw new ToolkitError({
-      code: "POLICY_EXPERIMENTAL_DISABLED",
+      code: "POLICY_BROWSER_DISABLED",
       message: "Browser sessions are disabled by policy.",
-      likely_cause: "policy.allow_browser is false (the safe default — browser is escalation-only).",
-      next_action: "Set allow_browser=true in policy.json only if Protected Fetch / Extract cannot do the job.",
+      likely_cause: "policy.allow_browser is false — browser was opted out in this workspace.",
+      next_action:
+        "Re-enable with `zenrows policy set allow_browser true`. Note: browser is escalation-only — prefer fetch/extract, which cost less, for most cases.",
+      suggested_commands: ["zenrows policy set allow_browser true"],
     });
   }
 }

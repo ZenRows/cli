@@ -41,6 +41,7 @@ export interface StepResult {
   status?: number;
   bytes?: number;
   costUsd?: number | null;
+  costCredits?: number | null;
   requestId?: string | null;
   /** For local `batch-estimate` steps: the estimated credit cost of the spec. */
   estimatedCredits?: number;
@@ -75,6 +76,7 @@ export async function runStep(
       status: result.status,
       bytes: result.body.length,
       costUsd: result.costUsd,
+      costCredits: result.costCredits,
       requestId: result.requestId,
       failureReason: ok ? undefined : "expectation not met",
     };
