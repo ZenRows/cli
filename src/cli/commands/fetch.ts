@@ -37,6 +37,10 @@ export const fetch_: Command = {
     "  --out <file>           write the response body to a file",
     "  --no-signup            do not auto-create a Free plan account if no key exists",
     "  --json                 print a structured result",
+    "",
+    "Cost (credits per request): 1x normal · 5x --js-render · 10x --premium-proxy · 25x both.",
+    "In auto mode you pay only for the configuration that succeeds; the exact charge is",
+    "reported after every request (costCredits / X-Request-Credits).",
   ].join("\n"),
   async run(argv: string[], ctx: RunContext): Promise<number> {
     const { values, positionals } = parse(argv, {

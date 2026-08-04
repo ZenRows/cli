@@ -37,6 +37,9 @@ export const extract: Command = {
     "  --out <file>           write output to a file",
     "  --no-signup            do not auto-create a Free plan account if no key exists",
     "  --json                 structured result",
+    "",
+    "Cost (credits per request): 1x normal · 5x --js-render · 10x --premium-proxy · 25x both.",
+    "The exact charge is reported after every request (costCredits / X-Request-Credits).",
   ].join("\n"),
   async run(argv: string[], ctx: RunContext): Promise<number> {
     const { values, positionals } = parse(argv, {
