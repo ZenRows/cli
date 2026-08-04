@@ -98,19 +98,3 @@ export function quotaExhausted(
     suggested_commands: claimUrl ? [] : ["zenrows usage"],
   });
 }
-
-/** Build the canonical "this capability is not configured" error. */
-export function capabilityUnavailable(
-  capabilityLabel: string,
-  command: string,
-  suggested: string[],
-): ToolkitError {
-  return new ToolkitError({
-    code: "CAPABILITY_UNAVAILABLE",
-    message: `${capabilityLabel} is not configured for this backend yet.`,
-    likely_cause: `The cloud primitive behind \`${command}\` is not enabled for this account or has not shipped.`,
-    next_action:
-      "Use a local spec / validation path, or escalate to a confirmed primitive (Protected Fetch / Extract).",
-    suggested_commands: suggested,
-  });
-}
