@@ -36,7 +36,6 @@ export const MCP_CLIENTS: Record<string, McpClientSpec> = {
     configFile: ".mcp.json (project) or run `claude mcp add`",
     format: "cli",
     autoConfigurable: true,
-    notes: "Confirmed: `claude mcp add zenrows -e ZENROWS_API_KEY=… -- npx -y @zenrows/mcp`.",
   },
   cursor: {
     id: "cursor",
