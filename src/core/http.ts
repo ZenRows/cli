@@ -203,6 +203,25 @@ export async function scrape(
         "This is a permanent policy block, not a transient failure — the same request will fail again with any parameters (--js-render, --premium-proxy, …). Use a different source, or contact Zenrows if you believe this domain should be allowed.",
     });
   }
+  const unrecoverable = unrecoverableTargetCode(body);
+  if (unrecoverable) {
+    // The target itself does not resolve (RESP007) or does not exist (RESP002, 404).
+    // No fetch configuration can change that, so we must NOT advise a retry — a
+    // retry fails identically and still costs credits. (A human is free to try a
+    // corrected URL; we just don't hand an agent an escalation command here.)
+    const detail = zrErrorDetail(body) ?? snippet(body);
+    const noResolve = unrecoverable === "RESP007";
+    throw new ToolkitError({
+      code: "FETCH_FAILED",
+      message: noResolve
+        ? "The target domain could not be resolved."
+        : "The target returned 404 Not Found.",
+      likely_cause: `${detail}. This is a property of the target, not a transient block.`,
+      next_action: noResolve
+        ? "Check the URL for typos. No configuration (--js-render, --premium-proxy) can reach a host with no DNS record — do not retry; it will fail identically and still cost credits."
+        : "Verify the URL. Rendering or premium proxies will not turn a 404 into content — do not retry; it will fail identically and still cost credits.",
+    });
+  }
   if (res.status === 422 || res.status >= 500 || (res.status >= 400 && !looksLikeContent(result))) {
     throw new ToolkitError({
       code: "FETCH_FAILED",
@@ -248,6 +267,21 @@ function isForbiddenDomain(body: string): boolean {
     return typeof j.code === "string" && j.code.toUpperCase() === "REQS001";
   } catch {
     return false;
+  }
+}
+
+/**
+ * Codes where the target is unreachable/nonexistent — RESP007 (domain does not
+ * resolve) and RESP002 (target 404). Permanent: no proxy/render setting fixes
+ * them, so the caller must not advise a (billed) retry.
+ */
+function unrecoverableTargetCode(body: string): "RESP007" | "RESP002" | null {
+  try {
+    const j = JSON.parse(body) as { code?: unknown };
+    const code = typeof j.code === "string" ? j.code.toUpperCase() : "";
+    return code === "RESP007" || code === "RESP002" ? code : null;
+  } catch {
+    return null;
   }
 }
 

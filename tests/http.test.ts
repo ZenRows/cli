@@ -110,6 +110,34 @@ test("scrape sends a User-Agent carrying the current CLI version", async () => {
   assert.equal(seenUA, `zenrows-cli/${CLI_VERSION}`);
 });
 
+test("scrape does NOT advise a (billed) retry when the target cannot be resolved (RESP007)", async () => {
+  const RESP007 = JSON.stringify({
+    code: "RESP007",
+    detail: "The requested target domain could not be resolved, or there is no DNS record associated with it.",
+    status: 422,
+    title: "Could not resolve domain (RESP007)",
+  });
+  await withFetch(
+    () => new Response(RESP007, { status: 422, headers: { "content-type": "application/json" } }),
+    async () => {
+      await assert.rejects(
+        () => scrape("https://api.zenrows.com/v1/", "test-key", { url: "https://no-such-host.invalid" }),
+        (err: unknown) => {
+          const e = err as { code: string; next_action: string; suggested_commands: string[] };
+          assert.equal(e.code, "FETCH_FAILED");
+          // The whole point: it discourages a retry and offers no billed retry
+          // command. (Naming the flags to say they *won't* help is fine; telling
+          // the agent to "retry with" them is not.)
+          assert.match(e.next_action, /do not retry/i);
+          assert.doesNotMatch(e.next_action, /retry with/i);
+          assert.equal(e.suggested_commands.length, 0);
+          return true;
+        },
+      );
+    },
+  );
+});
+
 test("scrape maps AUTH010 on extract=auto to EXTRACT_DOMAIN_NOT_ENABLED", async () => {
   const AUTH010 = JSON.stringify({
     code: "AUTH010",
