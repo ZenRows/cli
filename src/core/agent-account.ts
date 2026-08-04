@@ -64,25 +64,40 @@ export async function discoverSignupUrl(
 }
 
 /**
- * Resolve the agent-signup endpoint. Precedence:
- *   1. ZENROWS_AGENT_SIGNUP_URL env var (local testing)
- *   2. `signupUrl` in .zenrows/config.json
- *   3. discovery via /.well-known/oauth-protected-resource (cached per process)
- *   4. the production default (AGENT_SIGNUP_API_URL)
+ * Ordered list of signup endpoints to try. Precedence:
+ *   1. ZENROWS_AGENT_SIGNUP_URL env var (explicit — used alone)
+ *   2. `signupUrl` in .zenrows/config.json (explicit — used alone)
+ *   3. discovery via /.well-known/oauth-protected-resource, THEN the built-in
+ *      default (AGENT_SIGNUP_API_URL) as a fallback.
+ *
+ * The fallback is the safety net: a discovered endpoint that is wrong or blocked
+ * can never make signup worse than having no discovery at all — `signupAgent`
+ * tries the next candidate on failure. An explicit override (env/config) is
+ * honored as-is with no fallback, since that is deliberate operator intent.
  */
+export async function signupCandidates(
+  projectRoot?: string,
+  opts: { fetchImpl?: typeof fetch } = {},
+): Promise<string[]> {
+  const fromEnv = process.env[SIGNUP_URL_ENV];
+  if (fromEnv && fromEnv.trim()) return [fromEnv.trim()];
+  const configured = loadConfig(projectRoot).signupUrl;
+  if (configured && configured.trim()) return [configured.trim()];
+  if (discoveredSignupUrl === undefined) {
+    discoveredSignupUrl = await discoverSignupUrl(projectRoot, opts);
+  }
+  const urls: string[] = [];
+  if (discoveredSignupUrl && discoveredSignupUrl !== AGENT_SIGNUP_API_URL) urls.push(discoveredSignupUrl);
+  urls.push(AGENT_SIGNUP_API_URL);
+  return urls;
+}
+
+/** The primary signup endpoint (first candidate). Used to derive the claim-status URL. */
 export async function resolveSignupUrl(
   projectRoot?: string,
   opts: { fetchImpl?: typeof fetch } = {},
 ): Promise<string> {
-  const fromEnv = process.env[SIGNUP_URL_ENV];
-  if (fromEnv && fromEnv.trim()) return fromEnv.trim();
-  const configured = loadConfig(projectRoot).signupUrl;
-  if (configured && configured.trim()) return configured.trim();
-  if (discoveredSignupUrl === undefined) {
-    discoveredSignupUrl = await discoverSignupUrl(projectRoot, opts);
-  }
-  if (discoveredSignupUrl) return discoveredSignupUrl;
-  return AGENT_SIGNUP_API_URL;
+  return (await signupCandidates(projectRoot, opts))[0]!;
 }
 
 function accountPath(projectRoot?: string): string {
@@ -126,7 +141,7 @@ export interface SignupResponse {
 export async function signupAgent(
   opts: { url?: string; fetchImpl?: typeof fetch } = {},
 ): Promise<SignupResponse> {
-  const url = opts.url ?? (await resolveSignupUrl(undefined, { fetchImpl: opts.fetchImpl }));
+  const urls = opts.url ? [opts.url] : await signupCandidates(undefined, { fetchImpl: opts.fetchImpl });
   const doFetch = opts.fetchImpl ?? fetch;
 
   // Signup is the one functional request the CLI must make — no separate
@@ -148,45 +163,61 @@ export async function signupAgent(
     headers["X-ZR-CI"] = p.ci ? "1" : "0";
   }
 
-  let res: Response;
-  try {
-    res = await doFetch(url, {
-      method: "POST",
-      headers,
-    });
-  } catch (err) {
-    throw new ToolkitError({
-      code: "BACKEND_UNAVAILABLE",
-      message: "Could not reach the Zenrows signup endpoint.",
-      likely_cause: err instanceof Error ? err.message : String(err),
-      next_action: "Check connectivity and retry, or sign up manually with: zenrows signup --no-open",
-    });
-  }
-  if (res.status !== 201) {
-    const body = await res.text();
-    if (res.status === 429) {
-      throw new ToolkitError({
-        code: "SIGNUP_RATE_LIMITED",
-        message: "Zenrows blocked the auto-signup: too many new accounts from this network.",
-        likely_cause: body.slice(0, 240) || "The signup endpoint is rate-limited for this IP.",
-        next_action:
-          "Wait a few minutes and retry — the toolkit will try again automatically. If you already have a Zenrows API key, use it now with: zenrows login --api-key <key> (or set ZENROWS_API_KEY).",
-        suggested_commands: ["zenrows login --api-key <your-key>"],
+  // Try each candidate in order; on any failure fall back to the next (the last
+  // is always the built-in default). This is the safety net: a wrong/blocked
+  // discovered endpoint can never leave provisioning worse off than no discovery.
+  let lastErr: ToolkitError | undefined;
+  for (const url of urls) {
+    let res: Response;
+    try {
+      res = await doFetch(url, { method: "POST", headers });
+    } catch (err) {
+      lastErr = new ToolkitError({
+        code: "BACKEND_UNAVAILABLE",
+        message: "Could not reach the Zenrows signup endpoint.",
+        likely_cause: err instanceof Error ? err.message : String(err),
+        next_action: "Check connectivity and retry, or sign up manually with: zenrows signup --no-open",
       });
+      continue;
     }
-    const challenged = /just a moment|cf-mitigated|cf-challenge|<title>attention required/i.test(body);
-    throw new ToolkitError({
+    if (res.status === 201) return (await res.json()) as SignupResponse;
+    lastErr = signupError(res.status, await res.text());
+  }
+  throw (
+    lastErr ??
+    new ToolkitError({
       code: "SIGNUP_FAILED",
-      message: `Automatic account provisioning failed (HTTP ${res.status}).`,
-      likely_cause: challenged
-        ? "The signup endpoint returned a bot challenge (Cloudflare), not an account."
-        : body.slice(0, 240) || `The signup endpoint returned HTTP ${res.status}.`,
+      message: "Automatic account provisioning failed.",
+      likely_cause: "No signup endpoint was reachable.",
+      next_action: "Use an existing key: zenrows login --api-key <key> (or set ZENROWS_API_KEY).",
+      suggested_commands: ["zenrows login --api-key <your-key>"],
+    })
+  );
+}
+
+/** Build the ToolkitError for a non-201 signup response. */
+function signupError(status: number, body: string): ToolkitError {
+  if (status === 429) {
+    return new ToolkitError({
+      code: "SIGNUP_RATE_LIMITED",
+      message: "Zenrows blocked the auto-signup: too many new accounts from this network.",
+      likely_cause: body.slice(0, 240) || "The signup endpoint is rate-limited for this IP.",
       next_action:
-        "If you already have a Zenrows API key, use it now: zenrows login --api-key <key> (or set ZENROWS_API_KEY). Otherwise wait a moment and retry.",
+        "Wait a few minutes and retry — the toolkit will try again automatically. If you already have a Zenrows API key, use it now with: zenrows login --api-key <key> (or set ZENROWS_API_KEY).",
       suggested_commands: ["zenrows login --api-key <your-key>"],
     });
   }
-  return (await res.json()) as SignupResponse;
+  const challenged = /just a moment|cf-mitigated|cf-challenge|<title>attention required/i.test(body);
+  return new ToolkitError({
+    code: "SIGNUP_FAILED",
+    message: `Automatic account provisioning failed (HTTP ${status}).`,
+    likely_cause: challenged
+      ? "The signup endpoint returned a bot challenge (Cloudflare), not an account."
+      : body.slice(0, 240) || `The signup endpoint returned HTTP ${status}.`,
+    next_action:
+      "If you already have a Zenrows API key, use it now: zenrows login --api-key <key> (or set ZENROWS_API_KEY). Otherwise wait a moment and retry.",
+    suggested_commands: ["zenrows login --api-key <your-key>"],
+  });
 }
 
 export interface AccountStatus {
