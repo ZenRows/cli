@@ -32,8 +32,8 @@ export const batch: Command = {
     "    --js-render                    job-level: render JavaScript",
     "    --premium-proxy                job-level: use residential IPs",
     "    --proxy-country <cc>           job-level: geo-target (needs --premium-proxy)",
-    "    --output <fmt>                 job-level response_type (markdown|plaintext|pdf)",
-    "    --wait                         poll until the run finishes",
+    "    --output <fmt>                 job-level response_type (markdown|plaintext|pdf|html)",
+    "    --follow                       poll until the run finishes (alias: --wait)",
     "    --no-signup                    do not auto-create a Free plan account if no key exists",
     "  status <id>                      show run status + stats",
     "  results <id> [--status s]        list results (successful|failed|all); paginated",
@@ -84,7 +84,7 @@ function estimateCmd(rest: string[], ctx: RunContext): number {
   const v = validateJsonl(file);
   const est = estimateCredits(v.jobs);
   if (ctx.json) {
-    log.out(JSON.stringify({ ...v, estimatedCredits: est.credits }, null, 2));
+    log.out(JSON.stringify({ ok: v.errors.length === 0, ...v, estimatedCredits: est.credits }, null, 2));
   } else {
     log.info(c(ANSI.bold, `Job spec: ${file}`));
     log.info(`valid jobs: ${v.validJobs}/${v.totalLines}`);
@@ -105,10 +105,14 @@ async function createCmd(rest: string[], ctx: RunContext): Promise<number> {
     "premium-proxy": { type: "boolean" },
     "proxy-country": { type: "string" },
     output: { type: "string" },
-    wait: { type: "boolean" },
+    follow: { type: "boolean" },
+    wait: { type: "boolean" }, // back-compat alias for --follow
     "no-signup": { type: "boolean" },
     json: { type: "boolean" },
   });
+  // `--follow` is the clear name (poll until the run finishes); `--wait` is kept
+  // as an alias because fetch/extract use `--wait <ms>` for a different meaning.
+  const follow = values.follow === true || values.wait === true;
   const json = ctx.json || values.json === true;
   const file = positionals[0];
   if (!file) throw needFile();
@@ -163,7 +167,7 @@ async function createCmd(rest: string[], ctx: RunContext): Promise<number> {
   log.step(`Submitting batch job (${body.tasks.length} tasks, ~${est.credits} credits)…`);
   try {
     const job = await createJob(body, { apiKey });
-    const finished = values.wait === true ? await waitForJob(job.job_id, { apiKey }) : job;
+    const finished = follow ? await waitForJob(job.job_id, { apiKey }) : job;
     const runDir = writeRun({
       runId,
       command: "zenrows batch create",
@@ -342,8 +346,19 @@ function normalizeOutput(v?: string): string | undefined {
     pdf: "pdf",
     html: "", // raw HTML is the default; no response_type
   };
-  const mapped = map[v.toLowerCase()];
-  return mapped ? mapped : undefined;
+  const key = v.toLowerCase();
+  if (!(key in map)) {
+    // Fail loudly rather than silently dropping an unrecognized format (house rule).
+    throw new ToolkitError({
+      code: "INVALID_USAGE",
+      message: `Unknown --output format: ${v}.`,
+      likely_cause: "Only markdown | plaintext | pdf | html are supported for batch --output.",
+      next_action: "Use --output md|markdown | text|plaintext | pdf | html (html = raw HTML, the default).",
+      suggested_commands: ["zenrows batch create jobs.jsonl --output markdown"],
+    });
+  }
+  const mapped = map[key];
+  return mapped ? mapped : undefined; // html → undefined (no response_type)
 }
 
 function requireId(id: string | undefined): string {

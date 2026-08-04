@@ -41,7 +41,7 @@ export const trace: Command = {
     const rec = loadRun(runId);
 
     if (sub === "inspect") {
-      log.out(JSON.stringify(rec, null, 2));
+      log.out(JSON.stringify({ ok: true, ...rec }, null, 2));
       return 0;
     }
     if (sub === "export") {
@@ -52,7 +52,7 @@ export const trace: Command = {
     if (sub === "replay") {
       const cmd = rebuildCommand(rec);
       if (ctx.json) {
-        log.out(JSON.stringify({ runId, replay: cmd }, null, 2));
+        log.out(JSON.stringify({ ok: true, runId, replay: cmd }, null, 2));
       } else {
         log.info("Replay this run with:");
         log.out(cmd);
@@ -102,7 +102,7 @@ function explain(rec: RunRecord, ctx: RunContext): number {
       : [rebuildCommand(rec) + " --manual --js-render --premium-proxy"];
 
   if (ctx.json) {
-    log.out(JSON.stringify({ runId: rec.runId, what_happened: what, likely_failure_reason: reason, evidence: rec, recommended_next_action: nextAction, suggested_commands: suggested }, null, 2));
+    log.out(JSON.stringify({ ok: true, runId: rec.runId, what_happened: what, likely_failure_reason: reason, evidence: rec, recommended_next_action: nextAction, suggested_commands: suggested }, null, 2));
     return 0;
   }
   log.info(c(ANSI.bold, `Trace explain · ${rec.runId}`));

@@ -69,6 +69,7 @@ export const account: Command = {
 
     if (ctx.json) {
       log.out(JSON.stringify({
+        ok: true,
         hasKey: auth.hasKey,
         source: auth.source,
         account: acct ?? null,

@@ -90,3 +90,45 @@ test("batch create submits when the run is within policy caps", async () => {
     assert.equal(didFetch(), true, "an in-policy run must reach the Batch API");
   });
 });
+
+test("batch create rejects an unknown --output format before any network call", async () => {
+  await withBatchWorkspace({}, async (didFetch) => {
+    const file = writeSpec(["https://ok.example/a"]);
+    const code = await batch.run(["create", file, "--output", "bogus"], ctx);
+    assert.equal(code, 1);
+    assert.equal(didFetch(), false, "an unknown --output must fail loudly, not silently drop");
+  });
+});
+
+/** Capture stdout (log.out) for the duration of `fn`. */
+async function captureOut(fn: () => unknown): Promise<string> {
+  const orig = process.stdout.write.bind(process.stdout);
+  let buf = "";
+  process.stdout.write = ((s: string | Uint8Array) => {
+    buf += typeof s === "string" ? s : Buffer.from(s).toString();
+    return true;
+  }) as typeof process.stdout.write;
+  try {
+    await fn();
+  } finally {
+    process.stdout.write = orig;
+  }
+  return buf;
+}
+
+test("batch estimate --json emits an {ok,...} envelope (ok reflects spec validity)", async () => {
+  await withBatchWorkspace({}, async () => {
+    const good = writeSpec(["https://ok.example/a"]);
+    const okOut = await captureOut(() => batch.run(["estimate", good], ctx));
+    const okJson = JSON.parse(okOut) as { ok: boolean; estimatedCredits: number };
+    assert.equal(okJson.ok, true);
+    assert.equal(typeof okJson.estimatedCredits, "number");
+
+    // A spec with a bad line → ok:false (and the command's exit code is 1).
+    const bad = join(process.cwd(), "bad.jsonl");
+    writeFileSync(bad, '{"url":"https://ok.example/a"}\nnot-json\n');
+    const badOut = await captureOut(() => batch.run(["estimate", bad], ctx));
+    const badJson = JSON.parse(badOut) as { ok: boolean };
+    assert.equal(badJson.ok, false);
+  });
+});

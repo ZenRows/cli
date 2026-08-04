@@ -23,7 +23,7 @@ export const policy: Command = {
     const pol = loadPolicy();
     if (!sub || sub === "show") {
       if (ctx.json) {
-        log.out(JSON.stringify(pol, null, 2));
+        log.out(JSON.stringify({ ok: true, ...pol }, null, 2));
         return 0;
       }
       for (const [k, v] of Object.entries(pol)) kv(k, Array.isArray(v) ? `[${v.join(", ")}]` : String(v), 24);
