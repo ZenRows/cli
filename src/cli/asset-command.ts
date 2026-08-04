@@ -87,8 +87,8 @@ export function makeAssetCommand(type: AssetType, summary: string): Command {
 function extraUsage(type: AssetType): string {
   if (type === "skill") return "|validate|generate";
   if (type === "template") return "|create";
-  if (type === "recipe") return "|run|explain";
-  if (type === "workflow") return "|run|explain";
+  if (type === "recipe") return "|run";
+  if (type === "workflow") return "|run";
   if (type === "eval") return "|run|report";
   return "";
 }
@@ -97,9 +97,9 @@ function helpFor(type: AssetType): string {
   const lines = [`Manage ${type}s from the installable asset registry.`, ""];
   lines.push("Subcommands:");
   lines.push(`  list                 list all ${type}s in the registry (status-aware)`);
-  lines.push(`  install <name>       copy a ${type} into .zenrows/`);
+  lines.push(`  install <name>       copy ${type === "eval" ? "an" : "a"} ${type} into .zenrows/`);
   if (type === "skill") lines.push("  install --all        install every available skill");
-  lines.push(`  explain <name>       print metadata + docs for a ${type}`);
+  lines.push(`  explain <name>       print metadata + docs for ${type === "eval" ? "an" : "a"} ${type}`);
   lines.push(`  update [name]        reinstall (refresh) installed ${type}s`);
   lines.push(`  remove <name>        remove an installed ${type}`);
   if (type === "template") lines.push("  create <name> --output <dir>   instantiate a template into <dir>");
@@ -121,7 +121,7 @@ function listCmd(type: AssetType, _argv: string[], ctx: RunContext): number {
   if (ctx.json) {
     log.out(
       JSON.stringify(
-        { type, assets: assets.map((a) => ({ ...a, installed: installed.has(a.name), runnable: assetRunnable(a) })) },
+        { ok: true, type, assets: assets.map((a) => ({ ...a, installed: installed.has(a.name), runnable: assetRunnable(a) })) },
         null,
         2,
       ),
@@ -145,7 +145,7 @@ function listCmd(type: AssetType, _argv: string[], ctx: RunContext): number {
 function installCmd(type: AssetType, argv: string[], ctx: RunContext): number {
   const all = argv.includes("--all");
   const targets = all
-    ? loadRegistry(type).filter((a) => a.status === "available" || a.status === "experimental")
+    ? loadRegistry(type).filter(assetRunnable) // everything whose backend deps are usable (incl. beta) — matches `plugin install`
     : argv.filter((a) => !a.startsWith("-")).map((name) => requireAsset(type, name));
   if (targets.length === 0) {
     throw new ToolkitError({

@@ -34,8 +34,11 @@ If the user has a known URL and wants page content:
 If the user has a known URL and wants structured data:
   → Use Extract.                    (zenrows extract <url> | --autoparse | --css)
 
-If the user has many URLs:
-  → Fan out fetch/extract per URL   (validate on one page first, then iterate).
+If the user has many URLs (bulk):
+  → Use Batch.                      (validate one page with fetch/extract first,
+                                     then `zenrows batch create <jobs.jsonl>`)
+                                     Batch is the cheap path at scale — do NOT
+                                     fan out fetch/extract per URL for bulk work.
 
 If the user needs login, clicks, forms, sessions, or persistent state:
   → Use Interact / Browser Sessions.(zenrows browser)    [escalation-only]
@@ -66,7 +69,7 @@ Run `zenrows status` for the live capability matrix. As of this toolkit:
 | --- | --- | --- |
 | Protected Fetch | `zenrows fetch` | available (`GET /v1/`) |
 | Extract (extract=auto / Autoparse/CSS/Markdown) | `zenrows extract` | beta (same `/v1/`; extract=auto falls back to autoparse) |
-| Batch | `zenrows batch` | beta (validate specs locally) |
+| Batch | `zenrows batch` | beta — runs cloud jobs (create/status/results); cheapest path at scale. Estimate specs locally with no key |
 | Browser | `zenrows browser` | available (Browser Sessions REST API / MCP) |
 | MCP | `zenrows mcp` | available (remote + local server) |
 

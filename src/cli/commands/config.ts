@@ -3,6 +3,7 @@
  *   show
  *   get <key>
  *   set <key> <value>
+ *   reset
  */
 import { defaultConfig, loadConfig, saveConfig } from "../../core/config.ts";
 import { log } from "../../core/logger.ts";
@@ -26,7 +27,7 @@ const SETTABLE: Record<string, (c: ToolkitConfig, v: string) => void> = {
 export const config: Command = {
   name: "config",
   summary: "View or update toolkit configuration (non-secret).",
-  usage: "zenrows config <show|get <key>|set <key> <value>>",
+  usage: "zenrows config <show|get <key>|set <key> <value>|reset>",
   run(argv: string[], ctx: RunContext): number {
     const [sub, key, value] = argv;
     const cfg = loadConfig();

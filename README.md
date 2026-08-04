@@ -51,11 +51,15 @@ matrix.
 ## 4. Quickstart
 
 ```bash
-npx -y @zenrows/cli init
+npm install -g @zenrows/cli # puts `zenrows` on PATH (466 ms, zero deps)
+zenrows init
 zenrows fetch https://httpbin.io/html # auto-provisions a Free plan account on first use
 zenrows extract https://www.owler.com/company/meltwater # extract=auto on an enabled domain
 zenrows extract https://www.scrapingcourse.com/ecommerce/ --autoparse # Autoparse (any domain)
 ```
+
+> Prefer no global install? Prefix each command with `npx -y @zenrows/cli`
+> (e.g. `npx -y @zenrows/cli fetch <url>`) — `npx` does not put `zenrows` on PATH.
 
 No API key up front: on your first cloud call the toolkit creates a free,
 unclaimed Zenrows Free plan account for you (see §6).

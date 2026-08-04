@@ -14,7 +14,8 @@ import { defaultConfig, loadConfig, saveConfig } from "../../core/config.ts";
 import { defaultPolicy, loadPolicy, savePolicy } from "../../core/policy.ts";
 import { log, ANSI, c } from "../../core/logger.ts";
 import { mask } from "../../core/redact.ts";
-import { createWorkspace } from "../../core/workspace.ts";
+import { existsSync } from "node:fs";
+import { createWorkspace, workspacePaths } from "../../core/workspace.ts";
 import { installAsset, loadRegistry } from "../../core/registry.ts";
 import { buildMcpConfig, MCP_CLIENTS } from "../../installers/mcp/index.ts";
 import { runFetch } from "../../adapters/protected-fetch.ts";
@@ -71,7 +72,11 @@ export const init: Command = {
     section("Workspace");
     const paths = createWorkspace(root);
     log.success(`Created ${paths.dir}`);
-    if (!loadConfigSafe(root)) {
+    // Write config.json when absent (loadConfig always returns merged defaults,
+    // so a "does it load?" check never writes — check the file itself). Writing
+    // it here makes the "Wrote config.json" line true and lets `--no-telemetry`
+    // actually persist, rather than being silently dropped until first signup.
+    if (!existsSync(workspacePaths(root).config)) {
       const cfg = defaultConfig();
       if (values["no-telemetry"]) cfg.telemetry = "off";
       saveConfig(cfg, root);
@@ -92,7 +97,9 @@ export const init: Command = {
     } else {
       const st = authState(root);
       if (st.hasKey) log.success(`Using existing key (${st.masked}, ${st.source}).`);
-      else log.warn("No API key configured. Run `zenrows login --api-key <key>` or `zenrows signup`.");
+      else if (pol.auto_signup)
+        log.success("No API key needed — a free Zenrows account is provisioned automatically on your first cloud call (e.g. `zenrows fetch <url>`).");
+      else log.warn("No API key configured (auto-signup is off). Run `zenrows login --api-key <key>` or `zenrows signup`.");
     }
 
     // 3. Assets
@@ -138,7 +145,7 @@ export const init: Command = {
           log.dim("This is non-fatal for init. Check `zenrows status --check`.");
         }
       } else {
-        log.dim("Skipping test fetch (no credentials).");
+        log.dim("Skipping live test fetch — a key is provisioned automatically on your first fetch.");
       }
     }
 
@@ -157,15 +164,6 @@ export const init: Command = {
     return 0;
   },
 };
-
-function loadConfigSafe(root?: string): boolean {
-  try {
-    const cfg = loadConfig(root);
-    return Boolean(cfg && cfg.version);
-  } catch {
-    return false;
-  }
-}
 
 function installSet(type: AssetType, root?: string): void {
   const assets = loadRegistry(type).filter((a) => a.status === "available" || a.status === "experimental" || a.status === "beta");

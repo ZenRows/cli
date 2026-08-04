@@ -54,6 +54,53 @@ test("signupAgent parses a 201 response and sends provenance headers", async () 
   assert.ok(sentHeaders["X-ZR-CI"] === "0" || sentHeaders["X-ZR-CI"] === "1");
 });
 
+test("signupAgent falls back to the built-in default when a discovered endpoint fails (safety net)", async () => {
+  // This is the exact regression that caused the original outage: discovery
+  // advertised a host behind a bot-challenge. The safety net must recover by
+  // trying the built-in default, so signup can never fail closed on a bad doc.
+  const prevSignup = process.env[SIGNUP_URL_ENV];
+  const prevDisco = process.env[DISCOVERY_URL_ENV];
+  const prevTelemetry = process.env.ZENROWS_TELEMETRY;
+  delete process.env[SIGNUP_URL_ENV];
+  delete process.env[DISCOVERY_URL_ENV];
+  process.env.ZENROWS_TELEMETRY = "off"; // skip provenance/telemetry-id side effects
+  _resetDiscoveryCache();
+
+  const BLOCKED = "https://www.blocked.example/api/agent/signup";
+  const calls: Array<{ method: string; url: string }> = [];
+  const fakeFetch = (async (url: string, init?: RequestInit) => {
+    const method = init?.method ?? "GET";
+    calls.push({ method, url: String(url) });
+    if (method === "GET") {
+      // discovery doc points the CLI at a blocked host
+      return new Response(JSON.stringify({ agent_auth: { signup_endpoint: BLOCKED } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }
+    if (String(url) === BLOCKED) return new Response("<title>Just a moment...</title>", { status: 403 });
+    if (String(url) === AGENT_SIGNUP_API_URL)
+      return new Response(JSON.stringify({ apiKey: "zr-key", accountId: "u1", claimUrl: "https://x/claim/t" }), {
+        status: 201,
+        headers: { "content-type": "application/json" },
+      });
+    return new Response("unexpected", { status: 500 });
+  }) as unknown as typeof fetch;
+
+  try {
+    const res = await signupAgent({ fetchImpl: fakeFetch });
+    assert.equal(res.apiKey, "zr-key"); // recovered via the fallback
+    const posts = calls.filter((c) => c.method === "POST").map((c) => c.url);
+    assert.deepEqual(posts, [BLOCKED, AGENT_SIGNUP_API_URL]); // blocked first, then fell back to default
+  } finally {
+    _resetDiscoveryCache();
+    if (prevSignup !== undefined) process.env[SIGNUP_URL_ENV] = prevSignup;
+    if (prevDisco !== undefined) process.env[DISCOVERY_URL_ENV] = prevDisco;
+    if (prevTelemetry !== undefined) process.env.ZENROWS_TELEMETRY = prevTelemetry;
+    else delete process.env.ZENROWS_TELEMETRY;
+  }
+});
+
 test("signupAgent omits all provenance headers when opted out via env", async () => {
   const prev = process.env.ZENROWS_TELEMETRY;
   process.env.ZENROWS_TELEMETRY = "off";
