@@ -174,11 +174,15 @@ export async function signupAgent(
         suggested_commands: ["zenrows login --api-key <your-key>"],
       });
     }
+    const challenged = /just a moment|cf-mitigated|cf-challenge|<title>attention required/i.test(body);
     throw new ToolkitError({
-      code: "FETCH_FAILED",
-      message: `Agent signup failed (HTTP ${res.status}).`,
-      likely_cause: body.slice(0, 240),
-      next_action: "Retry, or use an existing key: zenrows login --api-key <key>.",
+      code: "SIGNUP_FAILED",
+      message: `Automatic account provisioning failed (HTTP ${res.status}).`,
+      likely_cause: challenged
+        ? "The signup endpoint returned a bot challenge (Cloudflare), not an account."
+        : body.slice(0, 240) || `The signup endpoint returned HTTP ${res.status}.`,
+      next_action:
+        "If you already have a Zenrows API key, use it now: zenrows login --api-key <key> (or set ZENROWS_API_KEY). Otherwise wait a moment and retry.",
       suggested_commands: ["zenrows login --api-key <your-key>"],
     });
   }
