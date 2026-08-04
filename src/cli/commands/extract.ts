@@ -162,6 +162,11 @@ export const extract: Command = {
         `Extracted via ${via} · ${outcome.result.body.length} bytes · ${formatRequestCost(outcome.result.costUsd, outcome.result.costCredits)} · run ${runId}`,
       );
       if (runDir) log.dim(`  artifact: ${runDir}`);
+      if (outcome.empty) {
+        log.warn(
+          "No structured data extracted — the page may render via JavaScript, or this layout isn't auto-extractable. Try --manual --js-render, or --css with explicit selectors.",
+        );
+      }
 
       if (ctx.json || values.json) {
         log.out(
@@ -171,6 +176,7 @@ export const extract: Command = {
               runId,
               method: outcome.method,
               fellBackToAutoparse: outcome.fellBackToAutoparse ?? false,
+              empty: outcome.empty ?? false,
               httpStatus: outcome.result.status,
               data: outcome.data ?? null,
               bytes: outcome.result.body.length,

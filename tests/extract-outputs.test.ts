@@ -267,3 +267,47 @@ test("runExtract --css without a selector map fails locally (no network)", async
     (e: unknown) => e instanceof ToolkitError && e.code === "INVALID_USAGE",
   );
 });
+
+// --- ACT-1514: empty extraction must not be a silent success ----------------
+test("runExtract flags an empty extract=auto result (empty=true)", async () => {
+  await withFetch(JSON.stringify({ parsed: {}, html: "<html/>" }), async () => {
+    const outcome = await runExtract({ url: "https://x.com" }, cfg, defaultPolicy(), "testkey");
+    assert.equal(outcome.method, "extract");
+    assert.deepEqual(outcome.data, {});
+    assert.equal(outcome.empty, true);
+  });
+});
+
+test("runExtract flags an empty autoparse result (empty=true)", async () => {
+  await withFetch("{}", async () => {
+    const outcome = await runExtract(
+      { url: "https://x.com", method: "autoparse" },
+      cfg,
+      defaultPolicy(),
+      "testkey",
+    );
+    assert.equal(outcome.empty, true);
+  });
+});
+
+test("runExtract does not flag a non-empty result", async () => {
+  await withFetch(JSON.stringify({ parsed: { title: "X" }, html: "<html/>" }), async () => {
+    const outcome = await runExtract({ url: "https://x.com" }, cfg, defaultPolicy(), "testkey");
+    assert.equal(outcome.empty ?? false, false);
+  });
+});
+
+test("runExtract --validate fails on an empty result", async () => {
+  await withFetch(JSON.stringify({ parsed: {}, html: "<html/>" }), async () => {
+    await assert.rejects(
+      () =>
+        runExtract(
+          { url: "https://x.com", method: "extract", fallbackAutoparse: false, validate: true },
+          cfg,
+          defaultPolicy(),
+          "testkey",
+        ),
+      (e: unknown) => e instanceof ToolkitError && e.code === "EXTRACT_VALIDATION_FAILED",
+    );
+  });
+});
