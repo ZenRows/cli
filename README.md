@@ -167,8 +167,12 @@ zenrows mcp config --client vscode           # servers JSON
 zenrows mcp config --client generic --remote # hosted server at https://mcp.zenrows.com/mcp
 ```
 
-Local server: `npx -y @zenrows/mcp` (env `ZENROWS_API_KEY`). Remote server:
-`https://mcp.zenrows.com/mcp`.
+Local server: `npx -y @zenrows/mcp` (stdio; can auto-provision a Free plan key).
+Remote server: `https://mcp.zenrows.com/mcp` (streamable-http; client OAuth).
+
+The portable Agent Plugins package at [`agent-plugin/`](agent-plugin/) declares
+both servers in `mcp.json` (no secrets) and ships MCP-native skills under
+`agent-plugin/skills/`.
 
 ## 12. Plugins
 
@@ -176,6 +180,11 @@ Local server: `npx -y @zenrows/mcp` (env `ZENROWS_API_KEY`). Remote server:
 zenrows plugin list
 zenrows plugin install claude-code # installs core skills + prints MCP config
 ```
+
+**Agent Plugins 1.0:** see [`agent-plugin/`](agent-plugin/) (`plugin.json` +
+`mcp.json` + MCP-native skills). Legacy per-client snippets from
+`zenrows plugin install` remain available. CLI-oriented skills stay under
+repo-root `skills/`.
 
 ## 13. Skills
 

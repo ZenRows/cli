@@ -1,0 +1,23 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "zenrows",
+  "version": "0.1.0",
+  "description": "Protected web data for AI agents via Zenrows MCP — scrape, extract, batch, and browser sessions with cost-aware escalation.",
+  "author": {
+    "name": "Zenrows",
+    "url": "https://www.zenrows.com"
+  },
+  "homepage": "https://www.zenrows.com",
+  "repository": "https://github.com/zenrows/cli",
+  "license": "MIT",
+  "keywords": [
+    "zenrows",
+    "mcp",
+    "scraping",
+    "extract",
+    "batch",
+    "browser",
+    "anti-bot",
+    "web-data"
+  ]
+}
