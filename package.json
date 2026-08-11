@@ -1,6 +1,6 @@
 {
   "name": "@zenrows/cli",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Open-source CLI, MCP, skills, templates, workflows, recipes, and evals layer for giving AI agents reliable access to protected web data through Zenrows cloud infrastructure.",
   "type": "module",
   "license": "MIT",
