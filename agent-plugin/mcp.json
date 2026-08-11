@@ -1,0 +1,14 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/mcp.schema.json",
+  "mcpServers": {
+    "zenrows": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@zenrows/mcp"]
+    },
+    "zenrows-remote": {
+      "type": "streamable-http",
+      "url": "https://mcp.zenrows.com/mcp"
+    }
+  }
+}
