@@ -65,3 +65,14 @@ test("agent-plugin skills are MCP-native (not CLI-primary)", () => {
   // should not instruct CLI as the primary path
   assert.doesNotMatch(master, /→ Use Protected Fetch\.\s+\(zenrows fetch/);
 });
+
+test("package.json files includes agent-plugin for npm publish", () => {
+  const pkg = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8")) as {
+    files?: string[];
+  };
+  assert.ok(Array.isArray(pkg.files), "package.json files must be an array");
+  assert.ok(pkg.files.includes("agent-plugin"), "agent-plugin must be in package.json#files");
+  assert.ok(existsSync(join(root, "plugin.json")));
+  assert.ok(existsSync(join(root, "mcp.json")));
+  assert.ok(existsSync(join(root, "README.md")));
+});

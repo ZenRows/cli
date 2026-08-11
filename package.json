@@ -34,6 +34,7 @@
   "files": [
     "dist",
     "!dist/tests",
+    "agent-plugin",
     "registry",
     "skills",
     "templates",

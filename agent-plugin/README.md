@@ -18,13 +18,32 @@ agent-plugin/
 
 ## Install
 
-Point your Agent Plugins–compatible client at this folder (or the `agent-plugin/` path in [`zenrows/cli`](https://github.com/zenrows/cli)).
+### From npm (`@zenrows/cli` ≥ 1.2.1)
+
+```bash
+npm install @zenrows/cli
+PLUGIN=node_modules/@zenrows/cli/agent-plugin
+
+# Cursor local plugins (copy — prefer over symlink):
+mkdir -p ~/.cursor/plugins/local
+rm -rf ~/.cursor/plugins/local/zenrows
+cp -R "$PLUGIN" ~/.cursor/plugins/local/zenrows
+```
+
+Or point any Agent Plugins–compatible client at that `agent-plugin` folder
+(global install: `$(npm root -g)/@zenrows/cli/agent-plugin`).
+
+### From git
+
+Clone [`zenrows/cli`](https://github.com/zenrows/cli) and use the repo-root `agent-plugin/` folder the same way.
 
 Clients discover:
 
 - `plugin.json` — manifest
 - `mcp.json` — MCP servers (no secrets)
 - `skills/*/SKILL.md` — playbooks
+
+**Note:** `zenrows plugin install <client>` installs **CLI registry skills** into `.zenrows/skills/` and prints an MCP snippet. That is **not** the same as copying this Agent Plugins 1.0 folder.
 
 ## MCP servers (`mcp.json`)
 
@@ -48,32 +67,17 @@ Use MCP tool names — not CLI `zenrows fetch`:
 | `interact-browser` | `browser_*` (escalation only) |
 | `cost-control` | Cost multipliers + escalate-with-evidence |
 
-## Local MCP testing (before npm publish)
+## Local MCP testing
 
-Until `@zenrows/mcp` with extract/batch/auto-signup is published, point stdio at a local build:
+Published `@zenrows/mcp` already includes extract / batch / auto-signup. For a local MCP build:
 
 ```bash
 cd /path/to/zenrows-mcp
 npm run build
-# Inspector UI:
-npm run inspect
-# Or stdio with an existing key:
-ZENROWS_API_KEY=… node dist/index.js
-# Or local Streamable HTTP (Bearer still required — no anonymous remote signup):
-ZENROWS_API_KEY=… npm run dev:http
+ZENROWS_API_KEY=… node dist/index.js   # or omit key to exercise auto-signup
 ```
 
-In a client `mcp.json` / Cursor config, use:
-
-```json
-{
-  "command": "node",
-  "args": ["/absolute/path/to/zenrows-mcp/dist/index.js"],
-  "env": { "ZENROWS_API_KEY": "YOUR_KEY" }
-}
-```
-
-Omit `ZENROWS_API_KEY` to exercise stdio auto-signup into `~/.zenrows/`.
+Do **not** commit a D2-style override into this package’s `mcp.json` — shipped defaults stay `npx @zenrows/mcp` + `https://mcp.zenrows.com/mcp`.
 
 ## Related
 

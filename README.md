@@ -172,7 +172,8 @@ Remote server: `https://mcp.zenrows.com/mcp` (streamable-http; client OAuth).
 
 The portable Agent Plugins package at [`agent-plugin/`](agent-plugin/) declares
 both servers in `mcp.json` (no secrets) and ships MCP-native skills under
-`agent-plugin/skills/`.
+`agent-plugin/skills/`. It is included in the published `@zenrows/cli` npm
+tarball (`node_modules/@zenrows/cli/agent-plugin`).
 
 ## 12. Plugins
 
@@ -181,10 +182,11 @@ zenrows plugin list
 zenrows plugin install claude-code # installs core skills + prints MCP config
 ```
 
-**Agent Plugins 1.0:** see [`agent-plugin/`](agent-plugin/) (`plugin.json` +
-`mcp.json` + MCP-native skills). Legacy per-client snippets from
-`zenrows plugin install` remain available. CLI-oriented skills stay under
-repo-root `skills/`.
+**Agent Plugins 1.0:** after `npm install @zenrows/cli`, use
+`node_modules/@zenrows/cli/agent-plugin/` (`plugin.json` + `mcp.json` +
+MCP-native skills). See [`agent-plugin/README.md`](agent-plugin/README.md).
+Legacy per-client snippets from `zenrows plugin install` remain available.
+CLI-oriented skills stay under repo-root `skills/`.
 
 ## 13. Skills
 
