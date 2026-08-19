@@ -203,3 +203,19 @@ test("waitForJob polls until a terminal status", async () => {
   assert.equal(job.latest_run.status, "completed");
   assert.equal(i, 3);
 });
+
+test("waitForJob treats failed as terminal", async () => {
+  const statuses = ["running", "failed"];
+  let i = 0;
+  const impl = (async () => {
+    const status = statuses[Math.min(i++, statuses.length - 1)]!;
+    return new Response(
+      JSON.stringify({ job_id: "j", latest_run: { status, failure_reason: "insufficient_credits", stats: { total: 1, completed: 0, successful: 0, failed: 0 } } }),
+      { status: 200, headers: { "content-type": "application/json" } },
+    );
+  }) as unknown as typeof fetch;
+
+  const job = await waitForJob("j", { apiKey: "k", fetchImpl: impl, sleepImpl: async () => {} });
+  assert.equal(job.latest_run.status, "failed");
+  assert.equal(i, 2);
+});

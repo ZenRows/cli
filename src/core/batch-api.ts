@@ -76,7 +76,7 @@ interface ProblemJson {
 }
 
 /** Terminal run states — a run stops progressing once it reaches one of these. */
-export const TERMINAL_STATUSES: ReadonlySet<string> = new Set(["completed", "stopped", "deleted"]);
+export const TERMINAL_STATUSES: ReadonlySet<string> = new Set(["completed", "stopped", "failed", "deleted"]);
 
 interface RequestOpts {
   apiKey: string;
