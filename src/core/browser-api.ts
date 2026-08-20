@@ -3,7 +3,7 @@
  *
  * A managed REST session API (used in production by the official `@zenrows/mcp`
  * server) hosted at `https://mcp.zenrows.com/browser/sessions/*`. Auth is the
- * `Authorization: Bearer <key>` header (same key as the scraper API). Bodies are
+ * `Authorization: Bearer <key>` header (same key as the Fetch API). Bodies are
  * JSON; the CLI drives it directly — no CDP/WebSocket, no browser dependency.
  * Structurally the same shape as `batch-api.ts` (separate host, header auth,
  * injectable `fetchImpl` for tests).
