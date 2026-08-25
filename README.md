@@ -139,9 +139,22 @@ zenrows batch cancel <job-id>                        # stop an in-flight run
 ```
 
 `jobs.jsonl` is one JSON object per line, each with a `url` (plus optional
-per-line overrides like `js_render`, `premium_proxy`, `proxy_country`). Request
-beta access from Zenrows to run in the cloud; until then, validate/estimate
-locally or fan out with `zenrows fetch` per URL.
+per-line overrides like `js_render`, `premium_proxy`, `proxy_country`,
+`extract`). Request beta access from Zenrows to run in the cloud; until then,
+validate/estimate locally or fan out with `zenrows fetch` per URL.
+
+**Extract in Batch.** Set `"extract": "auto"` on a line to run that URL through
+Extract — structured data instead of raw HTML:
+
+```jsonl
+{"url": "https://example.com/products", "extract": "auto", "external_id": "p1"}
+{"url": "https://example.com/reviews", "extract": "auto", "external_id": "r1"}
+```
+
+An Extract task costs the same as a regular one (1 credit at base tier), so
+`batch estimate` prices it correctly. Results for an Extract task carry two
+keys: `html` (the raw page) and `parsed` (the structured data) — validate a
+sample with `zenrows extract <url>` before running the full batch.
 
 ## 10. Browser Sessions
 

@@ -30,7 +30,9 @@ Optional if exposed by the server: `batch_wait` to block until terminal status.
 1. Validate the workflow on **one** URL with `scrape` or `extract`.
 2. `batch_create` with the full task list (each task: `url` + optional
    overrides like `js_render`, `premium_proxy`, `proxy_country`, `mode`,
-   `autoparse`, `external_id`, `metadata`).
+   `autoparse`, `extract`, `external_id`, `metadata`). `extract: "auto"`
+   returns structured data instead of raw HTML, at the same credit cost as a
+   regular task; the result carries `html` and `parsed` keys.
 3. Poll `batch_status` until terminal (`completed` / `stopped` / …).
 4. Collect with `batch_results`.
 5. `batch_cancel` if the user aborts or the run should stop early.
