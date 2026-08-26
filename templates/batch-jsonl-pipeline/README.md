@@ -3,7 +3,12 @@
 Scaffold for a high-scale workload expressed as a JSONL job spec, run on the
 Zenrows **Batch**. One JSON object per line, each with a `url` (plus
 optional per-line overrides like `js_render`, `premium_proxy`, `proxy_country`,
-`mode`, `autoparse`, and an `external_id` echoed back on each result).
+`mode`, `autoparse`, `extract`, and an `external_id` echoed back on each
+result).
+
+Set `"extract": "auto"` on a line to run that URL through Extract — structured
+data instead of raw HTML, at the same credit cost as a regular task. Extract
+results carry `html` and `parsed` keys.
 
 ## Local (no key)
 

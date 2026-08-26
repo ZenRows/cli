@@ -24,7 +24,21 @@ zenrows batch estimate jobs.jsonl     # validate the spec + estimate credits
 
 `jobs.jsonl` is one JSON object per line, each with a `url` (plus optional
 per-task keys: `external_id`, `metadata`, and scrape params like `js_render`,
-`premium_proxy`, `proxy_country`, `mode`, `autoparse`).
+`premium_proxy`, `proxy_country`, `mode`, `autoparse`, `extract`).
+
+## Extract in Batch
+
+`"extract": "auto"` on a line runs that URL through Extract, returning
+structured data instead of raw HTML.
+
+```
+{"url": "https://example.com/products", "extract": "auto", "external_id": "p1"}
+```
+
+An Extract task costs the same as a regular one (1 credit at base tier), so
+`batch estimate` prices it correctly. The result carries two keys: `html` (the
+raw page) and `parsed` (the structured data). Validate on a single URL with
+`zenrows extract <url>` before running the full batch.
 
 ## Cloud (needs a key + beta access)
 ```

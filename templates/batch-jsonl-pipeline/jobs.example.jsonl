@@ -1,3 +1,4 @@
 {"url": "https://www.scrapingcourse.com/ecommerce/", "mode": "auto", "autoparse": true}
 {"url": "https://httpbin.io/html"}
 {"url": "https://example.com", "js_render": true, "premium_proxy": true}
+{"url": "https://www.scrapingcourse.com/ecommerce/", "extract": "auto", "external_id": "extract-demo"}
