@@ -19,6 +19,8 @@ export interface UsageConcurrency {
 
 export interface UsageProduct {
   usage?: number;
+  /** Same consumption as `usage`, counted in credits. */
+  usage_credits?: number;
   concurrency?: UsageConcurrency;
   [k: string]: unknown;
 }
@@ -27,13 +29,23 @@ export interface UsageDetails {
   status?: string;
   period_starts_at?: string;
   period_ends_at?: string;
-  /** Total units consumed across all products. */
+  /** Total consumed across all products, in dollars. */
   usage?: number;
+  /** The same consumption in credits — what the docs and the dashboard quote. */
+  usage_credits?: number;
+  /** The plan's allowance in credits. `credit_limit * plan.unit_cost === plan.price`. */
+  credit_limit?: number;
   /** Consumption as a percentage of the plan limit. */
   usage_percent?: number;
   plan?: {
     name?: string;
     price?: number;
+    /**
+     * Dollars per credit, and it is **per plan**, not a platform constant: Free bills
+     * $0.001/credit (5,000 credits for $5) while larger plans get a volume rate. Never
+     * convert between dollars and credits with a hardcoded factor.
+     */
+    unit_cost?: number;
     recurrence?: string;
     products?: {
       api?: UsageProduct;
