@@ -5,7 +5,7 @@
  * a `next_action`, and optional `suggested_commands`. Agents (and humans) can
  * react to the code and follow the suggested command without guessing.
  */
-import { DASHBOARD_URL } from "./open-url.ts";
+import { BILLING_TOPUP_URL, PLANS_URL } from "./open-url.ts";
 
 export type ErrorCode =
   | "AUTH_MISSING"
@@ -96,7 +96,7 @@ export function quotaExhausted(
   const renewLine = "Credits renew at the end of the billing period — run `zenrows usage` for the date.";
   const claimLine = claimUrl
     ? `You are on the Zenrows Free plan. Claim your account to keep your usage and add credits: ${claimUrl}. ${renewLine}`
-    : `You are out of Zenrows credits. ${renewLine} To carry on now, add credits or upgrade your plan: ${DASHBOARD_URL}`;
+    : `You are out of Zenrows credits. ${renewLine} To carry on now, add a credit pack (${BILLING_TOPUP_URL} opens the purchase directly) or upgrade your plan: ${PLANS_URL}`;
   const detail = opts.detail ? `${opts.detail.replace(/\.\s*$/, "")}. ` : "";
   return new ToolkitError({
     code: "POLICY_MAX_CREDITS_EXCEEDED",
