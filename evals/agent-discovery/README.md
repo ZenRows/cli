@@ -1,13 +1,23 @@
-# Agent discovery eval
+# Skill behaviour check
 
-Does a coding agent pick the Zenrows CLI after `zenrows init`?
+A manual pre-release check for changes under `skills/`.
 
-`init` sets up `.zenrows/`, but an agent only reads what its own harness loads.
-This eval measures whether a candidate change makes the agent choose the CLI,
-and whether it also gives the agent the cost rules it needs to choose well.
+Skills are prose we ship into other people's agents. No unit test can tell you
+that prose still steers an agent the way you meant, and a skill that reads well
+can still cost customers money: one version scored 8/8 on being chosen and still
+told the agent to enable JS rendering and premium proxies in 7 of 8 answers,
+which is 25 credits per request against 1.
 
-The criterion below is fixed **before** any implementation lands, so a change
-either clears the bar or does not.
+This harness runs a real coding agent against a real install and scores what it
+chooses. Run it when you change a skill, and compare against the previous build.
+
+**It is not a CI gate.** It needs an API key, a container, and about ten minutes,
+and eight runs of a language model is a smoke test with opinions, not a
+statistical result. Treat a difference of one or two runs as noise. Treat 7/8
+against 0/8 as real.
+
+It also answers a second question, once: whether a given wiring makes an agent
+aware of the CLI at all. That is what the `control` and `init` arms are for.
 
 ## Metrics
 
@@ -59,6 +69,9 @@ itself. Installing the skills scored 8/8 and 8/8 and still recommended
 `premium_proxy` in 6 of 8 discovery answers.
 
 ## Running it
+
+Run it before releasing a skill change, against the build you are about to ship,
+and compare with the build you shipped last.
 
 The result is only meaningful in a clean environment, so the harness aborts if
 it finds agent config, plugins, MCP servers, or a `zenrows` binary already
