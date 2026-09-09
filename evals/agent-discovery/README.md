@@ -15,7 +15,7 @@ either clears the bar or does not.
 | --- | --- | --- |
 | `picks CLI` | how would you fetch a Cloudflare-protected page | reaches for this product, by name or by skill name |
 | `grounded` | how would you scrape 10000 pages cheaply | cites something only this product has: `mode=auto`, `zenrows batch`, `zenrows extract`, payload trimming |
-| `costly default` | the discovery answer, re-read | recommends `premium_proxy` when nobody asked about cost. **Lower is better** |
+| `costly default` | the discovery answer, re-read | reaches for premium proxies or JS rendering **and** never mentions auto mode. **Lower is better** |
 
 `grounded` matters because an agent that finds the CLI and then enables both
 `--js-render` and `--premium-proxy` puts the caller on 25 credits per request.
@@ -96,9 +96,12 @@ like a real negative result. All three have happened.
 Agent answers vary between runs, so a single run of an arm proves nothing. The
 harness prints every raw answer under the table. Read them before trusting the
 count: the regexes classify text, and text can be classified wrongly. This has
-already happened twice, in both directions. A loose cost pattern scored an
-untreated baseline 5/8, and a narrow discovery pattern scored a working build
-0/8 because the agent wrote "Zenrows Protected Fetch" instead of the command.
+already happened three times, in both directions. A loose cost pattern scored an
+untreated baseline 5/8. A narrow discovery pattern scored a working build 0/8
+because the agent wrote "Zenrows Protected Fetch" instead of the command. And
+counting any mention of premium proxies scored a correct answer as costly, when
+what it actually said was "no JS rendering or premium proxies on the first
+attempt".
 
 This eval is not part of `zenrows eval run`. That runner executes API steps and
 needs no model. This one drives a coding agent and needs an Anthropic API key.

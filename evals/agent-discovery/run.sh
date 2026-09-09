@@ -25,7 +25,13 @@ KNOWS_COST='mode=auto|adaptive stealth|zenrows batch|zenrows extract|zenrows fet
 # js_render plus premium_proxy is 25 credits per request, and mode=auto exists so
 # the agent never has to make that call itself. Lower is better, and this is the
 # one metric where a rise is a regression.
-COSTLY_DEFAULT='premium_proxy|premium prox|--premium-proxy'
+#
+# Scored as costly only when the answer never mentions auto mode: the good
+# answers name premium proxies to rule them out ("no JS rendering or premium
+# proxies on the first attempt"), and counting that as a hit punishes exactly
+# the behaviour we want.
+COSTLY_ESCALATION='premium.prox|--premium-proxy|js.render|--js-render'
+CHOSE_AUTO='auto mode|mode=auto|adaptive stealth'
 
 fail() { echo "ABORT: $*" >&2; exit 1; }
 
@@ -98,7 +104,7 @@ for arm in $ARMS; do
   j=$(score "$arm" "$Q_JUDGMENT" "$KNOWS_COST" /tmp/judgment.txt)
   # Re-read the discovery answers already on disk rather than paying for the
   # same 8 runs twice: this asks a different question of the same evidence.
-  c=$(grep "^$arm run" /tmp/discovery.txt | grep -icE "$COSTLY_DEFAULT")
+  c=$(grep "^$arm run" /tmp/discovery.txt | grep -iE "$COSTLY_ESCALATION" | grep -ivcE "$CHOSE_AUTO")
   printf '%-10s %-12s %-12s %s\n' "$arm" "$d/$RUNS" "$j/$RUNS" "$c/$RUNS"
 done
 
