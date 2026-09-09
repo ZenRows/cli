@@ -22,8 +22,9 @@ zenrows trace export <run-id>     # JSON for sharing
 - `FETCH_FAILED` / empty content → first retry in auto mode (`mode=auto`), which
   escalates for you and bills only for what succeeds. For slow pages add
   `--wait-for <selector>`. Only when auto mode has failed on its own, take
-  manual control with `--manual --js-render` (5 credits per request), then
-  `--premium-proxy` (25 with both, against 1 for a basic call).
+  manual control with `--manual --js-render`, then `--premium-proxy`. Each step
+  multiplies the cost of the request, and both together are the most expensive
+  configuration available ([[cost-control]]).
 - `REQUEST_TIMEOUT` → the CLI stopped waiting; the API was reached. Raise
   `--timeout` (default 120000ms, above the API's own 90s budget), or drop
   `--wait-for` so the request finishes inside that budget and the API returns

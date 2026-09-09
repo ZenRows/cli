@@ -31,6 +31,7 @@ zenrows extract <url> --validate                   # fail if not valid JSON
 - If Autoparse misses fields, switch to `--css` with explicit selectors. Auto
   mode already renders JS when the target needs it, so reach for
   `--manual --js-render` only after auto mode has returned an incomplete page:
-  it costs 5 credits per request against 1, and it makes the escalation yours.
+  it costs several times a basic call ([[cost-control]]) and it makes the
+  escalation yours.
 
 See [[protected-fetch]] for retrieval semantics.

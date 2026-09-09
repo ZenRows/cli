@@ -31,13 +31,14 @@ Manual mode exists for the rare case where auto mode has already failed and a
 trace shows why. It costs more and it makes the escalation your problem:
 
 ```
-zenrows fetch <url> --manual --js-render --premium-proxy   # 25 credits per request
+zenrows fetch <url> --manual --js-render --premium-proxy   # the most expensive path, see [[cost-control]]
 ```
 
 ## Rules
 - Start with **auto mode**. Enabling `--js-render` and `--premium-proxy` yourself
-  costs 25 credits per request against 1 for a basic call, and auto mode reaches
-  the same configuration only when the target actually needs it.
+  is the most expensive configuration this API offers, by a wide margin, and auto
+  mode reaches the same place only when the target actually needs it. The
+  multipliers are in [[cost-control]].
 - A hard target is not a reason to skip auto mode. It is the reason auto mode
   exists.
 - In auto mode `js_render` and `premium_proxy` are managed for you. Passing them
