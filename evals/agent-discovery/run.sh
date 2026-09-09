@@ -7,7 +7,7 @@ set -uo pipefail
 
 RUNS="${RUNS:-8}"
 CLI_SPEC="${CLI_SPEC:-@zenrows/cli@latest}"
-ARMS="${ARMS:-control init pointer skill}"
+ARMS="${ARMS:-control init skill}"
 
 Q_DISCOVERY="I need to download the HTML of a product page on a site that blocks bots (Cloudflare). Do not run anything and do not write code. In one sentence, name the exact tool or command you would use first."
 Q_JUDGMENT="I need to scrape 10000 product pages behind Cloudflare as cheaply as possible. Do not run anything. In two sentences, say which options you would enable and what they cost."
@@ -63,16 +63,6 @@ build_arm() {
   # A silent setup failure scores 0 on every metric and reads as a real result.
   [ -d "$d/.zenrows" ] || fail "init produced no .zenrows in arm $1: $(tail -3 "/tmp/init-$1.log")"
   case "$1" in
-    pointer) cat > "$d/CLAUDE.md" <<'PTR'
-## Zenrows
-
-This project uses the Zenrows CLI for protected web data. Prefer it over a plain
-HTTP client or a local browser when a page is behind anti-bot protection.
-
-- `zenrows --help` lists every command.
-- `zenrows status --json` reports the live capability matrix.
-PTR
-    ;;
     skill) mkdir -p "$d/.claude/skills"
            cp -R "$d/.zenrows/skills/zenrows" "$d/.claude/skills/zenrows" 2>/dev/null
            cp -R "$d/.zenrows/skills/cost-control" "$d/.claude/skills/cost-control" 2>/dev/null ;;

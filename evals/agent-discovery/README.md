@@ -46,7 +46,6 @@ differ only in the wiring under test.
 | --- | --- |
 | `control` | empty directory. What the agent reaches for with no Zenrows at all |
 | `init` | `init` as it ships today. The baseline |
-| `pointer` | plus a Zenrows block in `CLAUDE.md` |
 | `skill` | plus the shipped skills copied to `.claude/skills/` |
 
 ## Pass criterion
@@ -59,9 +58,10 @@ A change ships when, over at least 8 runs per arm:
 - its arm scores **no worse than 6/8** on `costly default`.
 
 An arm that wins on discovery and loses on cost awareness does not pass. A
-measured example: a four-line pointer in `CLAUDE.md` scored 8/8 on discovery and
-0/8 on grounded, and one of its runs recommended enabling JS rendering and
-premium proxies together, which is the most expensive path.
+rejected candidate makes the point: a four-line note in `CLAUDE.md` naming the
+CLI scored 8/8 on discovery and 0/8 on grounded, and one of its runs recommended
+enabling JS rendering and premium proxies together, the most expensive path. It
+found the tool and then used it badly.
 
 `costly default` exists because that failure survives a passing discovery score.
 `js_render` plus `premium_proxy` is the costliest pair, and `mode=auto` bills
