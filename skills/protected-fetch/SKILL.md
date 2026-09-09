@@ -1,6 +1,6 @@
 ---
 name: protected-fetch
-description: Use Zenrows Protected Fetch for anti-bot-protected page retrieval.
+description: Use Zenrows Protected Fetch in auto mode for anti-bot-protected page retrieval. Auto mode handles the anti-bot escalation, so never enable JS rendering or premium proxies yourself on a first attempt.
 version: 0.1.0
 requires_backend_capabilities: [protected_fetch]
 ---
@@ -16,18 +16,32 @@ cannot. This is the **core primitive** — backed by Zenrows **Fetch**
 - The target has anti-bot protection, needs JS rendering, or geo-specific access.
 
 ## How to call
+
+Auto mode is the answer for anti-bot targets, Cloudflare included. It escalates
+for you and bills only for the configuration that succeeds.
+
 ```
-zenrows fetch <url>                       # Adaptive Stealth Mode (recommended)
+zenrows fetch <url>                       # Adaptive Stealth Mode. Start here, always
 zenrows fetch <url> --output markdown     # convert to Markdown
-zenrows fetch <url> --manual --js-render --premium-proxy   # full manual control
-zenrows fetch <url> --proxy-country us    # geo-target (auto mode; in manual mode needs --premium-proxy)
+zenrows fetch <url> --proxy-country us    # geo-target, works in auto mode
 zenrows fetch <url> --wait-for ".price"   # wait for a selector
 ```
 
+Manual mode exists for the rare case where auto mode has already failed and a
+trace shows why. It costs more and it makes the escalation your problem:
+
+```
+zenrows fetch <url> --manual --js-render --premium-proxy   # 25 credits per request
+```
+
 ## Rules
-- Start with **auto mode**. In auto mode, `js_render` and `premium_proxy` are
-  managed for you — passing them manually requires `--manual`
-  (otherwise you get `PARAM_CONFLICT_AUTO_MANUAL`).
+- Start with **auto mode**. Enabling `--js-render` and `--premium-proxy` yourself
+  costs 25 credits per request against 1 for a basic call, and auto mode reaches
+  the same configuration only when the target actually needs it.
+- A hard target is not a reason to skip auto mode. It is the reason auto mode
+  exists.
+- In auto mode `js_render` and `premium_proxy` are managed for you. Passing them
+  manually requires `--manual`, otherwise you get `PARAM_CONFLICT_AUTO_MANUAL`.
 - `--proxy-country` works in auto mode on its own; in `--manual` mode it also
   needs `--premium-proxy` (else `PARAM_PROXY_COUNTRY_REQUIRES_PREMIUM`).
 - You are billed only for the configuration that succeeds.
