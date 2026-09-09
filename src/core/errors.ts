@@ -5,7 +5,7 @@
  * a `next_action`, and optional `suggested_commands`. Agents (and humans) can
  * react to the code and follow the suggested command without guessing.
  */
-import { DASHBOARD_URL } from "./open-url.ts";
+import { BILLING_TOPUP_URL, PLANS_URL } from "./open-url.ts";
 
 export type ErrorCode =
   | "AUTH_MISSING"
@@ -88,15 +88,21 @@ export function quotaExhausted(
   claimUrl?: string,
   opts: { status?: number; detail?: string } = {},
 ): ToolkitError {
+  // Say that the allowance comes back. Without it this reads as a permanent paywall,
+  // which is how the API's own AUTH004 text reads ("Purchase a new subscription to
+  // continue") and why exhausted clients retry-loop instead of waiting or upgrading —
+  // one account spent seven days at ~3 req/s against this wall. `zenrows usage` prints
+  // the exact `period_ends_at`, so the date is one command away rather than guessed here.
+  const renewLine = "Credits renew at the end of the billing period — run `zenrows usage` for the date.";
   const claimLine = claimUrl
-    ? `You are on the Zenrows Free plan. Claim your account to keep your usage and add credits: ${claimUrl}`
-    : `You are out of Zenrows credits. Add credits or upgrade your plan: ${DASHBOARD_URL}`;
+    ? `You are on the Zenrows Free plan. Claim your account to keep your usage and add credits: ${claimUrl}. ${renewLine}`
+    : `You are out of Zenrows credits. ${renewLine} To carry on now, add a credit pack (${BILLING_TOPUP_URL} opens the purchase directly) or upgrade your plan: ${PLANS_URL}`;
   const detail = opts.detail ? `${opts.detail.replace(/\.\s*$/, "")}. ` : "";
   return new ToolkitError({
     code: "POLICY_MAX_CREDITS_EXCEEDED",
     message: "Zenrows request quota exhausted.",
     likely_cause: `${detail}HTTP ${opts.status ?? 429} for ${url}`,
     next_action: claimLine,
-    suggested_commands: claimUrl ? [] : ["zenrows usage"],
+    suggested_commands: ["zenrows usage"],
   });
 }

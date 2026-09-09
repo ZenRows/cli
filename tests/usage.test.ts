@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fetchUsage, usageUrl } from "../src/core/usage.ts";
 import { ToolkitError } from "../src/core/errors.ts";
+import { fmt } from "../src/cli/commands/usage.ts";
+import type { UsageDetails } from "../src/core/usage.ts";
 
 test("usageUrl derives subscriptions/self/details from the api base", () => {
   assert.equal(usageUrl("https://api.zenrows.com/v1/"), "https://api.zenrows.com/v1/subscriptions/self/details");
@@ -60,4 +62,28 @@ test("fetchUsage maps a 402 (over usage limit) to POLICY_MAX_CREDITS_EXCEEDED", 
     () => fetchUsage("https://api.zenrows.com/v1/", "x", { fetchImpl: fakeFetch }),
     (e: unknown) => e instanceof ToolkitError && e.code === "POLICY_MAX_CREDITS_EXCEEDED",
   );
+});
+
+test("zenrows usage reports credits, which the endpoint has always returned", () => {
+  // Verified against the live endpoint: it sends usage_credits and credit_limit
+  // alongside the dollar figure. Neither was declared on UsageDetails, so the command
+  // printed only dollars and left the reader to convert — which they cannot do, because
+  // the rate is per plan (Free $0.001/credit, larger plans a volume rate).
+  assert.equal(fmt(62982), "62,982");
+  assert.equal(fmt(35999978), "35,999,978");
+});
+
+test("UsageDetails carries credits and the per-plan rate", () => {
+  const sample: UsageDetails = {
+    status: "ACTIVE",
+    usage: 5.66823039823616,
+    usage_credits: 62982,
+    credit_limit: 35999978,
+    usage_percent: 0,
+    plan: { name: "Business", price: 3239.89, unit_cost: 8.9997e-5, recurrence: "YEARLY" },
+  };
+  // credit_limit * unit_cost === plan.price is the invariant that makes the rate per-plan
+  // rather than a platform constant. Holds on the live response.
+  assert.ok(Math.abs(sample.credit_limit! * sample.plan!.unit_cost! - sample.plan!.price!) < 0.01);
+  assert.ok(Math.abs(sample.usage! / sample.usage_credits! - sample.plan!.unit_cost!) < 1e-8);
 });
