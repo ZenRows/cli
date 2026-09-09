@@ -18,7 +18,7 @@ import { existsSync } from "node:fs";
 import { createWorkspace, workspacePaths } from "../../core/workspace.ts";
 import { installAsset, loadRegistry } from "../../core/registry.ts";
 import { buildMcpConfig, MCP_CLIENTS } from "../../installers/mcp/index.ts";
-import { installProjectSkills, supportedSkillClients } from "../../installers/agent-skills.ts";
+import { installAgentSkills, supportedSkillClients } from "../../installers/agent-skills.ts";
 import { runFetch } from "../../adapters/protected-fetch.ts";
 import { formatRequestCost } from "../../core/http.ts";
 import { loadCapabilities } from "../../core/capabilities.ts";
@@ -31,7 +31,7 @@ const SMOKE_URL = "https://httpbin.io/html";
 export const init: Command = {
   name: "init",
   summary: "Set up the workspace, auth, MCP, skills, and starter assets.",
-  usage: "zenrows init [--all] [--api-key <key>] [--agents a,b,c] [--browser] [--yes] [--no-test] [--no-agent-skills]",
+  usage: "zenrows init [--all] [--api-key <key>] [--agents a,b,c] [--browser] [--yes] [--no-test] [--project] [--no-agent-skills]",
   help: [
     "Flags:",
     "  --all                 do everything reasonable (assets + MCP snippets + health check)",
@@ -41,7 +41,8 @@ export const init: Command = {
     "  --browser             allow browser escalation in policy",
     "  --experimental        allow experimental commands in policy",
     "  --no-telemetry        set telemetry=off",
-    "  --no-agent-skills     do not copy skills into the agent directories in this project",
+    "  --project             install skills into this repository instead of your home directory",
+    "  --no-agent-skills     do not install skills into the agent directories at all",
     "  --no-test             skip the test Protected Fetch",
     "  --yes                 non-interactive",
   ].join("\n"),
@@ -63,6 +64,7 @@ export const init: Command = {
       "no-telemetry": { type: "boolean" },
       "no-test": { type: "boolean" },
       "no-agent-skills": { type: "boolean" },
+      project: { type: "boolean" },
     });
 
     const all = values.all === true;
@@ -120,9 +122,11 @@ export const init: Command = {
       // Skills in .zenrows/ are invisible to every harness, so put a copy where
       // the agent reads. Without this the agent never learns the CLI exists.
       if (!values["no-agent-skills"]) {
-        for (const t of installProjectSkills(paths.root, agents)) {
+        const scope = values.project ? "project" : "global";
+        for (const t of installAgentSkills(agents, { scope, root: paths.root })) {
           log.success(`Installed ${t.skills.length} skill(s) into ${t.dir}/`);
         }
+        if (scope === "global") log.dim("Installed for every project on this machine. Use --project to keep them in this repository.");
         const unsupported = agents.filter((a) => !supportedSkillClients().includes(a));
         if (unsupported.length) log.dim(`No verified skills path for: ${unsupported.join(", ")}. MCP config below covers them.`);
       }
