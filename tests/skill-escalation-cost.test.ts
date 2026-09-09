@@ -8,9 +8,10 @@ import { pkgPath } from "../src/core/paths.ts";
  * Skills are prose we ship into other people's agents, so the usual tests say
  * nothing about them. This one encodes a single lesson from a real regression:
  * a skill offered `--js-render --premium-proxy` as an ordinary example, and the
- * agent then recommended that pair for routine work. It is 25 credits per
- * request against 1, and `mode=auto` reaches the same place only when the
- * target needs it.
+ * agent then recommended that pair for routine work. It is the most expensive
+ * configuration the API offers, and `mode=auto` reaches the same place only when
+ * the target needs it. The multipliers themselves live in the cost-control
+ * skill, which is the one place that should carry a number.
  *
  * The rule is narrow on purpose. It fires on a runnable example that turns both
  * on with no price attached. A synopsis listing optional flags in brackets is
@@ -31,8 +32,9 @@ function enablesBothEscalations(line: string): boolean {
   return /--js-render\b/.test(line) && /--premium-proxy\b/.test(line);
 }
 
+/** Any cost signal will do. Prices change; the warning should not have to. */
 function statesCost(line: string): boolean {
-  return /\bcredits?\b|\bcosts?\b|\b25\b/i.test(line);
+  return /\bcredits?\b|\bcosts?\b|expensive|\bprice|cost-control/i.test(line);
 }
 
 test("a runnable example that enables both escalations states its cost", () => {
@@ -47,7 +49,7 @@ test("a runnable example that enables both escalations states its cost", () => {
   assert.deepEqual(
     offenders,
     [],
-    `--js-render with --premium-proxy is 25 credits per request. An example that turns both on must say so on the same line, or use mode=auto instead:\n${offenders.join("\n")}`,
+    `--js-render with --premium-proxy is the most expensive configuration available. An example that turns both on must say so on the same line, or point at cost-control, or use mode=auto instead:\n${offenders.join("\n")}`,
   );
 });
 

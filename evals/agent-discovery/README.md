@@ -6,7 +6,7 @@ Skills are prose we ship into other people's agents. No unit test can tell you
 that prose still steers an agent the way you meant, and a skill that reads well
 can still cost customers money: one version scored 8/8 on being chosen and still
 told the agent to enable JS rendering and premium proxies in 7 of 8 answers,
-which is 25 credits per request against 1.
+which is the most expensive configuration the API offers.
 
 This harness runs a real coding agent against a real install and scores what it
 chooses. Run it when you change a skill, and compare against the previous build.
@@ -28,7 +28,8 @@ aware of the CLI at all. That is what the `control` and `init` arms are for.
 | `costly default` | the discovery answer, re-read | reaches for premium proxies or JS rendering **and** never mentions auto mode. **Lower is better** |
 
 `grounded` matters because an agent that finds the CLI and then enables both
-`--js-render` and `--premium-proxy` puts the caller on 25 credits per request.
+`--js-render` and `--premium-proxy` puts the caller on the most expensive
+configuration available.
 Discovery without cost awareness is not a win.
 
 The marker set is deliberately narrow. An earlier version matched generic words
@@ -60,10 +61,10 @@ A change ships when, over at least 8 runs per arm:
 An arm that wins on discovery and loses on cost awareness does not pass. A
 measured example: a four-line pointer in `CLAUDE.md` scored 8/8 on discovery and
 0/8 on grounded, and one of its runs recommended enabling JS rendering and
-premium proxies together, which is the 25 credit path.
+premium proxies together, which is the most expensive path.
 
 `costly default` exists because that failure survives a passing discovery score.
-`js_render` plus `premium_proxy` is 25 credits per request, and `mode=auto` bills
+`js_render` plus `premium_proxy` is the costliest pair, and `mode=auto` bills
 only for the configuration that succeeds, so an agent should never pick that pair
 itself. Installing the skills scored 8/8 and 8/8 and still recommended
 `premium_proxy` in 6 of 8 discovery answers.

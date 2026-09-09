@@ -47,8 +47,8 @@ key, a container, and about ten minutes.
 
 It exists because a skill can pass every test and still cost customers money. A
 version that installed correctly and scored 8/8 on being chosen still told the
-agent to enable JS rendering and premium proxies in 7 of 8 answers, which is 25
-credits per request against 1.
+agent to enable JS rendering and premium proxies in 7 of 8 answers, the most
+expensive configuration the API offers.
 
 ## Rules
 

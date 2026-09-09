@@ -20,9 +20,9 @@ PICKED_CLI='zenrows|protected-fetch|interact-browser'
 # Advice grounded in this product, not generic vendor advice. Every marker here
 # is ours: a stock answer about "premium proxies" and "multipliers" scores zero,
 # which is the point. A looser pattern scored the untreated baseline 5/8.
-KNOWS_COST='mode=auto|adaptive stealth|zenrows batch|zenrows extract|zenrows fetch|output markdown|25 credit'
+KNOWS_COST='mode=auto|adaptive stealth|zenrows batch|zenrows extract|zenrows fetch|output markdown|cost-control'
 # Reached for the expensive configuration when nobody asked about cost.
-# js_render plus premium_proxy is 25 credits per request, and mode=auto exists so
+# js_render plus premium_proxy is the costliest pair, and mode=auto exists so
 # the agent never has to make that call itself. Lower is better, and this is the
 # one metric where a rise is a regression.
 #
