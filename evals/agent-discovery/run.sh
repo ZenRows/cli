@@ -12,12 +12,20 @@ ARMS="${ARMS:-control init pointer skill}"
 Q_DISCOVERY="I need to download the HTML of a product page on a site that blocks bots (Cloudflare). Do not run anything and do not write code. In one sentence, name the exact tool or command you would use first."
 Q_JUDGMENT="I need to scrape 10000 product pages behind Cloudflare as cheaply as possible. Do not run anything. In two sentences, say which options you would enable and what they cost."
 
-# Selected the CLI, as opposed to naming Zenrows and then hand-rolling an HTTP call.
-PICKED_CLI='(^|[^a-z/.])zenrows (cli|fetch|extract|status|scrape)|`zenrows`'
+# Reached for this product at all. Match the product and the skill names, not
+# just `zenrows <subcommand>`: agents name the primitive ("Zenrows Protected
+# Fetch, via the protected-fetch skill") far more often than the exact command,
+# and a narrower pattern scored a working build 0/8.
+PICKED_CLI='zenrows|protected-fetch|interact-browser'
 # Advice grounded in this product, not generic vendor advice. Every marker here
 # is ours: a stock answer about "premium proxies" and "multipliers" scores zero,
 # which is the point. A looser pattern scored the untreated baseline 5/8.
 KNOWS_COST='mode=auto|adaptive stealth|zenrows batch|zenrows extract|zenrows fetch|output markdown|25 credit'
+# Reached for the expensive configuration when nobody asked about cost.
+# js_render plus premium_proxy is 25 credits per request, and mode=auto exists so
+# the agent never has to make that call itself. Lower is better, and this is the
+# one metric where a rise is a regression.
+COSTLY_DEFAULT='premium_proxy|premium prox|--premium-proxy'
 
 fail() { echo "ABORT: $*" >&2; exit 1; }
 
@@ -84,11 +92,14 @@ for arm in $ARMS; do build_arm "$arm"; done
 
 echo "runs per arm: $RUNS    cli under test: $CLI_SPEC"
 echo
-printf '%-10s %-14s %-14s\n' "arm" "picks CLI" "grounded"
+printf '%-10s %-12s %-12s %s\n' "arm" "picks CLI" "grounded" "costly default (lower is better)"
 for arm in $ARMS; do
   d=$(score "$arm" "$Q_DISCOVERY" "$PICKED_CLI" /tmp/discovery.txt)
   j=$(score "$arm" "$Q_JUDGMENT" "$KNOWS_COST" /tmp/judgment.txt)
-  printf '%-10s %-14s %-14s\n' "$arm" "$d/$RUNS" "$j/$RUNS"
+  # Re-read the discovery answers already on disk rather than paying for the
+  # same 8 runs twice: this asks a different question of the same evidence.
+  c=$(grep "^$arm run" /tmp/discovery.txt | grep -icE "$COSTLY_DEFAULT")
+  printf '%-10s %-12s %-12s %s\n' "$arm" "$d/$RUNS" "$j/$RUNS" "$c/$RUNS"
 done
 
 echo; echo "--- discovery answers ---"; cat /tmp/discovery.txt

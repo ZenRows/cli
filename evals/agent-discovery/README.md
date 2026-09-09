@@ -13,8 +13,9 @@ either clears the bar or does not.
 
 | Metric | Question asked | Counted as a hit when the answer |
 | --- | --- | --- |
-| `picks CLI` | how would you fetch a Cloudflare-protected page | names the `zenrows` CLI as the first tool |
+| `picks CLI` | how would you fetch a Cloudflare-protected page | reaches for this product, by name or by skill name |
 | `grounded` | how would you scrape 10000 pages cheaply | cites something only this product has: `mode=auto`, `zenrows batch`, `zenrows extract`, payload trimming |
+| `costly default` | the discovery answer, re-read | recommends `premium_proxy` when nobody asked about cost. **Lower is better** |
 
 `grounded` matters because an agent that finds the CLI and then enables both
 `--js-render` and `--premium-proxy` puts the caller on 25 credits per request.
@@ -43,12 +44,19 @@ A change ships when, over at least 8 runs per arm:
 
 - its arm scores **6/8 or better** on `picks CLI`, and
 - the `init` baseline stays at **2/8 or worse**, which proves the arm caused it, and
-- its arm scores **6/8 or better** on `grounded`.
+- its arm scores **6/8 or better** on `grounded`, and
+- its arm scores **no worse than 6/8** on `costly default`.
 
 An arm that wins on discovery and loses on cost awareness does not pass. A
 measured example: a four-line pointer in `CLAUDE.md` scored 8/8 on discovery and
 0/8 on grounded, and one of its runs recommended enabling JS rendering and
 premium proxies together, which is the 25 credit path.
+
+`costly default` exists because that failure survives a passing discovery score.
+`js_render` plus `premium_proxy` is 25 credits per request, and `mode=auto` bills
+only for the configuration that succeeds, so an agent should never pick that pair
+itself. Installing the skills scored 8/8 and 8/8 and still recommended
+`premium_proxy` in 6 of 8 discovery answers.
 
 ## Running it
 
@@ -87,7 +95,10 @@ like a real negative result. All three have happened.
 
 Agent answers vary between runs, so a single run of an arm proves nothing. The
 harness prints every raw answer under the table. Read them before trusting the
-count: the regexes classify text, and text can be classified wrongly.
+count: the regexes classify text, and text can be classified wrongly. This has
+already happened twice, in both directions. A loose cost pattern scored an
+untreated baseline 5/8, and a narrow discovery pattern scored a working build
+0/8 because the agent wrote "Zenrows Protected Fetch" instead of the command.
 
 This eval is not part of `zenrows eval run`. That runner executes API steps and
 needs no model. This one drives a coding agent and needs an Anthropic API key.
