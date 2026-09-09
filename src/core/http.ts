@@ -43,6 +43,22 @@ export interface ScraperParams {
   [param: string]: string | number | boolean | undefined;
 }
 
+/**
+ * Client-side timeout for a Fetch and Extract request, deliberately ABOVE the
+ * gateway's own 90s request budget.
+ *
+ * The two must not be equal. When they were both 90s, any request that used
+ * the full server budget became a race between our own abort and the API's
+ * real error envelope — and the abort usually won, so a specific, actionable
+ * server error (a 422, a 499) was reported as "could not reach the API". The
+ * client must outlive the server budget so the API always gets the chance to
+ * answer for itself.
+ */
+export const DEFAULT_TIMEOUT_MS = 120_000;
+
+/** The gateway's own request budget. Kept here only to justify the default above. */
+export const SERVER_BUDGET_MS = 90_000;
+
 function buildUrl(apiBase: string, apiKey: string, params: ScraperParams): { full: string; redacted: string } {
   const u = new URL(apiBase);
   u.searchParams.set("apikey", apiKey);
@@ -65,8 +81,17 @@ export async function scrape(
 ): Promise<ScraperResult> {
   registerSecret(apiKey);
   const { full, redacted } = buildUrl(apiBase, apiKey, params);
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 90_000);
+  // Our own timer is the only thing that aborts this controller, so this flag —
+  // not `err.name === "AbortError"` — is what tells a client-side give-up apart
+  // from a genuine transport failure. The two must never share an error code.
+  let timedOut = false;
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, timeoutMs);
+  const startedAt = Date.now();
 
   let res: Response;
   try {
@@ -77,11 +102,13 @@ export async function scrape(
     });
   } catch (err) {
     clearTimeout(timeout);
+    const elapsedMs = Date.now() - startedAt;
+    if (timedOut) throw requestTimeout(params.url, timeoutMs, elapsedMs);
     const cause = err instanceof Error ? err.message : String(err);
     throw new ToolkitError({
       code: "BACKEND_UNAVAILABLE",
       message: `Could not reach the Zenrows API.`,
-      likely_cause: `Network error or timeout: ${cause}`,
+      likely_cause: `Network error after ${formatMs(elapsedMs)}: ${cause}`,
       next_action: "Check connectivity and retry. Verify api base in `zenrows config show`.",
       suggested_commands: ["zenrows status", "zenrows config show"],
     });
@@ -242,6 +269,35 @@ export async function scrape(
     });
   }
   return result;
+}
+
+/**
+ * The CLI gave up waiting before the API answered. This is NOT unreachability:
+ * the connection was established and the gateway was still working, so telling
+ * the operator to check connectivity would send them at the wrong problem. The
+ * elapsed time is included so the 90s server budget is visible in the output.
+ */
+export function requestTimeout(url: string, timeoutMs: number, elapsedMs: number): ToolkitError {
+  const suggestedMs = Math.max(timeoutMs + 60_000, SERVER_BUDGET_MS + 60_000);
+  const atBudget = elapsedMs >= SERVER_BUDGET_MS;
+  return new ToolkitError({
+    code: "REQUEST_TIMEOUT",
+    message: `The CLI stopped waiting after ${formatMs(timeoutMs)}. The Zenrows API did not respond in time.`,
+    likely_cause:
+      `The request was aborted client-side after ${formatMs(elapsedMs)}. The API was reached — this is not a ` +
+      (atBudget
+        ? `connectivity problem. The request also passed the API's own ${formatMs(SERVER_BUDGET_MS)} budget, so the target is very likely rendering slowly or a wait condition never matched.`
+        : `connectivity problem, and the API's own ${formatMs(SERVER_BUDGET_MS)} budget had not run out yet.`),
+    next_action:
+      `Retry with a longer client timeout (\`--timeout ${suggestedMs}\`). If the target needs a long render, drop ` +
+      "`--wait-for` so the request finishes inside the API's budget and the API can return its own error instead.",
+    suggested_commands: [`zenrows fetch ${url} --timeout ${suggestedMs}`],
+  });
+}
+
+/** `89677` → `89.7s`; `120004` → `120s`. One decimal, and never a bare `.0`. */
+function formatMs(ms: number): string {
+  return `${(ms / 1000).toFixed(1).replace(/\.0$/, "")}s`;
 }
 
 function looksLikeContent(r: ScraperResult): boolean {

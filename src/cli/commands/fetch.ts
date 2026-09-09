@@ -35,6 +35,7 @@ export const fetch_: Command = {
     "  --output <fmt>         html (default) | markdown | text | pdf",
     "  --screenshot           capture an above-the-fold screenshot",
     "  --out <file>           write the response body to a file",
+    "  --timeout <ms>         client-side timeout (default 120000; above the API's own 90s budget)",
     "  --no-signup            do not auto-create a Free plan account if no key exists",
     "  --json                 print a structured result",
     "",
@@ -56,6 +57,7 @@ export const fetch_: Command = {
       output: { type: "string" },
       screenshot: { type: "boolean" },
       out: { type: "string" },
+      timeout: { type: "string" },
       "no-signup": { type: "boolean" },
       json: { type: "boolean" },
     });
@@ -97,6 +99,7 @@ export const fetch_: Command = {
       originalStatus: values["original-status"] === true,
       output: normalizeOutput(asString(values.output)),
       screenshot: values.screenshot === true,
+      timeoutMs: normalizeTimeout(values.timeout),
     };
 
     const runId = newRunId();
@@ -180,6 +183,28 @@ export const fetch_: Command = {
     }
   },
 };
+
+/**
+ * `--timeout <ms>`, in milliseconds, matching `batch wait --timeout`.
+ *
+ * Rejects a non-numeric or non-positive value rather than silently falling back
+ * to the default: an agent that passes `--timeout fast` must not get a green
+ * result on a timeout the CLI never honored.
+ */
+export function normalizeTimeout(v: unknown): number | undefined {
+  if (v === undefined) return undefined;
+  const ms = asNumber(v);
+  if (ms === undefined || ms <= 0) {
+    throw new ToolkitError({
+      code: "INVALID_USAGE",
+      message: `Invalid --timeout value '${String(v)}'.`,
+      likely_cause: "--timeout takes a positive number of milliseconds.",
+      next_action: "Pass milliseconds, e.g. --timeout 180000 for three minutes.",
+      suggested_commands: ["zenrows fetch <url> --timeout 180000"],
+    });
+  }
+  return ms;
+}
 
 export function normalizeOutput(v?: string): ResponseFormat | undefined {
   if (!v) return undefined;

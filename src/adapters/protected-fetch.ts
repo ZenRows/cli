@@ -45,6 +45,12 @@ export interface FetchOptions {
    */
   outputs?: string;
   jsonResponse?: boolean;
+  /**
+   * Client-side timeout in milliseconds. Not an API parameter — it never goes
+   * into the query string. Unset means `http.ts`'s default, which is above the
+   * gateway's own request budget on purpose.
+   */
+  timeoutMs?: number;
 }
 
 const RESPONSE_TYPE: Partial<Record<ResponseFormat, string>> = {
@@ -144,6 +150,6 @@ export async function runFetch(
   validateAutoManual(opts, config);
   const params = buildParams(opts, config);
   const mode: "auto" | "manual" = params.mode === "auto" ? "auto" : "manual";
-  const result = await scrape(config.apiBase, apiKey, params);
+  const result = await scrape(config.apiBase, apiKey, params, { timeoutMs: opts.timeoutMs });
   return { result, params, mode };
 }
