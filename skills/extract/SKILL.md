@@ -28,7 +28,9 @@ zenrows extract <url> --validate                   # fail if not valid JSON
 
 ## Rules
 - Validate on a single page before scaling across many URLs.
-- If Autoparse misses fields, switch to `--css` with explicit selectors, or add
-  `--manual --js-render` for JS-heavy pages.
+- If Autoparse misses fields, switch to `--css` with explicit selectors. Auto
+  mode already renders JS when the target needs it, so reach for
+  `--manual --js-render` only after auto mode has returned an incomplete page:
+  it costs 5 credits per request against 1, and it makes the escalation yours.
 
 See [[protected-fetch]] for retrieval semantics.
