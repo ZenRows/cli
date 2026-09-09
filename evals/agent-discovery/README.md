@@ -76,6 +76,11 @@ npm pack && docker run --rm -e ANTHROPIC_API_KEY="$ANTHROPIC_API_KEY" \
   -e CLI_SPEC=/w/zenrows-cli-x.y.z.tgz -v "$PWD:/w:ro" zenrows-agent-discovery
 ```
 
+The harness aborts rather than reporting a score when the agent cannot
+authenticate, when the CLI will not install, or when an arm's `init` produces no
+`.zenrows/`. Each of those otherwise scores 0 on every metric and reads exactly
+like a real negative result. All three have happened.
+
 `RUNS` sets the sample size per arm, `ARMS` selects which arms to run.
 
 ## Reading the result

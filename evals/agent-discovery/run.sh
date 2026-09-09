@@ -33,10 +33,21 @@ command -v zenrows >/dev/null && fail "a zenrows binary is already on PATH"
 probe=$(claude -p "reply with the single word: ok" 2>&1 | head -3)
 echo "$probe" | grep -qi "^ok$" || fail "the agent is not usable: ${probe:-no output}. Set ANTHROPIC_API_KEY."
 
+# Install the CLI under test after the gate, never before: the gate must see a
+# machine with no zenrows on it. A tarball path cannot be run through npx, so
+# install for real and let the arms call the binary.
+export NPM_CONFIG_PREFIX="$HOME/.npm-global"
+export PATH="$NPM_CONFIG_PREFIX/bin:$PATH"
+npm install -g "$CLI_SPEC" >/tmp/install.log 2>&1 \
+  || fail "could not install $CLI_SPEC: $(tail -3 /tmp/install.log)"
+command -v zenrows >/dev/null || fail "$CLI_SPEC installed but left no zenrows binary"
+
 build_arm() {
   d="/work/$1"; mkdir -p "$d"; cd "$d" || exit 1
   [ "$1" = control ] && return 0
-  npx -y "$CLI_SPEC" init --all </dev/null >/dev/null 2>&1
+  zenrows init --all </dev/null >"/tmp/init-$1.log" 2>&1
+  # A silent setup failure scores 0 on every metric and reads as a real result.
+  [ -d "$d/.zenrows" ] || fail "init produced no .zenrows in arm $1: $(tail -3 "/tmp/init-$1.log")"
   case "$1" in
     pointer) cat > "$d/CLAUDE.md" <<'PTR'
 ## Zenrows
