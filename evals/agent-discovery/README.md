@@ -14,11 +14,16 @@ either clears the bar or does not.
 | Metric | Question asked | Counted as a hit when the answer |
 | --- | --- | --- |
 | `picks CLI` | how would you fetch a Cloudflare-protected page | names the `zenrows` CLI as the first tool |
-| `knows cost` | how would you scrape 10000 pages cheaply | cites a real cost rule (the credit multipliers, or `mode=auto`) |
+| `grounded` | how would you scrape 10000 pages cheaply | cites something only this product has: `mode=auto`, `zenrows batch`, `zenrows extract`, payload trimming |
 
-`knows cost` matters because an agent that finds the CLI and then enables both
+`grounded` matters because an agent that finds the CLI and then enables both
 `--js-render` and `--premium-proxy` puts the caller on 25 credits per request.
 Discovery without cost awareness is not a win.
+
+The marker set is deliberately narrow. An earlier version matched generic words
+like "multiplier" and scored the untreated baseline 5/8, while those answers all
+began "assuming a commercial scraping API, you didn't say which". Generic advice
+that happens to mention cost is not knowledge of this product.
 
 ## Arms
 
@@ -38,9 +43,12 @@ A change ships when, over at least 8 runs per arm:
 
 - its arm scores **6/8 or better** on `picks CLI`, and
 - the `init` baseline stays at **2/8 or worse**, which proves the arm caused it, and
-- its arm scores **no worse than the baseline** on `knows cost`.
+- its arm scores **6/8 or better** on `grounded`.
 
-An arm that wins on discovery and loses on cost awareness does not pass.
+An arm that wins on discovery and loses on cost awareness does not pass. A
+measured example: a four-line pointer in `CLAUDE.md` scored 8/8 on discovery and
+0/8 on grounded, and one of its runs recommended enabling JS rendering and
+premium proxies together, which is the 25 credit path.
 
 ## Running it
 

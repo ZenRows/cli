@@ -14,8 +14,10 @@ Q_JUDGMENT="I need to scrape 10000 product pages behind Cloudflare as cheaply as
 
 # Selected the CLI, as opposed to naming Zenrows and then hand-rolling an HTTP call.
 PICKED_CLI='(^|[^a-z/.])zenrows (cli|fetch|extract|status|scrape)|`zenrows`'
-# Quoted a real cost rule rather than guessing. 1x/5x/10x/25x and mode=auto are ours.
-KNOWS_COST='25x|25 credit|10x|10 credit|multiplier|mode=auto|adaptive stealth'
+# Advice grounded in this product, not generic vendor advice. Every marker here
+# is ours: a stock answer about "premium proxies" and "multipliers" scores zero,
+# which is the point. A looser pattern scored the untreated baseline 5/8.
+KNOWS_COST='mode=auto|adaptive stealth|zenrows batch|zenrows extract|zenrows fetch|output markdown|25 credit'
 
 fail() { echo "ABORT: $*" >&2; exit 1; }
 
@@ -71,7 +73,7 @@ for arm in $ARMS; do build_arm "$arm"; done
 
 echo "runs per arm: $RUNS    cli under test: $CLI_SPEC"
 echo
-printf '%-10s %-14s %-14s\n' "arm" "picks CLI" "knows cost"
+printf '%-10s %-14s %-14s\n' "arm" "picks CLI" "grounded"
 for arm in $ARMS; do
   d=$(score "$arm" "$Q_DISCOVERY" "$PICKED_CLI" /tmp/discovery.txt)
   j=$(score "$arm" "$Q_JUDGMENT" "$KNOWS_COST" /tmp/judgment.txt)
