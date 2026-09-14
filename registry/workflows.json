@@ -5,11 +5,58 @@
       "type": "workflow",
       "description": "Gather competitor pages, extract structured data, and keep it fresh.",
       "status": "available",
-      "requires_backend_capabilities": ["protected_fetch", "extract"],
+      "requires_backend_capabilities": [
+        "protected_fetch",
+        "extract"
+      ],
       "requires_auth": true,
       "version": "0.1.0",
       "path": "workflows/competitor-intelligence",
-      "tags": ["competitive", "extract", "fetch"]
+      "tags": [
+        "competitive",
+        "extract",
+        "fetch"
+      ]
+    },
+    {
+      "name": "price-monitoring",
+      "type": "workflow",
+      "description": "Watch prices across many product pages, validated once and then run as a managed batch.",
+      "status": "available",
+      "requires_backend_capabilities": [
+        "protected_fetch",
+        "extract",
+        "batch"
+      ],
+      "requires_auth": true,
+      "version": "0.1.0",
+      "path": "workflows/price-monitoring",
+      "tags": [
+        "pricing",
+        "fetch",
+        "extract",
+        "batch"
+      ]
+    },
+    {
+      "name": "gated-page-extraction",
+      "type": "workflow",
+      "description": "Get structured data out of pages that need interaction first, escalating to a browser only with evidence.",
+      "status": "available",
+      "requires_backend_capabilities": [
+        "protected_fetch",
+        "browser",
+        "extract"
+      ],
+      "requires_auth": true,
+      "version": "0.1.0",
+      "path": "workflows/gated-page-extraction",
+      "tags": [
+        "browser",
+        "escalation",
+        "extract",
+        "fetch"
+      ]
     }
   ]
 }
