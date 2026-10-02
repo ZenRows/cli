@@ -54,6 +54,14 @@ zenrows batch retry-failed <id>       # rerun only the failed tasks (new run)
 `--premium-proxy` (or `mode=auto`) and is rejected before any request. Job-level
 flags apply to every task; per-task keys in the JSONL override them.
 
+A run ends in one of `completed`, `failed`, `stopped`, or `deleted`. `status`,
+`wait`, and `create --wait` exit non-zero (`ok: false` under `--json`) only for
+`failed`, and print the run's `failure_reason` and `failure_detail`. When
+`failure_reason` is `api_key_cap_reached`, the key hit its own credit cap
+(`KEY_CREDIT_CAP_REACHED`): the account still has credits, other keys keep
+working, and the tasks not yet run stay pending. Wait for the cap to reset
+(`zenrows usage`) or raise the cap; do not resubmit the job with the same key.
+
 Deferred (documented, not yet in the CLI): CSV upload, open/queue jobs,
 scheduled jobs, webhooks/HMAC, and ZIP export.
 

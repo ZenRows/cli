@@ -132,3 +132,127 @@ test("batch estimate --json emits an {ok,...} envelope (ok reflects spec validit
     assert.equal(badJson.ok, false);
   });
 });
+
+/** Run `fn` in a workspace whose Batch API always answers with `job`. */
+function withJobResponse(job: unknown, fn: () => Promise<void>): Promise<void> {
+  const { root, cleanup } = tempRoot();
+  const cwd = process.cwd();
+  createWorkspace(root);
+  savePolicy(defaultPolicy(), root);
+  saveApiKey("0".repeat(41), root);
+  process.chdir(root);
+  const orig = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response(JSON.stringify(job), { status: 200, headers: { "content-type": "application/json" } })) as unknown as typeof fetch;
+  return fn().finally(() => {
+    globalThis.fetch = orig;
+    process.chdir(cwd);
+    cleanup();
+  });
+}
+
+/** Capture stderr (human output) for the duration of `fn`. */
+async function captureErr(fn: () => unknown): Promise<string> {
+  const orig = process.stderr.write.bind(process.stderr);
+  let buf = "";
+  process.stderr.write = ((s: string | Uint8Array) => {
+    buf += typeof s === "string" ? s : Buffer.from(s).toString();
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    await fn();
+  } finally {
+    process.stderr.write = orig;
+  }
+  return buf;
+}
+
+const capFailedJob = {
+  job_id: "j_cap",
+  latest_run: {
+    status: "failed",
+    stats: { total: 3, completed: 1, successful: 1, failed: 0 },
+    failure_reason: "api_key_cap_reached",
+    failure_detail: "This API key reached its weekly credit cap of 100. It resets on 2026-10-05.",
+  },
+};
+
+test("batch status on a run the key cap stopped exits 1, ok:false, with reason, detail, and cap guidance", async () => {
+  await withJobResponse(capFailedJob, async () => {
+    let code = -1;
+    const out = await captureOut(async () => {
+      code = await batch.run(["status", "j_cap"], ctx);
+    });
+    assert.equal(code, 1);
+    const j = JSON.parse(out) as Record<string, any>;
+    assert.equal(j.ok, false);
+    assert.equal(j.status, "failed");
+    assert.equal(j.failure_reason, "api_key_cap_reached");
+    assert.match(j.failure_detail, /weekly credit cap/);
+    assert.equal(j.error.code, "KEY_CREDIT_CAP_REACHED");
+    assert.match(j.error.next_action, /settings\/api-keys/);
+    // The status call itself succeeded, so the cause must not cite an HTTP 402.
+    assert.doesNotMatch(j.error.likely_cause, /HTTP 402/);
+    assert.match(j.error.likely_cause, /Stopped batch job j_cap/);
+  });
+});
+
+test("batch wait (human) on a cap-failed run prints reason and detail, no success mark, exits 1", async () => {
+  await withJobResponse(capFailedJob, async () => {
+    let code = -1;
+    const err = await captureErr(async () => {
+      code = await batch.run(["wait", "j_cap"], { json: false, yes: false });
+    });
+    assert.equal(code, 1);
+    assert.doesNotMatch(err, /✓/);
+    assert.match(err, /failure_reason: api_key_cap_reached/);
+    assert.match(err, /failure_detail: .*weekly credit cap/);
+    assert.match(err, /KEY_CREDIT_CAP_REACHED/);
+  });
+});
+
+test("batch status on a run failed for another reason exits 1 with BATCH_FAILED", async () => {
+  await withJobResponse(
+    { job_id: "j_f", latest_run: { status: "failed", stats: { total: 1, completed: 0, successful: 0, failed: 0 }, failure_reason: "internal_error", failure_detail: "boom" } },
+    async () => {
+      let code = -1;
+      const out = await captureOut(async () => {
+        code = await batch.run(["status", "j_f"], ctx);
+      });
+      assert.equal(code, 1);
+      const j = JSON.parse(out) as Record<string, any>;
+      assert.equal(j.ok, false);
+      assert.equal(j.error.code, "BATCH_FAILED");
+      assert.match(j.error.likely_cause, /internal_error: boom/);
+    },
+  );
+});
+
+test("batch status on completed and stopped runs exits 0 with ok:true", async () => {
+  for (const status of ["completed", "stopped"]) {
+    await withJobResponse({ job_id: "j_ok", latest_run: { status, stats: { total: 1, completed: 1, successful: 1, failed: 0 } } }, async () => {
+      let code = -1;
+      const out = await captureOut(async () => {
+        code = await batch.run(["status", "j_ok"], ctx);
+      });
+      assert.equal(code, 0, status);
+      const j = JSON.parse(out) as Record<string, any>;
+      assert.equal(j.ok, true, status);
+      assert.equal(j.error, undefined, status);
+    });
+  }
+});
+
+test("batch create --wait whose run the cap stops exits 1 with ok:false", async () => {
+  await withJobResponse(capFailedJob, async () => {
+    const file = writeSpec(["https://ok.example/a"]);
+    let code = -1;
+    const out = await captureOut(async () => {
+      code = await batch.run(["create", file, "--wait"], ctx);
+    });
+    assert.equal(code, 1);
+    const j = JSON.parse(out) as Record<string, any>;
+    assert.equal(j.ok, false);
+    assert.equal(j.failure_reason, "api_key_cap_reached");
+  });
+});

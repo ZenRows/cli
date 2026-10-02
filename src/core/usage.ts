@@ -55,7 +55,20 @@ export interface UsageDetails {
     };
   };
   top_ups?: unknown[];
+  /** The calling key's credit caps. Absent when they could not be loaded: unknown, not uncapped. */
+  api_key?: { caps?: KeyCreditCap[] };
   [k: string]: unknown;
+}
+
+/** One credit cap on the calling API key. */
+export interface KeyCreditCap {
+  window: "day" | "week" | "month" | "billing_period" | string;
+  credits: number;
+  used_credits?: number;
+  remaining_credits?: number;
+  resets_at?: string;
+  /** True when the cap's usage could not be read; the cap does not block the key meanwhile. */
+  unavailable?: boolean;
 }
 
 /** Build the plan-usage URL from the configured API base. */

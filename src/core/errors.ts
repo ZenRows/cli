@@ -17,6 +17,7 @@ export type ErrorCode =
   | "PARAM_PROXY_COUNTRY_REQUIRES_PREMIUM"
   | "POLICY_BLOCKED_DOMAIN"
   | "POLICY_MAX_CREDITS_EXCEEDED"
+  | "KEY_CREDIT_CAP_REACHED"
   | "POLICY_LIMIT_EXCEEDED"
   | "POLICY_EXPERIMENTAL_DISABLED"
   | "POLICY_BROWSER_DISABLED"
@@ -104,6 +105,36 @@ export function quotaExhausted(
     message: "Zenrows request quota exhausted.",
     likely_cause: `${detail}HTTP ${opts.status ?? 429} for ${url}`,
     next_action: claimLine,
+    suggested_commands: ["zenrows usage"],
+  });
+}
+
+/** Where an account manages its API keys and their credit caps. */
+export const API_KEYS_SETTINGS_URL = "https://app.zenrows.com/settings/api-keys";
+
+/**
+ * True when a 402 is a per-key credit cap (gateway AUTH014, Batch
+ * `api_key_cap_reached`), not an account out of credits. The account still has
+ * credits, so the out-of-credits advice (top up, upgrade, claim) is wrong here.
+ */
+export function isKeyCapReached(code?: string, body?: string): boolean {
+  if (code === "AUTH014" || code === "api_key_cap_reached") return true;
+  return !!body && /\b(AUTH014|api_key_cap_reached)\b/.test(body);
+}
+
+/**
+ * The error for a request refused because this API key reached one of its credit
+ * caps. `opts.status: null` is for a Batch run the cap stopped: the run's status
+ * call succeeded, so there is no HTTP 402 to cite, only `url` (the job).
+ */
+export function keyCapReached(url: string, opts: { status?: number | null; detail?: string } = {}): ToolkitError {
+  const detail = opts.detail ? `${opts.detail.replace(/\.\s*$/, "")}. ` : "";
+  const where = opts.status === null ? `Stopped ${url}` : `HTTP ${opts.status ?? 402} for ${url}`;
+  return new ToolkitError({
+    code: "KEY_CREDIT_CAP_REACHED",
+    message: "This API key reached one of its credit caps.",
+    likely_cause: `${detail}${where}`,
+    next_action: `The account still has credits and its other API keys keep working. Wait for the cap to reset (\`zenrows usage\` shows when), or raise or remove this key's cap at ${API_KEYS_SETTINGS_URL}.`,
     suggested_commands: ["zenrows usage"],
   });
 }

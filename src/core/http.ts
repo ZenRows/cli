@@ -5,7 +5,7 @@
  * query parameter (per docs) and is registered as a secret so it is redacted
  * from any logged URL.
  */
-import { ToolkitError, quotaExhausted } from "./errors.ts";
+import { ToolkitError, isKeyCapReached, keyCapReached, quotaExhausted } from "./errors.ts";
 import { readAccount } from "./agent-account.ts";
 import { ENV_KEY, resolveApiKey } from "./auth.ts";
 import { registerSecret } from "./logger.ts";
@@ -186,6 +186,11 @@ export async function scrape(
           "Retry with --autoparse for general-purpose extraction on any site, or contact Zenrows support to enable this domain for Extract.",
         suggested_commands: [`zenrows extract ${params.url} --autoparse`],
       });
+    }
+    // AUTH014: this key hit one of its credit caps; the account still has credits.
+    if (isKeyCapReached(zrErrorCode(body) ?? undefined)) {
+      // `detail` names the cap and its reset date; the title alone says neither.
+      throw keyCapReached(redacted, { status: 402, detail: zrErrorProblemDetail(body) ?? zrErrorDetail(body) ?? undefined });
     }
     // Zenrows returns 402 with a JSON error envelope (e.g. AUTH004 "reached its
     // usage limit" / "Subscription has no credit available") when the account is
@@ -403,6 +408,17 @@ export function zrErrorCode(body: string): string | null {
   try {
     const j = JSON.parse(body) as { code?: unknown };
     return typeof j.code === "string" ? j.code.toUpperCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The problem body's `detail` field alone, prefixed with its code. */
+function zrErrorProblemDetail(body: string): string | null {
+  try {
+    const j = JSON.parse(body) as { code?: string; detail?: string };
+    if (!j.detail) return null;
+    return j.code ? `(${j.code}) ${j.detail}` : j.detail;
   } catch {
     return null;
   }

@@ -32,6 +32,18 @@ zenrows trace export <run-id>     # JSON for sharing
 - `BACKEND_UNAVAILABLE` → a genuine transport failure (DNS/TCP/TLS). Check
   connectivity and `zenrows config show`.
 - `AUTH_INVALID` → re-check the key, `zenrows login --api-key …`.
+- `KEY_CREDIT_CAP_REACHED` → this API key hit one of its own credit caps (HTTP
+  402, gateway code `AUTH014`, Batch `api_key_cap_reached`). The account still
+  has credits and its other keys keep working. Do not retry and do not escalate:
+  `zenrows usage` shows the cap and when it resets. Wait for the reset, or have
+  the account owner raise or remove the cap at
+  https://app.zenrows.com/settings/api-keys.
+- `POLICY_MAX_CREDITS_EXCEEDED` → the account itself is out of credits (or a
+  local policy credit limit was hit). Do not retry-loop; `zenrows usage` shows
+  when credits renew. Top up or upgrade, or claim the account if it is an
+  auto-created Free plan.
+- `BATCH_FAILED` → the batch run ended `failed`; `failure_reason` and
+  `failure_detail` in `zenrows batch status <id> --json` say why.
 - `PARAM_CONFLICT_AUTO_MANUAL` → drop the managed flags or add `--manual`.
 - `CAPABILITY_UNAVAILABLE` → the primitive is not available on this account (e.g. beta/invite-only); use the local-spec path where offered.
 

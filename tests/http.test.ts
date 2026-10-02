@@ -246,3 +246,29 @@ test("scrape still returns non-Zenrows 4xx bodies (allowed_status_codes / origin
     },
   );
 });
+
+test("scrape maps AUTH014 (this key hit its credit cap) to KEY_CREDIT_CAP_REACHED, not out of credits", async () => {
+  const AUTH014 = JSON.stringify({
+    code: "AUTH014",
+    detail: "This API key has reached its daily cap of 200 credits. The cap resets on 2026-10-03 at 00:00 UTC.",
+    status: 402,
+    title: "API key credit cap reached (AUTH014)",
+    type: "https://docs.zenrows.com/api-error-codes#AUTH014",
+  });
+  await withFetch(
+    () => new Response(AUTH014, { status: 402, headers: { "content-type": "application/problem+json" } }),
+    async () => {
+      await assert.rejects(
+        () => scrape("https://api.zenrows.com/v1/", "test-key", { url: "https://example.net" }),
+        (err: unknown) => {
+          const e = err as { code: string; likely_cause: string; next_action: string };
+          assert.equal(e.code, "KEY_CREDIT_CAP_REACHED");
+          assert.match(e.likely_cause, /resets on 2026-10-03/);
+          assert.match(e.next_action, /settings\/api-keys/);
+          assert.doesNotMatch(e.next_action, /credit pack|out of Zenrows credits/);
+          return true;
+        },
+      );
+    },
+  );
+});
