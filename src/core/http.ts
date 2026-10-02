@@ -413,10 +413,6 @@ export function zrErrorCode(body: string): string | null {
   }
 }
 
-/**
- * Clean one-line detail from a Zenrows JSON error body
- * (e.g. `(AUTH003) Invalid apikey provided`).
- */
 /** The problem body's `detail` field alone, prefixed with its code. */
 function zrErrorProblemDetail(body: string): string | null {
   try {
@@ -428,6 +424,10 @@ function zrErrorProblemDetail(body: string): string | null {
   }
 }
 
+/**
+ * Clean one-line detail from a Zenrows JSON error body
+ * (e.g. `(AUTH003) Invalid apikey provided`).
+ */
 export function zrErrorDetail(body: string): string | null {
   try {
     const j = JSON.parse(body) as { code?: string; title?: string; detail?: string };

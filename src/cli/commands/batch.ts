@@ -17,7 +17,7 @@ import { assertDomainAllowed, assertWithinLimits, loadPolicy } from "../../core/
 import { newRunId, writeRun } from "../../core/artifacts.ts";
 import { createJob, downloadResults, getJob, listResults, rerunJob, stopJob, waitForJob, type Job } from "../../core/batch-api.ts";
 import { asNumber, asString, parse, type Command, type RunContext } from "../command.ts";
-import { ToolkitError } from "../../core/errors.ts";
+import { ToolkitError, isKeyCapReached, keyCapReached } from "../../core/errors.ts";
 import { printError, writeOut } from "../output.ts";
 
 export const batch: Command = {
@@ -168,19 +168,21 @@ async function createCmd(rest: string[], ctx: RunContext): Promise<number> {
   try {
     const job = await createJob(body, { apiKey });
     const finished = follow ? await waitForJob(job.job_id, { apiKey }) : job;
+    const runError = runFailure(finished);
     const runDir = writeRun({
       runId,
       command: "zenrows batch create",
       capability: "batch",
       startedAt,
       finishedAt: new Date().toISOString(),
-      status: "ok",
+      status: runError ? "error" : "ok",
       request: { file, tasks: body.tasks.length, estimatedCredits: est.credits, jobParams },
-      result: { jobId: job.job_id, status: finished.latest_run?.status ?? "unknown" },
+      result: { jobId: job.job_id, status: finished.latest_run?.status ?? "unknown", ...failureFields(finished) },
+      ...(runError ? { error: runError.toJSON() } : {}),
     });
-    printJob(finished, json, `Submitted job ${job.job_id}`);
+    const code = printJob(finished, json, `Submitted job ${job.job_id}`);
     if (runDir && !json) log.dim(`  artifact: ${runDir}`);
-    return 0;
+    return code;
   } catch (err) {
     writeRun({
       runId,
@@ -202,8 +204,7 @@ async function statusCmd(rest: string[], ctx: RunContext): Promise<number> {
   assertUsable("batch");
   const apiKey = requireApiKey();
   const job = await getJob(id, { apiKey });
-  printJob(job, ctx.json, `Job ${id}`);
-  return 0;
+  return printJob(job, ctx.json, `Job ${id}`);
 }
 
 async function resultsCmd(rest: string[], ctx: RunContext): Promise<number> {
@@ -282,8 +283,7 @@ async function cancelCmd(rest: string[], ctx: RunContext): Promise<number> {
   assertUsable("batch");
   const apiKey = requireApiKey();
   const job = await stopJob(id, { apiKey });
-  printJob(job, ctx.json, `Stopped job ${id}`);
-  return 0;
+  return printJob(job, ctx.json, `Stopped job ${id}`);
 }
 
 async function waitCmd(rest: string[], ctx: RunContext): Promise<number> {
@@ -293,8 +293,7 @@ async function waitCmd(rest: string[], ctx: RunContext): Promise<number> {
   assertUsable("batch");
   const apiKey = requireApiKey();
   const job = await waitForJob(id, { apiKey, timeoutMs: asNumber(values.timeout) });
-  printJob(job, json, `Job ${id} finished`);
-  return 0;
+  return printJob(job, json, `Job ${id} finished`);
 }
 
 async function retryCmd(rest: string[], ctx: RunContext): Promise<number> {
@@ -305,22 +304,72 @@ async function retryCmd(rest: string[], ctx: RunContext): Promise<number> {
   // "Reruns and retrying failures": POST /jobs/{id}/rerun?status=failed replays
   // only the failures; already-successful tasks carry over.
   const job = await rerunJob(id, { apiKey, status: "failed" });
-  printJob(job, ctx.json, `Reran failed tasks for job ${id}`);
-  return 0;
+  return printJob(job, ctx.json, `Reran failed tasks for job ${id}`);
 }
 
-/** Print a job's status + stats, structured under --json. */
-function printJob(job: Job, json: boolean, headline: string): void {
+/** The run's failure_reason / failure_detail, when the API reports them. */
+function failureFields(job: Job): { failure_reason?: string; failure_detail?: string } {
+  const run = job.latest_run ?? ({} as Job["latest_run"]);
+  const out: { failure_reason?: string; failure_detail?: string } = {};
+  if (typeof run.failure_reason === "string" && run.failure_reason) out.failure_reason = run.failure_reason;
+  if (typeof run.failure_detail === "string" && run.failure_detail) out.failure_detail = run.failure_detail;
+  return out;
+}
+
+/**
+ * The error for a run that ended `failed`, or null for any other state. A run the
+ * key's credit cap stopped (`api_key_cap_reached`) gets the cap guidance: the
+ * account still has credits and its other keys keep working.
+ */
+export function runFailure(job: Job): ToolkitError | null {
+  if (job.latest_run?.status !== "failed") return null;
+  const { failure_reason, failure_detail } = failureFields(job);
+  const where = `batch job ${job.job_id}`;
+  if (isKeyCapReached(failure_reason)) {
+    return keyCapReached(where, { status: null, detail: failure_detail });
+  }
+  const why = [failure_reason, failure_detail].filter(Boolean).join(": ");
+  return new ToolkitError({
+    code: "BATCH_FAILED",
+    message: `Batch job ${job.job_id} failed.`,
+    likely_cause: why || "The run ended in status failed without a reason.",
+    next_action: "Inspect the per-task results, fix the cause, then rerun the failed tasks.",
+    suggested_commands: [`zenrows batch results ${job.job_id} --status failed`, `zenrows batch retry-failed ${job.job_id}`],
+  });
+}
+
+/**
+ * Print a job's status + stats, structured under --json, and return the exit
+ * code: 1 when the run ended `failed`, else 0. `stopped` and `deleted` are
+ * deliberate outcomes (someone cancelled or removed the run), so they exit 0
+ * but print as a warning, not a success.
+ */
+function printJob(job: Job, json: boolean, headline: string): number {
   const run = job.latest_run ?? ({} as Job["latest_run"]);
   const stats = run.stats;
+  const failure = failureFields(job);
+  const err = runFailure(job);
   if (json) {
-    log.out(JSON.stringify({ ok: true, jobId: job.job_id, status: run.status, stats }, null, 2));
-    return;
+    log.out(
+      JSON.stringify(
+        { ok: !err, jobId: job.job_id, status: run.status, stats, ...failure, ...(err ? { error: err.toJSON() } : {}) },
+        null,
+        2,
+      ),
+    );
+    return err ? 1 : 0;
   }
-  log.success(`${headline} · status: ${run.status ?? "unknown"}`);
+  const line = `${headline} · status: ${run.status ?? "unknown"}`;
+  if (err) log.error(line);
+  else if (run.status === "stopped" || run.status === "deleted") log.warn(line);
+  else log.success(line);
   if (stats) {
     log.info(`  ${stats.completed}/${stats.total} completed · ${stats.successful} successful · ${stats.failed} failed`);
   }
+  if (failure.failure_reason) log.info(`  failure_reason: ${failure.failure_reason}`);
+  if (failure.failure_detail) log.info(`  failure_detail: ${failure.failure_detail}`);
+  if (err) printError(err, false);
+  return err ? 1 : 0;
 }
 
 function normalizeResultStatus(v?: string): "successful" | "failed" | "all" | undefined {

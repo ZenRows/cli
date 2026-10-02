@@ -122,13 +122,18 @@ export function isKeyCapReached(code?: string, body?: string): boolean {
   return !!body && /\b(AUTH014|api_key_cap_reached)\b/.test(body);
 }
 
-/** The error for a request refused because this API key reached one of its credit caps. */
-export function keyCapReached(url: string, opts: { status?: number; detail?: string } = {}): ToolkitError {
+/**
+ * The error for a request refused because this API key reached one of its credit
+ * caps. `opts.status: null` is for a Batch run the cap stopped: the run's status
+ * call succeeded, so there is no HTTP 402 to cite, only `url` (the job).
+ */
+export function keyCapReached(url: string, opts: { status?: number | null; detail?: string } = {}): ToolkitError {
   const detail = opts.detail ? `${opts.detail.replace(/\.\s*$/, "")}. ` : "";
+  const where = opts.status === null ? `Stopped ${url}` : `HTTP ${opts.status ?? 402} for ${url}`;
   return new ToolkitError({
     code: "KEY_CREDIT_CAP_REACHED",
     message: "This API key reached one of its credit caps.",
-    likely_cause: `${detail}HTTP ${opts.status ?? 402} for ${url}`,
+    likely_cause: `${detail}${where}`,
     next_action: `The account still has credits and its other API keys keep working. Wait for the cap to reset (\`zenrows usage\` shows when), or raise or remove this key's cap at ${API_KEYS_SETTINGS_URL}.`,
     suggested_commands: ["zenrows usage"],
   });

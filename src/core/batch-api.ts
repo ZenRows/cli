@@ -43,6 +43,10 @@ export interface JobRun {
   status: string;
   stats: JobStats;
   run_id?: string;
+  /** Why a `failed` run stopped, e.g. `api_key_cap_reached`. */
+  failure_reason?: string;
+  /** Human-readable detail for `failure_reason`. */
+  failure_detail?: string;
   [k: string]: unknown;
 }
 
