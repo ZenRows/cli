@@ -137,6 +137,18 @@ test("problem+json 402 (no credit available) maps to POLICY_MAX_CREDITS_EXCEEDED
   );
 });
 
+test("problem+json 402 api_key_cap_reached maps to KEY_CREDIT_CAP_REACHED", async () => {
+  const { impl } = jsonFetch(
+    402,
+    { title: "Payment Required", status: 402, code: "api_key_cap_reached", detail: "This API key has reached its daily cap of 200 credits." },
+    "application/problem+json",
+  );
+  await assert.rejects(
+    () => createJob({ type: "regular", status: "closed", tasks: [] }, { apiKey: "k", fetchImpl: impl }),
+    (e: unknown) => e instanceof ToolkitError && e.code === "KEY_CREDIT_CAP_REACHED" && /daily cap of 200/.test(e.likely_cause),
+  );
+});
+
 test("problem+json 404 maps to BATCH_NOT_FOUND", async () => {
   const { impl } = jsonFetch(404, { code: "not_found", detail: "job missing" }, "application/problem+json");
   await assert.rejects(

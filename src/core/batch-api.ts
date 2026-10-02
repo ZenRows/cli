@@ -16,7 +16,7 @@
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { ToolkitError, quotaExhausted } from "./errors.ts";
+import { ToolkitError, isKeyCapReached, keyCapReached, quotaExhausted } from "./errors.ts";
 import { readAccount } from "./agent-account.ts";
 import { registerSecret } from "./logger.ts";
 
@@ -195,6 +195,9 @@ function problemToError(status: number, body: string, method: string, path: stri
         "Wait for an in-flight job to finish (or stop one with `zenrows batch cancel <id>`), then retry.",
       suggested_commands: ["zenrows batch status <id>"],
     });
+  }
+  if (status === 402 && isKeyCapReached(serverCode)) {
+    return keyCapReached(`${method} ${path}`, { status: 402, detail: problem.detail || problem.title || undefined });
   }
   if (status === 402) {
     // Out of credits ("Subscription has no credit available") — the same

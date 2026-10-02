@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { fetchUsage, usageUrl } from "../src/core/usage.ts";
 import { ToolkitError } from "../src/core/errors.ts";
-import { fmt } from "../src/cli/commands/usage.ts";
+import { fmt, formatKeyCaps } from "../src/cli/commands/usage.ts";
 import type { UsageDetails } from "../src/core/usage.ts";
 
 test("usageUrl derives subscriptions/self/details from the api base", () => {
@@ -86,4 +86,31 @@ test("UsageDetails carries credits and the per-plan rate", () => {
   // rather than a platform constant. Holds on the live response.
   assert.ok(Math.abs(sample.credit_limit! * sample.plan!.unit_cost! - sample.plan!.price!) < 0.01);
   assert.ok(Math.abs(sample.usage! / sample.usage_credits! - sample.plan!.unit_cost!) < 1e-8);
+});
+
+test("formatKeyCaps prints one line per cap on the calling key, none when uncapped", () => {
+  assert.deepEqual(formatKeyCaps(undefined), []);
+  assert.deepEqual(formatKeyCaps([]), []);
+  assert.deepEqual(
+    formatKeyCaps([
+      { window: "day", credits: 200, used_credits: 200, remaining_credits: 0, resets_at: "2026-10-03T00:00:00Z" },
+      { window: "month", credits: 300000, used_credits: 1234, remaining_credits: 298766, resets_at: "2026-11-01T00:00:00Z" },
+      { window: "week", credits: 100, unavailable: true, resets_at: "2026-10-05T00:00:00Z" },
+    ]),
+    [
+      "This key: daily cap 200, 200 used, 0 left, resets 2026-10-03T00:00:00Z",
+      "This key: monthly cap 300,000, 1,234 used, 298,766 left, resets 2026-11-01T00:00:00Z",
+      "This key: weekly cap 100, usage unavailable right now, resets 2026-10-05T00:00:00Z",
+    ],
+  );
+});
+
+test("fetchUsage keeps api_key so --json shows the key's caps", async () => {
+  const fakeFetch = (async () =>
+    new Response(JSON.stringify({ status: "ACTIVE", api_key: { caps: [{ window: "day", credits: 10, used_credits: 1, remaining_credits: 9 }] } }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    })) as unknown as typeof fetch;
+  const u = await fetchUsage("https://api.zenrows.com/v1/", "k", { fetchImpl: fakeFetch });
+  assert.equal(u.api_key?.caps?.[0]?.remaining_credits, 9);
 });

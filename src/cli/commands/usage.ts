@@ -5,7 +5,7 @@
 import { requireApiKey } from "../../core/auth.ts";
 import { loadConfig } from "../../core/config.ts";
 import { log } from "../../core/logger.ts";
-import { fetchUsage } from "../../core/usage.ts";
+import { fetchUsage, type KeyCreditCap } from "../../core/usage.ts";
 import { parse, type Command, type RunContext } from "../command.ts";
 
 /** Thousands separators, so a seven-digit credit limit stays readable. */
@@ -25,6 +25,23 @@ export function formatPlanStatus(status: string | undefined): string {
   if (!status) return "—";
   if (/^trialing$/i.test(status.trim())) return "active";
   return status;
+}
+
+const CAP_WINDOW_LABEL: Record<string, string> = {
+  day: "daily",
+  week: "weekly",
+  month: "monthly",
+  billing_period: "billing-period",
+};
+
+/** One line per credit cap on the calling key; none when the key is uncapped. */
+export function formatKeyCaps(caps: KeyCreditCap[] | undefined): string[] {
+  return (caps ?? []).map((c) => {
+    const label = `This key: ${CAP_WINDOW_LABEL[c.window] ?? c.window} cap ${fmt(c.credits)}`;
+    const reset = c.resets_at ? `, resets ${c.resets_at}` : "";
+    if (c.unavailable || c.used_credits === undefined) return `${label}, usage unavailable right now${reset}`;
+    return `${label}, ${fmt(c.used_credits)} used, ${fmt(c.remaining_credits ?? Math.max(0, c.credits - c.used_credits))} left${reset}`;
+  });
 }
 
 export const usage: Command = {
@@ -66,6 +83,7 @@ export const usage: Command = {
       log.info(`API concurrency: ${api.concurrency.usage ?? 0} in use / ${api.concurrency.limit ?? "—"} max`);
     }
     if (u.period_ends_at) log.info(`Billing period ends: ${u.period_ends_at}`);
+    for (const line of formatKeyCaps(u.api_key?.caps)) log.info(line);
     if (Array.isArray(u.top_ups) && u.top_ups.length) log.info(`Top-ups: ${u.top_ups.length}`);
     return 0;
   },

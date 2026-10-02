@@ -11,7 +11,7 @@
  * Sessions are billed by bandwidth + session time, so callers must always close
  * them (`closeSession`) — the `browser run` command does so in a `finally`.
  */
-import { ToolkitError, quotaExhausted } from "./errors.ts";
+import { ToolkitError, isKeyCapReached, keyCapReached, quotaExhausted } from "./errors.ts";
 import { readAccount } from "./agent-account.ts";
 import { registerSecret } from "./logger.ts";
 import { CLI_VERSION } from "./config.ts";
@@ -126,6 +126,12 @@ export function browserProblemToError(status: number, body: string, method: stri
       likely_cause: cause,
       next_action: "Re-check your key and log in again.",
       suggested_commands: ["zenrows login --api-key <your-key>"],
+    });
+  }
+  if (status === 402 && isKeyCapReached(serverCode, body)) {
+    return keyCapReached(`${method} ${path}`, {
+      status: 402,
+      detail: parsed.error || parsed.detail || parsed.title || undefined,
     });
   }
   if (status === 402) {

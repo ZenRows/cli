@@ -87,6 +87,14 @@ test("browserRequest maps 402 → POLICY_MAX_CREDITS_EXCEEDED", async () => {
   );
 });
 
+test("browserRequest maps 402 AUTH014 → KEY_CREDIT_CAP_REACHED", async () => {
+  const { impl } = stub(402, { code: "AUTH014", detail: "This API key has reached its monthly cap of 300 credits." });
+  await assert.rejects(
+    () => browserRequest("POST", "/browser/sessions", { apiKey: "k", fetchImpl: impl }),
+    (e: unknown) => e instanceof ToolkitError && e.code === "KEY_CREDIT_CAP_REACHED",
+  );
+});
+
 test("browserRequest maps 5xx → BROWSER_UNAVAILABLE", async () => {
   const { impl } = stub(503, "upstream down", "text/plain");
   await assert.rejects(
