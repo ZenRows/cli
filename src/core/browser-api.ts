@@ -14,7 +14,8 @@
 import { ToolkitError, isKeyCapReached, keyCapReached, quotaExhausted } from "./errors.ts";
 import { readAccount } from "./agent-account.ts";
 import { registerSecret } from "./logger.ts";
-import { CLI_VERSION } from "./config.ts";
+import { CLI_USER_AGENT } from "./config.ts";
+import { agentClientHeader } from "./agent-client.ts";
 
 /** Managed Browser session API base (no trailing slash). Tied to the MCP host. */
 export const DEFAULT_BROWSER_BASE = "https://mcp.zenrows.com";
@@ -65,7 +66,8 @@ export async function browserRequest<T>(method: string, path: string, opts: Requ
   const headers: Record<string, string> = {
     Authorization: `Bearer ${opts.apiKey}`,
     Accept: "application/json",
-    "User-Agent": `zenrows-cli/${CLI_VERSION}`,
+    "User-Agent": CLI_USER_AGENT,
+    ...agentClientHeader(),
   };
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
 

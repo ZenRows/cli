@@ -138,7 +138,7 @@ export const init: Command = {
         section("Test Protected Fetch");
         try {
           const apiKey = requireApiKey(root);
-          const { result } = await runFetch({ url: SMOKE_URL }, loadConfig(root), loadPolicy(root), apiKey);
+          const { result } = await runFetch({ url: SMOKE_URL }, loadConfig(root), loadPolicy(root), apiKey, root);
           log.success(`Protected Fetch OK — HTTP ${result.status}, ${result.body.length} bytes, ${formatRequestCost(result.costUsd, result.costCredits)}.`);
         } catch (err) {
           log.warn(`Test fetch did not pass: ${err instanceof Error ? err.message : String(err)}`);
