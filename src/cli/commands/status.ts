@@ -98,6 +98,7 @@ export const status: Command = {
 };
 
 /** Reachability probe that does not consume credits. */
+// Deliberately sends no X-ZenRows-Client: unauthenticated, non-billable reachability check.
 async function probe(apiBase: string): Promise<boolean> {
   try {
     const controller = new AbortController();

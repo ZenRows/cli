@@ -19,6 +19,8 @@ import { join } from "node:path";
 import { ToolkitError, isKeyCapReached, keyCapReached, quotaExhausted } from "./errors.ts";
 import { readAccount } from "./agent-account.ts";
 import { registerSecret } from "./logger.ts";
+import { CLI_USER_AGENT } from "./config.ts";
+import { agentClientHeader } from "./agent-client.ts";
 
 /** Confirmed Batch API base (no trailing slash). */
 export const DEFAULT_BATCH_API_BASE = "https://async.api.zenrows.com/v1";
@@ -109,7 +111,8 @@ export async function batchRequest<T>(method: string, path: string, opts: Reques
   const headers: Record<string, string> = {
     "X-API-Key": opts.apiKey,
     Accept: "application/json",
-    "User-Agent": "zenrows-cli",
+    "User-Agent": CLI_USER_AGENT,
+    ...agentClientHeader(),
   };
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
 

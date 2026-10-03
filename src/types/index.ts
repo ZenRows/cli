@@ -62,8 +62,9 @@ export interface ToolkitConfig {
   /**
    * Anonymous attribution toggle. The toolkit never POSTs to a telemetry
    * endpoint; "anonymous" only attaches provenance headers to the signup
-   * request and `utm_*` params to the browser URLs a human opens. "off" (or
-   * `ZENROWS_TELEMETRY=off`) suppresses both.
+   * request, the `X-ZenRows-Client` agent name to API requests, and `utm_*`
+   * params to the browser URLs a human opens. "off" (or
+   * `ZENROWS_TELEMETRY=off`) suppresses all three.
    */
   telemetry: "anonymous" | "off";
   /**

@@ -14,19 +14,23 @@ export const CONFIG_VERSION = "0.1.0";
  * without an import cycle. `VERSION` in `cli/index.ts` re-exports this.
  */
 export const CLI_VERSION = "1.3.0";
+/** The User-Agent on every request to a Zenrows API. The gateway reads the version from it. */
+export const CLI_USER_AGENT = `zenrows-cli/${CLI_VERSION}`;
 /** Env var to override the Fetch and Extract API base (local/staging testing). */
 export const API_BASE_ENV = "ZENROWS_API_BASE";
 /**
  * Env var to opt out of anonymous attribution. The toolkit never POSTs to a
  * telemetry endpoint; attribution is only anonymous provenance headers on the
- * signup request + `utm_*` params on the browser URLs a human opens. Setting
- * this to `off` (or config `telemetry: "off"`) suppresses all of it.
+ * signup request, the `X-ZenRows-Client` agent name on API requests
+ * (`agent-client.ts`), and `utm_*` params on the browser URLs a human opens.
+ * Setting this to `off` (or config `telemetry: "off"`) suppresses all of it.
  */
 export const TELEMETRY_ENV = "ZENROWS_TELEMETRY";
 
 /**
- * Whether to attach anonymous attribution (signup provenance headers + `utm_*`
- * on browser URLs). Off when `ZENROWS_TELEMETRY=off` or config `telemetry:"off"`.
+ * Whether to attach anonymous attribution (signup provenance headers, the
+ * `X-ZenRows-Client` agent name, `utm_*` on browser URLs). Off when
+ * `ZENROWS_TELEMETRY=off` or config `telemetry:"off"`.
  * There is no telemetry beacon — this only gates what rides on requests/URLs
  * the toolkit already makes.
  */
