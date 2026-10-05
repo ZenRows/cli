@@ -11,6 +11,8 @@ import { isQuotaError, zrErrorDetail } from "./http.ts";
 import { readAccount } from "./agent-account.ts";
 import { ENV_KEY, resolveApiKey } from "./auth.ts";
 import { registerSecret } from "./logger.ts";
+import { CLI_USER_AGENT } from "./config.ts";
+import { agentClientHeader } from "./agent-client.ts";
 
 export interface UsageConcurrency {
   limit?: number;
@@ -93,7 +95,7 @@ export async function fetchUsage(
   try {
     res = await doFetch(url, {
       method: "GET",
-      headers: { "X-API-Key": apiKey, Accept: "application/json", "User-Agent": "zenrows-cli" },
+      headers: { "X-API-Key": apiKey, Accept: "application/json", "User-Agent": CLI_USER_AGENT, ...agentClientHeader() },
       signal: controller.signal,
     });
   } catch (err) {

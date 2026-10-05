@@ -145,11 +145,13 @@ export async function runFetch(
   config: ToolkitConfig,
   policy: Policy,
   apiKey: string,
+  /** The workspace `config` came from, when it is not the one above the cwd. */
+  projectRoot?: string,
 ): Promise<FetchOutcome> {
   assertDomainAllowed(opts.url, policy);
   validateAutoManual(opts, config);
   const params = buildParams(opts, config);
   const mode: "auto" | "manual" = params.mode === "auto" ? "auto" : "manual";
-  const result = await scrape(config.apiBase, apiKey, params, { timeoutMs: opts.timeoutMs });
+  const result = await scrape(config.apiBase, apiKey, params, { timeoutMs: opts.timeoutMs, projectRoot });
   return { result, params, mode };
 }

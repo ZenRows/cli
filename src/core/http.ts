@@ -9,7 +9,8 @@ import { ToolkitError, isKeyCapReached, keyCapReached, quotaExhausted } from "./
 import { readAccount } from "./agent-account.ts";
 import { ENV_KEY, resolveApiKey } from "./auth.ts";
 import { registerSecret } from "./logger.ts";
-import { CLI_VERSION } from "./config.ts";
+import { CLI_USER_AGENT } from "./config.ts";
+import { agentClientHeader } from "./agent-client.ts";
 
 export interface ScraperResult {
   status: number;
@@ -77,7 +78,7 @@ export async function scrape(
   apiBase: string,
   apiKey: string,
   params: ScraperParams,
-  opts: { timeoutMs?: number } = {},
+  opts: { timeoutMs?: number; projectRoot?: string } = {},
 ): Promise<ScraperResult> {
   registerSecret(apiKey);
   const { full, redacted } = buildUrl(apiBase, apiKey, params);
@@ -97,7 +98,7 @@ export async function scrape(
   try {
     res = await fetch(full, {
       method: "GET",
-      headers: { "User-Agent": `zenrows-cli/${CLI_VERSION}`, "Accept-Encoding": "gzip, deflate" },
+      headers: { "User-Agent": CLI_USER_AGENT, "Accept-Encoding": "gzip, deflate", ...agentClientHeader({ projectRoot: opts.projectRoot }) },
       signal: controller.signal,
     });
   } catch (err) {

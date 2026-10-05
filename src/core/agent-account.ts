@@ -7,7 +7,8 @@
  */
 import { chmodSync, existsSync, unlinkSync } from "node:fs";
 import type { AgentAccount } from "../types/index.ts";
-import { attributionEnabled, getOrCreateTelemetryId, loadConfig, CLI_VERSION } from "./config.ts";
+import { attributionEnabled, getOrCreateTelemetryId, loadConfig, CLI_USER_AGENT, CLI_VERSION } from "./config.ts";
+import { agentClientHeader } from "./agent-client.ts";
 import { ToolkitError } from "./errors.ts";
 import { AGENT_SIGNUP_API_URL, WELL_KNOWN_PROTECTED_RESOURCE } from "./open-url.ts";
 import { detectClient } from "./provenance.ts";
@@ -51,7 +52,7 @@ export async function discoverSignupUrl(
     const doFetch = opts.fetchImpl ?? fetch;
     const res = await doFetch(url, {
       method: "GET",
-      headers: { Accept: "application/json", "User-Agent": "zenrows-cli" },
+      headers: { Accept: "application/json", "User-Agent": CLI_USER_AGENT, ...agentClientHeader({ projectRoot }) },
     });
     if (!res.ok) return null;
     const json = (await res.json()) as { agent_auth?: { signup_endpoint?: unknown } };
@@ -150,7 +151,8 @@ export async function signupAgent(
   // `telemetry:"off"` / ZENROWS_TELEMETRY=off suppresses every X-ZR-* header.
   const headers: Record<string, string> = {
     "content-type": "application/json",
-    "User-Agent": "zenrows-cli",
+    "User-Agent": CLI_USER_AGENT,
+    ...agentClientHeader(),
   };
   if (attributionEnabled()) {
     const p = detectClient();
@@ -252,7 +254,7 @@ export async function fetchAccountStatus(
   const doFetch = opts.fetchImpl ?? fetch;
   const res = await doFetch(url, {
     method: "GET",
-    headers: { "X-API-Key": apiKey, Accept: "application/json", "User-Agent": "zenrows-cli" },
+    headers: { "X-API-Key": apiKey, Accept: "application/json", "User-Agent": CLI_USER_AGENT, ...agentClientHeader() },
   });
   if (res.status !== 200) {
     const body = await res.text();
