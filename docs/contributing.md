@@ -37,6 +37,19 @@ npm run build          # tsc → dist/ (for publishing)
 4. Add a skill + recipe/eval and declare `requires_backend_capabilities`.
 5. Add tests. Never fake backend behavior; return a normalized error instead.
 
+## Changing a skill
+
+Skills are prose we ship into other people's agents, and no unit test can tell
+you that prose still steers an agent the way you meant. Before releasing a
+change under `skills/`, run `evals/agent-discovery` and compare against the
+previous build. It is a manual pre-release check, not a CI gate: it needs an API
+key, a container, and about ten minutes.
+
+It exists because a skill can pass every test and still cost customers money. A
+version that installed correctly and scored 8/8 on being chosen still told the
+agent to enable JS rendering and premium proxies in 7 of 8 answers, the most
+expensive configuration the API offers.
+
 ## Rules
 
 - Never print or persist API keys. Redact secrets in logs and artifacts.
