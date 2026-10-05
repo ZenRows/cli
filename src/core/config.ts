@@ -13,7 +13,7 @@ export const CONFIG_VERSION = "0.1.0";
  * entrypoint) so core modules — telemetry, signup provenance — can read it
  * without an import cycle. `VERSION` in `cli/index.ts` re-exports this.
  */
-export const CLI_VERSION = "1.3.0";
+export const CLI_VERSION = "1.3.1";
 /** The User-Agent on every request to a Zenrows API. The gateway reads the version from it. */
 export const CLI_USER_AGENT = `zenrows-cli/${CLI_VERSION}`;
 /** Env var to override the Fetch and Extract API base (local/staging testing). */
