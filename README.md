@@ -103,6 +103,16 @@ zenrows login --env             # use the ZENROWS_API_KEY environment variable
 Set `auto_signup: false` in `.zenrows/policy.json` to disable auto-provisioning
 globally.
 
+### Paying as an agent
+
+The CLI provisions a free account on its own, but paying for more needs a
+human. An agent with no API key and no human in the loop can buy credits
+itself: it reads
+[agents.zenrows.com/llms.txt](https://agents.zenrows.com/llms.txt), registers a
+free agent credential, pays over x402, MPP or a card, and calls Fetch and
+Extract over HTTP. Batch and Browser Sessions still need a zenrows.com account.
+Details: [agentic payments](https://docs.zenrows.com/first-steps/agentic-payments).
+
 ## 7. Protected Fetch
 
 ```bash
