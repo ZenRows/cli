@@ -2,6 +2,9 @@
  * Toolkit config (`.zenrows/config.json`). Non-secret, safe defaults.
  */
 import { randomUUID } from "node:crypto";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import type { ToolkitConfig } from "../types/index.ts";
 import { findWorkspace, readJson, workspacePaths, writeJson } from "./workspace.ts";
 
@@ -67,20 +70,56 @@ export function saveConfig(config: ToolkitConfig, projectRoot?: string): void {
   writeJson(ws.config, config);
 }
 
+/** Env var to relocate the per-machine config directory (tests, sandboxes). */
+export const CONFIG_HOME_ENV = "ZENROWS_CONFIG_HOME";
+
+/** Per-machine config directory, shared by every workspace on this machine. */
+export function machineConfigDir(): string {
+  const override = process.env[CONFIG_HOME_ENV];
+  if (override && override.trim()) return override.trim();
+  if (process.platform === "win32" && process.env.APPDATA) return join(process.env.APPDATA, "zenrows");
+  const xdg = process.env.XDG_CONFIG_HOME;
+  return join(xdg && xdg.trim() ? xdg.trim() : join(homedir(), ".config"), "zenrows");
+}
+
+function readMachineTelemetryId(file: string): string | undefined {
+  try {
+    const id = readFileSync(file, "utf8").trim();
+    return id || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Return the stable anonymous agent id, generating + persisting one on first
  * use. Sent as the `X-ZR-Agent-Id` header on signup so the backend can correlate
  * the (anonymous) device with the account it later merges on claim. Contains no
  * PII — a random uuid only.
+ *
+ * Stored per machine, not per workspace: a per-workspace id made every new
+ * project folder look like a new device, so the backend could not tell a
+ * rate-limited retry from the machine that had just signed up. An id already in
+ * the workspace is adopted on first run so existing devices keep their identity.
+ * If the machine directory is not writable, falls back to the workspace config.
  */
 export function getOrCreateTelemetryId(projectRoot?: string): string {
+  const file = join(machineConfigDir(), "telemetry-id");
+  const machineId = readMachineTelemetryId(file);
+  if (machineId) return machineId;
+
   const ws = projectRoot ? workspacePaths(projectRoot) : (findWorkspace() ?? workspacePaths());
   // Merge onto the raw stored config (not loadConfig) so we never persist the
   // ZENROWS_API_BASE env override back into config.json.
   const stored = readJson<Partial<ToolkitConfig>>(ws.config) ?? {};
-  const existing = stored.telemetryId;
-  if (existing && existing.trim()) return existing;
-  const id = randomUUID();
-  saveConfig({ ...defaultConfig(), ...stored, telemetryId: id }, projectRoot);
+  const workspaceId = stored.telemetryId?.trim() ? stored.telemetryId.trim() : undefined;
+  const id = workspaceId ?? randomUUID();
+
+  try {
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, `${id}\n`, { mode: 0o600 });
+  } catch {
+    if (!workspaceId) saveConfig({ ...defaultConfig(), ...stored, telemetryId: id }, projectRoot);
+  }
   return id;
 }

@@ -81,7 +81,8 @@ export interface ToolkitConfig {
    */
   discoveryUrl?: string;
   /**
-   * Stable, anonymous agent id (uuid). Generated once and persisted here; sent
+   * Legacy per-workspace agent id (uuid), adopted into the per-machine id on
+   * first run (see `getOrCreateTelemetryId`). Sent
    * as the `X-ZR-Agent-Id` signup header so the backend can correlate the
    * anonymous device with the account it merges on claim. No PII — random only.
    */
