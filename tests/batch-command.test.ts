@@ -6,6 +6,7 @@ import { batch } from "../src/cli/commands/batch.ts";
 import { createWorkspace } from "../src/core/workspace.ts";
 import { savePolicy, defaultPolicy } from "../src/core/policy.ts";
 import { saveApiKey } from "../src/core/auth.ts";
+import { loadConfig, saveConfig } from "../src/core/config.ts";
 import { tempRoot } from "./helpers.ts";
 
 const ctx = { json: true, yes: false };
@@ -295,4 +296,41 @@ test("batch estimate counts Adaptive Stealth Mode as the upper bound, --manual a
     assert.equal(auto.estimatedCredits, 50);
     assert.equal(manual.estimatedCredits, 2);
   });
+});
+
+test("batch create --manual --proxy-country without --premium-proxy is rejected before any network call", async () => {
+  await withBatchWorkspace({}, async (didFetch) => {
+    const file = writeSpec(["https://ok.example/a"]);
+    let code = -1;
+    const out = await captureOut(async () => {
+      code = await batch.run(["create", file, "--manual", "--proxy-country", "us"], ctx);
+    });
+    assert.equal(code, 1);
+    assert.equal((JSON.parse(out) as { error: { code: string } }).error.code, "PARAM_PROXY_COUNTRY_REQUIRES_PREMIUM");
+    assert.equal(didFetch(), false);
+  });
+});
+
+test("batch create respects defaultMode: manual in config (no mode=auto)", async () => {
+  const bodies: Array<{ tasks: Array<{ zenrows_params?: Record<string, string> }> }> = [];
+  await withBatchWorkspace({}, async () => {
+    saveConfig({ ...loadConfig(), defaultMode: "manual" });
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async (_u: unknown, init?: RequestInit) => {
+      if (init?.body) bodies.push(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify({ job_id: "j1", latest_run: { status: "queued" } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+    try {
+      await captureOut(() => batch.run(["create", writeSpec(["https://ok.example/a"])], ctx));
+      const est = JSON.parse(await captureOut(() => batch.run(["estimate", "jobs.jsonl"], ctx))) as { estimatedCredits: number };
+      assert.equal(est.estimatedCredits, 1);
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+  assert.equal(bodies.length, 1);
+  assert.equal(bodies[0]!.tasks[0]!.zenrows_params?.mode, undefined);
 });
