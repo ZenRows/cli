@@ -35,14 +35,15 @@ structured data instead of raw HTML.
 {"url": "https://example.com/products", "extract": "auto", "external_id": "p1"}
 ```
 
-An Extract task costs the same as a regular one (1 credit at base tier), so
-`batch estimate` prices it correctly. The result carries two keys: `html` (the
+An Extract task costs the same as a regular one, so `batch estimate` prices it
+correctly. The result carries two keys: `html` (the
 raw page) and `parsed` (the structured data). Validate on a single URL with
 `zenrows extract <url>` before running the full batch.
 
 ## Cloud (needs a key + beta access)
 ```
-zenrows batch create jobs.jsonl [--js-render] [--premium-proxy] [--proxy-country cc] [--wait]
+zenrows batch create jobs.jsonl [--proxy-country cc] [--wait]
+zenrows batch create jobs.jsonl --manual [--js-render] [--premium-proxy]
 zenrows batch status <id>             # run status + stats
 zenrows batch results <id> [--status successful|failed|all] [--out results.jsonl]
 zenrows batch wait <id> [--timeout ms]
@@ -50,9 +51,17 @@ zenrows batch cancel <id>             # stop an in-flight run
 zenrows batch retry-failed <id>       # rerun only the failed tasks (new run)
 ```
 
-`create` validates the spec first, then submits. `--proxy-country` needs
-`--premium-proxy` (or `mode=auto`) and is rejected before any request. Job-level
-flags apply to every task; per-task keys in the JSONL override them.
+Every task runs in Adaptive Stealth Mode (`mode=auto`) by default, like `fetch`
+and `extract`: Zenrows enables JS rendering and premium proxies only on the pages
+that need them, and bills only the configuration that succeeds. A task that sets
+`js_render`, `premium_proxy` or `mode` itself keeps its own settings, and
+`--js-render` / `--premium-proxy` force that configuration on every task instead.
+`--manual` turns Adaptive Stealth Mode off. `batch estimate` counts auto tasks at
+the 25x upper bound, so it's the most the run can cost, not the expected cost.
+
+`create` validates the spec first, then submits. Outside Adaptive Stealth Mode,
+`--proxy-country` needs `--premium-proxy` and is rejected before any request.
+Job-level flags apply to every task; per-task keys in the JSONL override them.
 
 A run ends in one of `completed`, `failed`, `stopped`, or `deleted`. `status`,
 `wait`, and `create --wait` exit non-zero (`ok: false` under `--json`) only for

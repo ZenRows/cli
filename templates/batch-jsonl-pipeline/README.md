@@ -29,7 +29,9 @@ zenrows batch retry-failed <job-id>                     # rerun only the failed 
 zenrows batch cancel <job-id>                           # stop an in-flight run
 ```
 
-Job-level scrape options come from flags (`--js-render`, `--premium-proxy`,
-`--proxy-country`, `--output`); per-line keys override them for that URL.
+Tasks use Adaptive Stealth Mode (`mode=auto`) by default. Job-level scrape
+options come from flags (`--js-render`, `--premium-proxy`, `--proxy-country`,
+`--output`, or `--manual` to turn Adaptive Stealth Mode off); per-line keys
+override them for that URL.
 Without beta access yet, validate/estimate locally or fan out with
 `zenrows fetch` per URL on a small sample first.

@@ -8,7 +8,8 @@
  *   - outputs=<filters>    → built-in output filters → JSON
  *   - response_type=markdown|plaintext
  *
- * Default method is `extract`. On AUTH010 (domain not in Extract beta) we
+ * Default method is `extract`. On AUTH010 / REQS007 (domain not enabled or not
+ * prepared for Extract) we
  * automatically retry once with Autoparse unless the caller opted into
  * `--autoparse` (or another explicit method) or disabled the fallback.
  */
@@ -28,7 +29,7 @@ export interface ExtractOptions extends Omit<FetchOptions, "autoparse" | "cssExt
   validate?: boolean;
   /**
    * When method is `extract` (default), retry once with Autoparse if the domain
-   * is not enabled for Extract (AUTH010). Defaults to true.
+   * is not enabled or prepared for Extract (AUTH010 / REQS007). Defaults to true.
    */
   fallbackAutoparse?: boolean;
 }

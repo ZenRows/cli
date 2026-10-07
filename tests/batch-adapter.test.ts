@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { estimateCredits, toJobBody, validateJsonl, type BatchJob } from "../src/adapters/batch.ts";
+import { estimateCredits, toJobBody, validateJsonl, withAdaptiveStealth, type BatchJob } from "../src/adapters/batch.ts";
 import { ToolkitError } from "../src/core/errors.ts";
 
 function specFile(lines: string[]): { file: string; cleanup: () => void } {
@@ -82,4 +82,32 @@ test("toJobBody allows proxy_country in mode=auto without premium_proxy", () => 
   const jobs: BatchJob[] = [{ url: "https://a.com", proxy_country: "us", mode: "auto" }];
   const body = toJobBody(jobs, {});
   assert.deepEqual(body.tasks[0]!.zenrows_params, { proxy_country: "us", mode: "auto" });
+});
+
+test("withAdaptiveStealth adds mode=auto to lines that don't force flags or set mode", () => {
+  const jobs: BatchJob[] = [
+    { url: "https://a.com" },
+    { url: "https://b.com", js_render: true },
+    { url: "https://c.com", zenrows_params: { premium_proxy: "true" } },
+    { url: "https://d.com", mode: "auto" },
+    { url: "https://e.com", autoparse: true, js_render: false },
+  ];
+  assert.deepEqual(
+    withAdaptiveStealth(jobs).map((j) => j.mode),
+    ["auto", undefined, undefined, "auto", "auto"],
+  );
+  assert.equal(jobs[0]!.mode, undefined, "input is not mutated");
+});
+
+test("withAdaptiveStealth leaves every line alone when job-level params force a flag", () => {
+  const jobs: BatchJob[] = [{ url: "https://a.com" }];
+  assert.equal(withAdaptiveStealth(jobs, { js_render: true })[0]!.mode, undefined);
+  assert.equal(withAdaptiveStealth(jobs, { premium_proxy: true })[0]!.mode, undefined);
+});
+
+test("toJobBody accepts proxy_country without premium_proxy once Adaptive Stealth Mode is applied", () => {
+  const jobs = withAdaptiveStealth([{ url: "https://a.com" }], { proxy_country: "us" });
+  const body = toJobBody(jobs, { proxy_country: "us" });
+  assert.equal(body.tasks[0]!.zenrows_params?.mode, "auto");
+  assert.equal(body.zenrows_params?.proxy_country, "us");
 });

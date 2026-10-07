@@ -6,6 +6,7 @@ import { batch } from "../src/cli/commands/batch.ts";
 import { createWorkspace } from "../src/core/workspace.ts";
 import { savePolicy, defaultPolicy } from "../src/core/policy.ts";
 import { saveApiKey } from "../src/core/auth.ts";
+import { loadConfig, saveConfig } from "../src/core/config.ts";
 import { tempRoot } from "./helpers.ts";
 
 const ctx = { json: true, yes: false };
@@ -255,4 +256,81 @@ test("batch create --wait whose run the cap stops exits 1 with ok:false", async 
     assert.equal(j.ok, false);
     assert.equal(j.failure_reason, "api_key_cap_reached");
   });
+});
+
+test("batch create sends mode=auto per task by default; --manual and --js-render opt out", async () => {
+  const bodies: Array<{ tasks: Array<{ zenrows_params?: Record<string, string> }>; zenrows_params?: Record<string, string> }> = [];
+  await withBatchWorkspace({}, async () => {
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async (_u: unknown, init?: RequestInit) => {
+      if (init?.body) bodies.push(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify({ job_id: "j1", latest_run: { status: "queued" } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+    try {
+      const file = writeSpec(["https://ok.example/a", "https://ok.example/b"]);
+      await captureOut(() => batch.run(["create", file], ctx));
+      await captureOut(() => batch.run(["create", file, "--manual"], ctx));
+      await captureOut(() => batch.run(["create", file, "--js-render"], ctx));
+      await captureOut(() => batch.run(["create", file, "--proxy-country", "us"], ctx));
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+  assert.equal(bodies.length, 4);
+  assert.deepEqual(bodies[0]!.tasks.map((t) => t.zenrows_params?.mode), ["auto", "auto"]);
+  assert.deepEqual(bodies[1]!.tasks.map((t) => t.zenrows_params?.mode), [undefined, undefined]);
+  assert.deepEqual(bodies[2]!.tasks.map((t) => t.zenrows_params?.mode), [undefined, undefined]);
+  assert.equal(bodies[2]!.zenrows_params?.js_render, "true");
+  assert.deepEqual(bodies[3]!.tasks.map((t) => t.zenrows_params?.mode), ["auto", "auto"]);
+  assert.equal(bodies[3]!.zenrows_params?.proxy_country, "us");
+});
+
+test("batch estimate counts Adaptive Stealth Mode as the upper bound, --manual as basic", async () => {
+  await withBatchWorkspace({}, async () => {
+    const file = writeSpec(["https://ok.example/a", "https://ok.example/b"]);
+    const auto = JSON.parse(await captureOut(() => batch.run(["estimate", file], ctx))) as { estimatedCredits: number };
+    const manual = JSON.parse(await captureOut(() => batch.run(["estimate", file, "--manual"], ctx))) as { estimatedCredits: number };
+    assert.equal(auto.estimatedCredits, 50);
+    assert.equal(manual.estimatedCredits, 2);
+  });
+});
+
+test("batch create --manual --proxy-country without --premium-proxy is rejected before any network call", async () => {
+  await withBatchWorkspace({}, async (didFetch) => {
+    const file = writeSpec(["https://ok.example/a"]);
+    let code = -1;
+    const out = await captureOut(async () => {
+      code = await batch.run(["create", file, "--manual", "--proxy-country", "us"], ctx);
+    });
+    assert.equal(code, 1);
+    assert.equal((JSON.parse(out) as { error: { code: string } }).error.code, "PARAM_PROXY_COUNTRY_REQUIRES_PREMIUM");
+    assert.equal(didFetch(), false);
+  });
+});
+
+test("batch create respects defaultMode: manual in config (no mode=auto)", async () => {
+  const bodies: Array<{ tasks: Array<{ zenrows_params?: Record<string, string> }> }> = [];
+  await withBatchWorkspace({}, async () => {
+    saveConfig({ ...loadConfig(), defaultMode: "manual" });
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async (_u: unknown, init?: RequestInit) => {
+      if (init?.body) bodies.push(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify({ job_id: "j1", latest_run: { status: "queued" } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+    try {
+      await captureOut(() => batch.run(["create", writeSpec(["https://ok.example/a"])], ctx));
+      const est = JSON.parse(await captureOut(() => batch.run(["estimate", "jobs.jsonl"], ctx))) as { estimatedCredits: number };
+      assert.equal(est.estimatedCredits, 1);
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+  assert.equal(bodies.length, 1);
+  assert.equal(bodies[0]!.tasks[0]!.zenrows_params?.mode, undefined);
 });

@@ -9,7 +9,8 @@
 import { statSync } from "node:fs";
 import { join } from "node:path";
 import { log, ANSI, c } from "../../core/logger.ts";
-import { estimateCredits, toJobBody, validateJsonl } from "../../adapters/batch.ts";
+import { estimateCredits, toJobBody, validateJsonl, withAdaptiveStealth, type BatchJob } from "../../adapters/batch.ts";
+import { loadConfig } from "../../core/config.ts";
 import { requireApiKey } from "../../core/auth.ts";
 import { ensureApiKey } from "../../core/ensure-key.ts";
 import { assertUsable } from "../../core/capabilities.ts";
@@ -26,12 +27,15 @@ export const batch: Command = {
   usage: "zenrows batch <estimate|create <file.jsonl>|status <id>|results <id>|cancel <id>|wait <id>|retry-failed <id>>",
   help: [
     "Local (no key):",
-    "  estimate <file.jsonl>            validate the spec + estimate credits",
+    "  estimate <file.jsonl> [--manual] validate the spec + estimate credits (upper bound)",
     "Cloud (needs a key + Batch beta access):",
     "  create <file.jsonl> [flags]      validate, then submit the job",
-    "    --js-render                    job-level: render JavaScript",
-    "    --premium-proxy                job-level: use residential IPs",
-    "    --proxy-country <cc>           job-level: geo-target (needs --premium-proxy)",
+    "    (default)                      Adaptive Stealth Mode (mode=auto) on every task that",
+    "                                   doesn't force js_render / premium_proxy itself",
+    "    --manual                       no Adaptive Stealth Mode; plain requests unless flags below",
+    "    --js-render                    job-level: force JavaScript rendering (turns auto off)",
+    "    --premium-proxy                job-level: force residential IPs (turns auto off)",
+    "    --proxy-country <cc>           job-level: geo-target (auto mode, or with --premium-proxy)",
     "    --output <fmt>                 job-level response_type (markdown|plaintext|pdf|html)",
     "    --follow                       poll until the run finishes (alias: --wait)",
     "    --no-signup                    do not auto-create a Free plan account if no key exists",
@@ -77,18 +81,23 @@ export const batch: Command = {
   },
 };
 
+/** Jobs as they will be sent: Adaptive Stealth Mode applied unless manual or disabled in config. */
+function effectiveJobs(jobs: BatchJob[], jobParams: Record<string, unknown>, manual: boolean): BatchJob[] {
+  return manual || loadConfig().defaultMode !== "auto" ? jobs : withAdaptiveStealth(jobs, jobParams);
+}
+
 function estimateCmd(rest: string[], ctx: RunContext): number {
-  const { positionals } = parse(rest, {});
+  const { values, positionals } = parse(rest, { manual: { type: "boolean" } });
   const file = positionals[0];
   if (!file) throw needFile();
   const v = validateJsonl(file);
-  const est = estimateCredits(v.jobs);
+  const est = estimateCredits(effectiveJobs(v.jobs, {}, values.manual === true));
   if (ctx.json) {
     log.out(JSON.stringify({ ok: v.errors.length === 0, ...v, estimatedCredits: est.credits }, null, 2));
   } else {
     log.info(c(ANSI.bold, `Job spec: ${file}`));
     log.info(`valid jobs: ${v.validJobs}/${v.totalLines}`);
-    log.info(`estimated credits (1x basic / 5x js / 10x proxy / 25x both): ${est.credits}`);
+    log.info(`estimated credits, upper bound (1x basic / 5x js / 10x proxy / 25x both or auto): ${est.credits}`);
     if (v.errors.length) {
       log.warn(`${v.errors.length} invalid line(s):`);
       v.errors.slice(0, 10).forEach((e) => log.dim(`  line ${e.line}: ${e.reason}`));
@@ -104,6 +113,7 @@ async function createCmd(rest: string[], ctx: RunContext): Promise<number> {
     "js-render": { type: "boolean" },
     "premium-proxy": { type: "boolean" },
     "proxy-country": { type: "string" },
+    manual: { type: "boolean" },
     output: { type: "string" },
     follow: { type: "boolean" },
     wait: { type: "boolean" }, // back-compat alias for --follow
@@ -137,11 +147,6 @@ async function createCmd(rest: string[], ctx: RunContext): Promise<number> {
   //  1. every task URL must pass the allow/deny domain policy,
   //  2. the run must fit the batch-only page/credit caps (a batch is the one
   //     primitive that fans out into many requests, so the caps bind here).
-  const policy = loadPolicy();
-  for (const job of v.jobs) assertDomainAllowed(job.url, policy);
-  const est = estimateCredits(v.jobs);
-  assertWithinLimits({ pages: v.validJobs, credits: est.credits }, policy, "batch");
-
   const jobParams: Record<string, unknown> = {};
   if (values["js-render"] === true) jobParams.js_render = true;
   if (values["premium-proxy"] === true) jobParams.premium_proxy = true;
@@ -149,9 +154,15 @@ async function createCmd(rest: string[], ctx: RunContext): Promise<number> {
   if (proxyCountry) jobParams.proxy_country = proxyCountry;
   const responseType = normalizeOutput(asString(values.output));
   if (responseType) jobParams.response_type = responseType;
+  const jobs = effectiveJobs(v.jobs, jobParams, values.manual === true);
+
+  const policy = loadPolicy();
+  for (const job of jobs) assertDomainAllowed(job.url, policy);
+  const est = estimateCredits(jobs);
+  assertWithinLimits({ pages: v.validJobs, credits: est.credits }, policy, "batch");
 
   // toJobBody validates proxy_country/premium_proxy BEFORE any HTTP call.
-  const body = toJobBody(v.jobs, jobParams);
+  const body = toJobBody(jobs, jobParams);
   const apiKey = await ensureApiKey(
     values["no-signup"] ? { ...policy, auto_signup: false } : policy,
     {

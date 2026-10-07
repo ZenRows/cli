@@ -91,6 +91,24 @@ export function estimateCredits(jobs: BatchJob[]): { credits: number; perJob: nu
   return { credits: perJob.reduce((a, b) => a + b, 0), perJob };
 }
 
+/**
+ * Adaptive Stealth Mode (mode=auto) by default, like `fetch` and `extract`: returns
+ * the jobs with `mode: "auto"` on every line that doesn't force `js_render` /
+ * `premium_proxy` or set `mode` itself, and none at all when the job-level params
+ * force either flag. Applied per task rather than job-level because the API rejects
+ * a task that combines a job-level mode=auto with its own js_render or
+ * premium_proxy (REQS004).
+ */
+export function withAdaptiveStealth(jobs: BatchJob[], jobParams: Record<string, unknown> = {}): BatchJob[] {
+  const forced = (p: Record<string, unknown>) => isTruthyFlag(p.js_render) || isTruthyFlag(p.premium_proxy);
+  if (forced(jobParams) || jobParams.mode != null) return jobs;
+  return jobs.map((job) => {
+    const own = { ...(job.zenrows_params ?? {}), ...job };
+    if (forced(own) || own.mode != null) return job;
+    return { ...job, mode: "auto" };
+  });
+}
+
 /** Body for `POST /jobs` (closed, all-URLs-up-front job). */
 export interface JobBody {
   type: "regular";
@@ -117,8 +135,8 @@ export interface JobBody {
  * `protected-fetch.ts::validateAutoManual`.
  */
 export function toJobBody(jobs: BatchJob[], jobParams: Record<string, unknown> = {}): JobBody {
-  assertProxyCountryPremium(jobParams, "job-level params");
-
+  // No separate job-level check: a job-level proxy_country is valid for each task
+  // in Adaptive Stealth Mode, and the per-task check below sees job ⊕ task params.
   const tasks = jobs.map((job, idx) => {
     const { url, external_id, metadata, zenrows_params } = job;
     const flat: Record<string, unknown> = {};
