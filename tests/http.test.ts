@@ -165,6 +165,27 @@ test("scrape maps AUTH010 on extract=auto to EXTRACT_DOMAIN_NOT_ENABLED", async 
   );
 });
 
+test("scrape maps REQS007 on extract=auto to EXTRACT_DOMAIN_NOT_ENABLED", async () => {
+  const REQS007 = JSON.stringify({
+    code: "REQS007",
+    detail: "Extract has not been prepared for example.net yet.",
+    status: 403,
+    title: "Extract not prepared (REQS007)",
+  });
+  await withFetch(
+    () => new Response(REQS007, { status: 403, headers: { "content-type": "application/json" } }),
+    async () => {
+      await assert.rejects(
+        () => scrape("https://api.zenrows.com/v1/", "test-key", { url: "https://example.net", extract: "auto" }),
+        (err: unknown) => {
+          assert.equal((err as { code: string }).code, "EXTRACT_DOMAIN_NOT_ENABLED");
+          return true;
+        },
+      );
+    },
+  );
+});
+
 test("scrape treats AUTH010 without extract as a credits/plan error, not EXTRACT_DOMAIN", async () => {
   // AUTH010 is also used for other plan-gated features; only map it to
   // EXTRACT_DOMAIN_NOT_ENABLED when the request asked for extract=auto.

@@ -256,3 +256,43 @@ test("batch create --wait whose run the cap stops exits 1 with ok:false", async 
     assert.equal(j.failure_reason, "api_key_cap_reached");
   });
 });
+
+test("batch create sends mode=auto per task by default; --manual and --js-render opt out", async () => {
+  const bodies: Array<{ tasks: Array<{ zenrows_params?: Record<string, string> }>; zenrows_params?: Record<string, string> }> = [];
+  await withBatchWorkspace({}, async () => {
+    const orig = globalThis.fetch;
+    globalThis.fetch = (async (_u: unknown, init?: RequestInit) => {
+      if (init?.body) bodies.push(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify({ job_id: "j1", latest_run: { status: "queued" } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    }) as unknown as typeof fetch;
+    try {
+      const file = writeSpec(["https://ok.example/a", "https://ok.example/b"]);
+      await captureOut(() => batch.run(["create", file], ctx));
+      await captureOut(() => batch.run(["create", file, "--manual"], ctx));
+      await captureOut(() => batch.run(["create", file, "--js-render"], ctx));
+      await captureOut(() => batch.run(["create", file, "--proxy-country", "us"], ctx));
+    } finally {
+      globalThis.fetch = orig;
+    }
+  });
+  assert.equal(bodies.length, 4);
+  assert.deepEqual(bodies[0]!.tasks.map((t) => t.zenrows_params?.mode), ["auto", "auto"]);
+  assert.deepEqual(bodies[1]!.tasks.map((t) => t.zenrows_params?.mode), [undefined, undefined]);
+  assert.deepEqual(bodies[2]!.tasks.map((t) => t.zenrows_params?.mode), [undefined, undefined]);
+  assert.equal(bodies[2]!.zenrows_params?.js_render, "true");
+  assert.deepEqual(bodies[3]!.tasks.map((t) => t.zenrows_params?.mode), ["auto", "auto"]);
+  assert.equal(bodies[3]!.zenrows_params?.proxy_country, "us");
+});
+
+test("batch estimate counts Adaptive Stealth Mode as the upper bound, --manual as basic", async () => {
+  await withBatchWorkspace({}, async () => {
+    const file = writeSpec(["https://ok.example/a", "https://ok.example/b"]);
+    const auto = JSON.parse(await captureOut(() => batch.run(["estimate", file], ctx))) as { estimatedCredits: number };
+    const manual = JSON.parse(await captureOut(() => batch.run(["estimate", file, "--manual"], ctx))) as { estimatedCredits: number };
+    assert.equal(auto.estimatedCredits, 50);
+    assert.equal(manual.estimatedCredits, 2);
+  });
+});

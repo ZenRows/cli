@@ -203,6 +203,24 @@ test("runExtract falls back to autoparse on AUTH010 for extract=auto", async () 
   });
 });
 
+test("runExtract falls back to autoparse on REQS007 (domain not prepared) for extract=auto", async () => {
+  const REQS007 = JSON.stringify({ code: "REQS007", detail: "Extract has not been prepared for x.com yet.", status: 403 });
+  const calls: string[] = [];
+  await withFetchHandler((url) => {
+    calls.push(url);
+    if (url.includes("extract=auto")) {
+      return new Response(REQS007, { status: 403, headers: { "content-type": "application/json" } });
+    }
+    return new Response('{"title":"fallback"}', { status: 200, headers: { "content-type": "application/json" } });
+  }, async () => {
+    const outcome = await runExtract({ url: "https://x.com" }, cfg, defaultPolicy(), "testkey");
+    assert.equal(outcome.method, "autoparse");
+    assert.equal(outcome.fellBackToAutoparse, true);
+    assert.equal(calls.length, 2);
+    assert.match(calls[1]!, /autoparse=true/);
+  });
+});
+
 test("runExtract does not fall back when fallbackAutoparse is false", async () => {
   await withFetch(AUTH010, async () => {
     await assert.rejects(

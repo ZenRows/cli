@@ -2,7 +2,7 @@
  * `zenrows extract <url> [flags]` → Extract (structured extraction on `/v1/`).
  *
  * Default: `extract=auto` (site-tailored Extract, open beta). If the domain is
- * not enabled (AUTH010), falls back once to Autoparse. Opt into Autoparse
+ * not enabled or prepared (AUTH010 / REQS007), falls back once to Autoparse. Opt into Autoparse
  * directly with `--autoparse`. Other methods: `--css`, `--outputs`, `--output`.
  */
 import { ensureApiKey } from "../../core/ensure-key.ts";
@@ -24,7 +24,7 @@ export const extract: Command = {
   usage: "zenrows extract <url> [--autoparse | --css <json> | --outputs <filters> | --output md|text] [flags]",
   help: [
     "Methods:",
-    "  (default)              extract=auto — site-tailored Extract (open beta); falls back to Autoparse if the domain is not enabled",
+    "  (default)              extract=auto — site-tailored Extract (open beta); falls back to Autoparse if the domain is not enabled or prepared",
     "  --autoparse            general-purpose Autoparse (any domain, no Extract fallback)",
     "  --css <json>           CSS selector map, e.g. '{\"title\":\"h1\",\"price\":\".price\"}'",
     "  --outputs <list>       built-in output filters → JSON: emails, phone_numbers, headings,",
@@ -130,7 +130,7 @@ export const extract: Command = {
       delete (safeParams as Record<string, unknown>).apikey;
 
       if (outcome.fellBackToAutoparse) {
-        log.info("Extract not enabled for this domain — fell back to Autoparse.");
+        log.info("Extract not available for this domain yet — fell back to Autoparse.");
       }
 
       const runDir = writeRun(

@@ -139,6 +139,18 @@ export async function scrape(
     redactedUrl: redacted,
   };
 
+  // REQS007 on extract=auto: the domain hasn't been prepared for Extract yet.
+  // Same recovery as AUTH010 (the extract adapter falls back to autoparse), so it
+  // maps to the same code. Checked before the 403 auth branch below.
+  if (res.status === 403 && params.extract !== undefined && zrErrorCode(body) === "REQS007") {
+    throw new ToolkitError({
+      code: "EXTRACT_DOMAIN_NOT_ENABLED",
+      message: "Extract has not been prepared for this domain yet.",
+      likely_cause: zrErrorDetail(body) ?? "This domain is not prepared for Extract.",
+      next_action: "Retry with --autoparse for general-purpose extraction on any site.",
+      suggested_commands: [`zenrows extract ${params.url} --autoparse`],
+    });
+  }
   if (res.status === 401 || res.status === 403) {
     // Distinguish Zenrows auth errors from target-site 403s. Zenrows auth
     // failures surface AUTH00x codes in the body.
