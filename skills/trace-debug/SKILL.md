@@ -23,7 +23,7 @@ zenrows trace export <run-id>     # JSON for sharing
   escalates for you and bills only for what succeeds. Only when auto mode has
   failed on its own, take manual control with `--manual --js-render`, then
   `--premium-proxy`. For slow pages, add `--wait-for <selector>` to a
-  `--manual --js-render` run; auto mode ignores it. Each step
+  `--manual --js-render` run; auto mode may ignore it. Each step
   multiplies the cost of the request, and both together are the most expensive
   configuration available ([[cost-control]]).
 - `REQUEST_TIMEOUT` → the CLI stopped waiting; the API was reached. Raise
