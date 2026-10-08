@@ -39,6 +39,7 @@ that endpoint with extraction parameters, not a separate product.
 | `zenrows fetch` | Fetch — retrieve a protected page | **available** — `GET https://api.zenrows.com/v1/` |
 | `zenrows extract` | Extract — `extract=auto` (domain-gated open beta; falls back to Autoparse) / CSS / Markdown | **beta** — same `/v1/` |
 | `zenrows batch` | Batch — fan out over many URLs | beta — cloud works with beta access; local validate/estimate always |
+| `zenrows crawl` | Crawl — collect the URLs behind one start page, optionally with each page's HTML | **available** — `https://api.zenrows.com/v1/crawls` |
 | `zenrows browser` | Browser Sessions REST API (same backend as MCP `browser_*`) | **available** — escalation-only; bills by bandwidth + time |
 | `zenrows mcp` | MCP server config (remote + local) | **available** |
 | Zenrows CLI | this repo | available |
@@ -156,7 +157,36 @@ An Extract task costs the same as a regular one (1 credit at base tier), so
 keys: `html` (the raw page) and `parsed` (the structured data) — validate a
 sample with `zenrows extract <url>` before running the full batch.
 
-## 10. Browser Sessions
+## 10. Crawl
+
+Zenrows **Crawl** (`https://api.zenrows.com/v1/crawls`) takes one start URL and
+returns the URLs it finds behind it, optionally with each page's HTML. Use it
+when you know the listing or section but not the item URLs. Crawl follows the
+links on each page up to `--depth` hops and stays on the start URL's domain.
+Without `--html` it returns URLs only. An account without Crawl access gets
+`CRAWL_NOT_ENABLED` ("Crawl is not enabled for this account", HTTP 403
+`REQS008`).
+
+```bash
+zenrows crawl start https://example.com/products/ --depth 1 \
+  --max-items 20 --include /product/ --follow    # start and wait for the end
+zenrows crawl results <crawl-id> --out urls.jsonl # every kept URL (paginated)
+zenrows crawl start <url> --depth 2 --html        # also fetch each kept page's HTML
+zenrows crawl content <crawl-id> <content-id>     # one page's HTML
+zenrows crawl results <crawl-id> --download       # NDJSON export (URLs + HTML) → <crawl-id>.jsonl
+zenrows crawl status <crawl-id>                   # status, coverage, stop reason
+zenrows crawl list                                # your crawls, newest first
+zenrows crawl stop <crawl-id>                     # stop a running crawl
+```
+
+`--depth` (link hops) is required; `--max-items` and `--max-pages` cap the
+crawl (API default 10 each), and `--max-pages` bounds the cost, since each page
+is one fetch. `--include` / `--exclude` are repeatable substring filters on the
+URL. When the account has too many crawls running, a start gets
+`CRAWL_QUOTA_EXCEEDED` and creates nothing; retry after `Retry-After`. Set
+`ZENROWS_CRAWL_API_BASE` to point the CLI at another deployment.
+
+## 11. Browser Sessions
 
 Escalation only — **prefer `fetch`/`extract` for the vast majority of cases**;
 they cost less. Use the browser for logins, forms, and multi-step JS flows that
@@ -170,7 +200,7 @@ bring-your-own Playwright/Puppeteer.
 close interactive sessions with `zenrows browser close`. On by default; opt out
 with `zenrows policy set allow_browser false`.
 
-## 11. MCP
+## 12. MCP
 
 ```bash
 zenrows mcp status
@@ -188,7 +218,7 @@ both servers in `mcp.json` (no secrets) and ships MCP-native skills under
 `agent-plugin/skills/`. It is included in the published `@zenrows/cli` npm
 tarball (`node_modules/@zenrows/cli/agent-plugin`).
 
-## 12. Plugins
+## 13. Plugins
 
 ```bash
 zenrows plugin list
@@ -201,7 +231,7 @@ MCP-native skills). See [`agent-plugin/README.md`](agent-plugin/README.md).
 Legacy per-client snippets from `zenrows plugin install` remain available.
 CLI-oriented skills stay under repo-root `skills/`.
 
-## 13. Skills
+## 14. Skills
 
 Agent-readable playbooks that teach agents how to choose primitives.
 
@@ -213,28 +243,28 @@ zenrows skill validate zenrows
 
 The master skill `skills/zenrows/SKILL.md` teaches the full decision tree.
 
-## 14. Templates
+## 15. Templates
 
 ```bash
 zenrows template list
 zenrows template create protected-fetch-node --output ./my-project
 ```
 
-## 15. Workflows
+## 16. Workflows
 
 ```bash
 zenrows workflow list
 zenrows workflow explain competitor-intelligence
 ```
 
-## 16. Recipes
+## 17. Recipes
 
 ```bash
 zenrows recipe list
 zenrows recipe run fetch-protected-page
 ```
 
-## 17. Evals
+## 18. Evals
 
 Reproducible, transparent benchmarks. **No competitor keys are bundled** and
 nothing is hardcoded to make Zenrows win — comparison evals require you to supply
@@ -249,7 +279,7 @@ zenrows eval report protected-fetch-smoke
 Reports write `input.json`, `results.json`, `report.md`, `failures.jsonl`,
 `cost.json`, and `traces/` under `.zenrows/evals/<run-id>/`.
 
-## 18. Security
+## 19. Security
 
 - API keys are never printed or written into run artifacts/assets.
 - Secrets live in `.zenrows/secrets.json` (0600, gitignored); logs are redacted.
@@ -259,12 +289,12 @@ Reports write `input.json`, `results.json`, `report.md`, `failures.jsonl`,
 - Destructive `uninstall` requires `--yes`. Browser is on by default; opt out with
   `zenrows policy set allow_browser false`. Experimental features are off by default.
 
-## 19. Capability matrix
+## 20. Capability matrix
 
 See [`registry/capabilities.json`](registry/capabilities.json). `zenrows status
 --json` emits it.
 
-## 20. Contributing
+## 21. Contributing
 
 The CLI is TypeScript with **zero runtime dependencies** (native `fetch`,
 `node:util` `parseArgs`, `node:test`). Node 20+ runs the published build;

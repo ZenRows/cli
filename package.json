@@ -48,6 +48,7 @@
     "zenrows": "node bin/zenrows.ts",
     "dev": "node bin/zenrows.ts",
     "test": "npm run build && node --test --import ./dist/tests/setup.js dist/tests/*.test.js",
+    "test:e2e": "npm run build && node --test dist/tests/e2e/*.test.js",
     "typecheck": "tsc --noEmit",
     "build": "rm -rf dist && tsc && chmod +x dist/bin/zenrows.js",
     "prepack": "npm run build",
