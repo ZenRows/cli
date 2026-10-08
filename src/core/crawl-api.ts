@@ -7,11 +7,10 @@
  * JSON; errors come back as `application/problem+json` (RFC 9457) and we branch
  * on `status` + `code` only. A crawl is an async job: create it, then poll it
  * until its status leaves `running`. `fetchImpl` / `sleepImpl` are injectable
- * for tests, mirroring `batch-api.ts`.
+ * for tests.
  *
- * Crawl is in beta. This release supports link discovery with URL-only or HTML
- * output, so the client never sends `discovery` or `output_format: "json"`.
- * Response fields we do not model pass through untouched.
+ * `output_format` takes `html` only (absent = URLs only). Response fields we do
+ * not model pass through untouched.
  */
 import { ToolkitError, isKeyCapReached, keyCapReached, quotaExhausted } from "./errors.ts";
 import { readAccount } from "./agent-account.ts";
@@ -237,10 +236,10 @@ function problemToError(
     return new ToolkitError({
       code: "CRAWL_NOT_ENABLED",
       message: "Crawl is not enabled for this account.",
-      likely_cause: `${cause}. Crawl is in beta and this account is not in it yet.`,
+      likely_cause: `${cause}. Crawl is not enabled for this account yet.`,
       next_action:
-        "Ask Zenrows support to enable Crawl for this account. Meanwhile fetch known URLs with `zenrows fetch`, or many with `zenrows batch`.",
-      suggested_commands: ["zenrows fetch <url>", "zenrows batch estimate jobs.jsonl"],
+        "Ask Zenrows support to enable Crawl for this account. Meanwhile fetch known URLs with `zenrows fetch`.",
+      suggested_commands: ["zenrows fetch <url>"],
     });
   }
   if (status === 401) {
@@ -271,9 +270,9 @@ function problemToError(
     return new ToolkitError({
       code: "CRAWL_QUOTA_EXCEEDED",
       message: "Too many crawls running.",
-      likely_cause: `${cause}. The account already holds as many active crawls and Batch jobs as it may (3 by default, shared with Batch).${wait}`,
+      likely_cause: `${cause}. The account has too many crawls running.${wait}`,
       next_action:
-        "Wait for a crawl or Batch job to finish (or stop one with `zenrows crawl stop <id>`), then retry. Nothing was created.",
+        "Retry after Retry-After, or stop one of your crawls with `zenrows crawl stop <id>` first. Nothing was created.",
       suggested_commands: ["zenrows crawl list"],
     });
   }
@@ -303,7 +302,7 @@ function problemToError(
     message: `Crawl request failed (HTTP ${status}).`,
     likely_cause: `${cause}.`,
     next_action:
-      status >= 500 ? "This is usually transient — retry with a short backoff." : "Fix the reported problem and retry.",
+      status >= 500 ? "Retry with a short backoff." : "Fix the reported problem and retry.",
   });
 }
 
@@ -431,7 +430,7 @@ export async function listAllResults(
 
 /**
  * Poll `GET /crawls/{id}?limit=1` until the status leaves `running`, backing off
- * 2s → ×1.5 → capped at 15s (Batch's waiter). On timeout throws CRAWL_TIMEOUT
+ * 2s → ×1.5 → capped at 15s. On timeout throws CRAWL_TIMEOUT
  * and leaves the crawl running. `sleepImpl` is injectable for tests.
  */
 export async function waitForCrawl(
