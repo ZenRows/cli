@@ -47,13 +47,13 @@
     {
       "name": "crawl",
       "type": "skill",
-      "description": "Discover the URLs behind one start page with Crawl (beta): start, wait, read results and page HTML, stop.",
-      "status": "beta",
+      "description": "Collect the URLs behind one start page with Crawl: start, wait, read results and page HTML, stop.",
+      "status": "available",
       "requires_backend_capabilities": ["crawl"],
       "requires_auth": true,
       "version": "0.1.0",
       "path": "skills/crawl",
-      "tags": ["crawl", "discovery", "links"]
+      "tags": ["crawl", "links", "urls"]
     },
     {
       "name": "interact-browser",

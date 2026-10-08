@@ -37,7 +37,7 @@ test("core skills include the GA set and the master decision-tree skill", () => 
   ]) {
     assert.ok(skills.includes(required), `skill ${required} present`);
   }
-  // Non-GA skills were trimmed from the registry (crawl is back, as beta).
+  // Non-GA skills were trimmed from the registry (crawl is back).
   for (const removed of ["discover", "monitor"]) {
     assert.ok(!skills.includes(removed), `skill ${removed} removed`);
   }
@@ -52,5 +52,5 @@ test("assetRunnable reflects backend capability status", () => {
   const extractSkill = loadRegistry("skill").find((s) => s.name === "extract")!;
   assert.equal(assetRunnable(extractSkill), true); // needs extract (open beta = usable)
   const crawlSkill = loadRegistry("skill").find((s) => s.name === "crawl")!;
-  assert.equal(assetRunnable(crawlSkill), true); // needs crawl (beta = usable)
+  assert.equal(assetRunnable(crawlSkill), true); // needs crawl (available)
 });
