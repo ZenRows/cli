@@ -28,6 +28,15 @@
       "requiresAuth": true,
       "notes": "Open beta. Cloud subcommands (create/status/results/cancel/wait/retry-failed) call the Batch API; `zenrows batch estimate` works locally with no API key."
     },
+    "crawl": {
+      "key": "crawl",
+      "label": "Crawl (beta)",
+      "status": "beta",
+      "command": "zenrows crawl",
+      "backend": "Crawl — https://api.zenrows.com/v1/crawls (X-API-Key header; same host as Fetch/Extract)",
+      "requiresAuth": true,
+      "notes": "Beta. Link discovery from one start URL with URL-only or HTML output (start/status/wait/results/content/list/stop). JSON output and pagination discovery are not exposed. An account without Crawl access gets 403 REQS008 (CRAWL_NOT_ENABLED). Crawls share the account's 3 active Batch job slots (429 too_many_crawls → CRAWL_QUOTA_EXCEEDED)."
+    },
     "browser": {
       "key": "browser",
       "label": "Browser Sessions",
