@@ -34,6 +34,10 @@ If the user has a known URL and wants page content:
 If the user has a known URL and wants structured data:
   → Use Extract.                    (zenrows extract <url> | --autoparse | --css)
 
+If the user has a start page (listing, index, section) but not the item URLs:
+  → Use Crawl.                      (zenrows crawl start <url> --depth 1 --follow,
+                                     then `zenrows crawl results <id>`)
+
 If the user has many URLs (bulk):
   → Use Batch.                      (validate one page with fetch/extract first,
                                      then `zenrows batch create <jobs.jsonl>`)
@@ -70,6 +74,7 @@ Run `zenrows status` for the live capability matrix. As of this toolkit:
 | Protected Fetch | `zenrows fetch` | available (`GET /v1/`) |
 | Extract (extract=auto / Autoparse/CSS/Markdown) | `zenrows extract` | beta (same `/v1/`; extract=auto falls back to autoparse) |
 | Batch | `zenrows batch` | beta — runs cloud jobs (create/status/results); cheapest path at scale. Estimate specs locally with no key |
+| Crawl | `zenrows crawl` | available — collect the URLs behind one start page, optionally with each page's HTML |
 | Browser | `zenrows browser` | available (Browser Sessions REST API / MCP) |
 | MCP | `zenrows mcp` | available (remote + local server) |
 

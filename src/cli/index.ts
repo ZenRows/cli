@@ -27,6 +27,7 @@ import { policy } from "./commands/policy.ts";
 import { fetch_ } from "./commands/fetch.ts";
 import { extract } from "./commands/extract.ts";
 import { batch } from "./commands/batch.ts";
+import { crawl } from "./commands/crawl.ts";
 import { browser } from "./commands/browser.ts";
 import { mcp } from "./commands/mcp.ts";
 import { plugin } from "./commands/plugin.ts";
@@ -43,7 +44,7 @@ const evalCmd = makeAssetCommand("eval", "Reproducible benchmark/test suites.");
 /** Ordered groups for help output. */
 const GROUPS: Array<{ title: string; commands: Command[] }> = [
   { title: "Setup", commands: [init, signup, account, login, logout, status, usage, update, uninstall, config, policy] },
-  { title: "Primitives", commands: [fetch_, extract, batch, browser] },
+  { title: "Primitives", commands: [fetch_, extract, batch, crawl, browser] },
   { title: "Distribution", commands: [mcp, plugin, skill, template, workflow, recipe, evalCmd, trace] },
 ];
 
