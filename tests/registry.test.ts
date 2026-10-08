@@ -29,6 +29,7 @@ test("core skills include the GA set and the master decision-tree skill", () => 
     "protected-fetch",
     "extract",
     "batch-jobs",
+    "crawl",
     "interact-browser",
     "cost-control",
     "trace-debug",
@@ -36,8 +37,8 @@ test("core skills include the GA set and the master decision-tree skill", () => 
   ]) {
     assert.ok(skills.includes(required), `skill ${required} present`);
   }
-  // Non-GA skills were trimmed from the registry.
-  for (const removed of ["discover", "crawl", "monitor"]) {
+  // Non-GA skills were trimmed from the registry (crawl is back).
+  for (const removed of ["discover", "monitor"]) {
     assert.ok(!skills.includes(removed), `skill ${removed} removed`);
   }
   assert.ok(existsSync(pkgPath("skills/zenrows/SKILL.md")), "master SKILL.md exists");
@@ -50,4 +51,6 @@ test("assetRunnable reflects backend capability status", () => {
   assert.equal(assetRunnable(batchSkill), true); // needs batch (open beta = usable)
   const extractSkill = loadRegistry("skill").find((s) => s.name === "extract")!;
   assert.equal(assetRunnable(extractSkill), true); // needs extract (open beta = usable)
+  const crawlSkill = loadRegistry("skill").find((s) => s.name === "crawl")!;
+  assert.equal(assetRunnable(crawlSkill), true); // needs crawl (available)
 });

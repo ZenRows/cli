@@ -28,6 +28,15 @@
       "requiresAuth": true,
       "notes": "Open beta. Cloud subcommands (create/status/results/cancel/wait/retry-failed) call the Batch API; `zenrows batch estimate` works locally with no API key."
     },
+    "crawl": {
+      "key": "crawl",
+      "label": "Crawl",
+      "status": "available",
+      "command": "zenrows crawl",
+      "backend": "Crawl — https://api.zenrows.com/v1/crawls (X-API-Key header; same host as Fetch/Extract)",
+      "requiresAuth": true,
+      "notes": "Follows the links on each page from one start URL up to depth, on the start URL's domain, and returns the URLs it keeps, optionally with each page's HTML (start/status/wait/results/content/list/stop). An account without Crawl access gets 403 REQS008 (CRAWL_NOT_ENABLED). Too many crawls running on the account gives 429 too_many_crawls (CRAWL_QUOTA_EXCEEDED); retry after Retry-After."
+    },
     "browser": {
       "key": "browser",
       "label": "Browser Sessions",

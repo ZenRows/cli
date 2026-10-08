@@ -11,6 +11,7 @@ test("capability matrix loads with the honest classifications", () => {
   assert.equal(caps.mcp?.status, "available");
   // Batch is a real product in open beta.
   assert.equal(caps.batch?.status, "beta");
+  assert.equal(caps.crawl?.status, "available");
 });
 
 test("isUsable true for available + open beta, false for absent capabilities", () => {
@@ -25,6 +26,7 @@ test("assertUsable passes for available + experimental + beta", () => {
   assert.doesNotThrow(() => assertUsable("browser")); // available (billing/escalation handled by docs, opt-out via policy)
   assert.doesNotThrow(() => assertUsable("extract"));
   assert.doesNotThrow(() => assertUsable("batch"));
+  assert.doesNotThrow(() => assertUsable("crawl"));
   assert.throws(
     () => assertUsable("nope"),
     (e: unknown) => e instanceof ToolkitError && e.code === "CAPABILITY_UNAVAILABLE",

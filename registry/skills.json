@@ -45,6 +45,17 @@
       "tags": ["batch", "scale", "jsonl"]
     },
     {
+      "name": "crawl",
+      "type": "skill",
+      "description": "Collect the URLs behind one start page with Crawl: start, wait, read results and page HTML, stop.",
+      "status": "available",
+      "requires_backend_capabilities": ["crawl"],
+      "requires_auth": true,
+      "version": "0.1.0",
+      "path": "skills/crawl",
+      "tags": ["crawl", "links", "urls"]
+    },
+    {
       "name": "interact-browser",
       "type": "skill",
       "description": "Escalate to Browser Sessions (REST API / MCP browser_*) only when fetch/extract cannot do the job.",
