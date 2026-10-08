@@ -1,0 +1,287 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import {
+  CRAWL_API_BASE_ENV,
+  DEFAULT_CRAWL_API_BASE,
+  contentIdOf,
+  crawlBase,
+  createCrawl,
+  downloadCrawl,
+  getCrawl,
+  getCrawlContent,
+  listAllResults,
+  listCrawls,
+  stopCrawl,
+  waitForCrawl,
+  type CrawlWithResults,
+} from "../src/core/crawl-api.ts";
+import { ToolkitError } from "../src/core/errors.ts";
+
+const crawlBody = {
+  crawl_id: "c_1",
+  status: "running",
+  url: "https://shop.example/",
+  depth: 1,
+  max_items: 10,
+  max_pages: 10,
+  coverage: { pages_fetched: 0, pages_failed: 0, items_found: 0 },
+  created_at: "2026-10-15T09:00:00Z",
+};
+
+/** Build a fetch stub that returns a fixed body, recording each call. */
+function stubFetch(status: number, payload: unknown, headers: Record<string, string> = {}) {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const impl = (async (url: string, init?: RequestInit) => {
+    calls.push({ url, init });
+    return new Response(typeof payload === "string" ? payload : JSON.stringify(payload), {
+      status,
+      headers: { "content-type": "application/json", ...headers },
+    });
+  }) as unknown as typeof fetch;
+  return { impl, calls };
+}
+
+function problem(status: number, code: string, detail = "nope", headers: Record<string, string> = {}) {
+  return stubFetch(status, { code, title: code, detail, status, instance: "urn:zenrows:request:x" }, {
+    "content-type": "application/problem+json",
+    ...headers,
+  });
+}
+
+test("crawlBase defaults to the production API and honors ZENROWS_CRAWL_API_BASE", () => {
+  assert.equal(crawlBase(), DEFAULT_CRAWL_API_BASE);
+  process.env[CRAWL_API_BASE_ENV] = "http://127.0.0.1:9/v1/";
+  try {
+    assert.equal(crawlBase(), "http://127.0.0.1:9/v1");
+  } finally {
+    delete process.env[CRAWL_API_BASE_ENV];
+  }
+});
+
+test("createCrawl posts /crawls with X-API-Key and only the fields that were set", async () => {
+  const { impl, calls } = stubFetch(202, crawlBody, { location: "/v1/crawls/c_1" });
+  const c = await createCrawl(
+    { url: "https://shop.example/", depth: 1, max_items: 3, include_patterns: ["/product/"], exclude_patterns: [] },
+    { apiKey: "zr-key", fetchImpl: impl },
+  );
+  assert.equal(c.crawl_id, "c_1");
+  const call = calls[0]!;
+  assert.equal(call.url, `${DEFAULT_CRAWL_API_BASE}/crawls`);
+  assert.equal(call.init?.method, "POST");
+  const headers = call.init?.headers as Record<string, string>;
+  assert.equal(headers["X-API-Key"], "zr-key");
+  assert.equal(headers["Content-Type"], "application/json");
+  assert.equal(headers["Idempotency-Key"], undefined);
+  assert.ok(!call.url.includes("apikey"), "the key never rides the query string");
+  const body = JSON.parse(String(call.init?.body));
+  assert.deepEqual(body, { url: "https://shop.example/", depth: 1, max_items: 3, include_patterns: ["/product/"] });
+  assert.ok(!("discovery" in body), "discovery is never sent");
+  assert.ok(!("output_format" in body));
+});
+
+test("createCrawl sends output_format html and Idempotency-Key when asked", async () => {
+  const { impl, calls } = stubFetch(202, crawlBody);
+  await createCrawl({ url: "https://shop.example/", depth: 2, max_pages: 5, output_format: "html" }, {
+    apiKey: "k",
+    fetchImpl: impl,
+    idempotencyKey: "idem-1",
+  });
+  const body = JSON.parse(String(calls[0]!.init?.body));
+  assert.deepEqual(body, { url: "https://shop.example/", depth: 2, max_pages: 5, output_format: "html" });
+  assert.equal((calls[0]!.init?.headers as Record<string, string>)["Idempotency-Key"], "idem-1");
+});
+
+test("getCrawl passes cursor + limit and parses results, tolerating unknown fields", async () => {
+  const { impl, calls } = stubFetch(200, {
+    ...crawlBody,
+    status: "a_future_status",
+    discovery: ["links"],
+    brand_new_field: { x: 1 },
+    results: [{ url: "https://shop.example/product/a", content_status: "fetched", content_url: "/v1/crawls/c_1/contents/ct_9" }],
+    next_cursor: "cur_2",
+  });
+  const page = await getCrawl("c_1", { apiKey: "k", cursor: "cur_1", limit: 50, fetchImpl: impl });
+  const u = new URL(calls[0]!.url);
+  assert.equal(u.pathname, "/v1/crawls/c_1");
+  assert.equal(u.searchParams.get("cursor"), "cur_1");
+  assert.equal(u.searchParams.get("limit"), "50");
+  assert.equal(calls[0]!.init?.method, "GET");
+  assert.equal(page.results[0]!.content_status, "fetched");
+  assert.equal(contentIdOf(page.results[0]!), "ct_9");
+  assert.equal(page.next_cursor, "cur_2");
+  assert.equal(page.brand_new_field && typeof page.brand_new_field, "object");
+});
+
+test("listCrawls reads one page; next_cursor is absent on the last page", async () => {
+  const { impl, calls } = stubFetch(200, { crawls: [{ ...crawlBody, status: "completed" }] });
+  const page = await listCrawls({ apiKey: "k", limit: 5, fetchImpl: impl });
+  assert.equal(new URL(calls[0]!.url).pathname, "/v1/crawls");
+  assert.equal(new URL(calls[0]!.url).searchParams.get("limit"), "5");
+  assert.equal(new URL(calls[0]!.url).searchParams.get("cursor"), null);
+  assert.equal(page.crawls.length, 1);
+  assert.equal(page.next_cursor, undefined);
+});
+
+test("stopCrawl posts /crawls/{id}/stop with no body", async () => {
+  const { impl, calls } = stubFetch(200, { crawl_id: "c_1", status: "stopped", stop_reason: "user" });
+  const s = await stopCrawl("c_1", { apiKey: "k", fetchImpl: impl });
+  assert.equal(s.status, "stopped");
+  assert.equal(calls[0]!.init?.method, "POST");
+  assert.equal(calls[0]!.init?.body, undefined);
+  assert.match(calls[0]!.url, /\/crawls\/c_1\/stop$/);
+});
+
+test("getCrawlContent returns the HTML body and its type", async () => {
+  const { impl, calls } = stubFetch(200, "<html><body>hi</body></html>", { "content-type": "text/html; charset=utf-8" });
+  const out = await getCrawlContent("c_1", "ct_9", { apiKey: "k", fetchImpl: impl });
+  assert.match(calls[0]!.url, /\/crawls\/c_1\/contents\/ct_9$/);
+  assert.match(out.contentType, /text\/html/);
+  assert.equal(out.body, "<html><body>hi</body></html>");
+});
+
+test("downloadCrawl returns the NDJSON and X-Crawl-Status", async () => {
+  const { impl, calls } = stubFetch(200, '{"url":"https://a"}\n{"url":"https://b"}\n', {
+    "content-type": "application/x-ndjson",
+    "x-crawl-status": "running",
+  });
+  const out = await downloadCrawl("c_1", { apiKey: "k", fetchImpl: impl });
+  assert.match(calls[0]!.url, /\/crawls\/c_1\/download$/);
+  assert.equal(out.crawlStatus, "running");
+  assert.equal(out.ndjson.trim().split("\n").length, 2);
+});
+
+test("403 REQS008 maps to CRAWL_NOT_ENABLED with the API's wording", async () => {
+  const { impl } = problem(403, "REQS008", "Contact support to request access.");
+  await assert.rejects(
+    () => createCrawl({ url: "https://a.example/", depth: 1 }, { apiKey: "k", fetchImpl: impl }),
+    (e: unknown) =>
+      e instanceof ToolkitError && e.code === "CRAWL_NOT_ENABLED" && e.message === "Crawl is not enabled for this account.",
+  );
+});
+
+test("404 crawl_not_found maps to CRAWL_NOT_FOUND", async () => {
+  const { impl } = problem(404, "crawl_not_found");
+  await assert.rejects(
+    () => getCrawl("c_nope", { apiKey: "k", fetchImpl: impl }),
+    (e: unknown) => e instanceof ToolkitError && e.code === "CRAWL_NOT_FOUND" && /crawl_not_found/.test(e.likely_cause),
+  );
+});
+
+test("404 content_not_found maps to CRAWL_NOT_FOUND with content guidance", async () => {
+  const { impl } = problem(404, "content_not_found");
+  await assert.rejects(
+    () => getCrawlContent("c_1", "ct_x", { apiKey: "k", fetchImpl: impl }),
+    (e: unknown) => e instanceof ToolkitError && e.code === "CRAWL_NOT_FOUND" && /content_status/.test(e.next_action),
+  );
+});
+
+test("422 invalid_parameter and 400 unknown_parameter map to CRAWL_INVALID", async () => {
+  for (const [status, code] of [
+    [422, "invalid_parameter"],
+    [400, "unknown_parameter"],
+    [409, "idempotency_request_in_flight"],
+  ] as const) {
+    const { impl } = problem(status, code, "'depth' is out of range.");
+    await assert.rejects(
+      () => createCrawl({ url: "https://a.example/", depth: 1 }, { apiKey: "k", fetchImpl: impl }),
+      (e: unknown) => e instanceof ToolkitError && e.code === "CRAWL_INVALID" && e.likely_cause.includes(code),
+    );
+  }
+});
+
+test("429 too_many_crawls maps to CRAWL_QUOTA_EXCEEDED and carries Retry-After", async () => {
+  const { impl } = problem(429, "too_many_crawls", "Too many crawls.", { "retry-after": "30" });
+  await assert.rejects(
+    () => createCrawl({ url: "https://a.example/", depth: 1 }, { apiKey: "k", fetchImpl: impl }),
+    (e: unknown) => e instanceof ToolkitError && e.code === "CRAWL_QUOTA_EXCEEDED" && /Retry after 30s/.test(e.likely_cause),
+  );
+});
+
+test("401 maps to AUTH_INVALID and 500 to CRAWL_FAILED", async () => {
+  const a = problem(401, "AUTH002");
+  await assert.rejects(() => listCrawls({ apiKey: "k", fetchImpl: a.impl }), (e: unknown) => e instanceof ToolkitError && e.code === "AUTH_INVALID");
+  const b = problem(500, "internal_error");
+  await assert.rejects(() => getCrawl("c", { apiKey: "k", fetchImpl: b.impl }), (e: unknown) => e instanceof ToolkitError && e.code === "CRAWL_FAILED");
+});
+
+test("a transport failure maps to BACKEND_UNAVAILABLE", async () => {
+  const impl = (async () => {
+    throw new TypeError("fetch failed");
+  }) as unknown as typeof fetch;
+  await assert.rejects(() => getCrawl("c", { apiKey: "k", fetchImpl: impl }), (e: unknown) => e instanceof ToolkitError && e.code === "BACKEND_UNAVAILABLE");
+});
+
+/** A stub that serves `pages` in order, recording the cursor each call sent. */
+function pagedFetch(pages: Array<Partial<CrawlWithResults>>) {
+  const cursors: Array<string | null> = [];
+  const limits: Array<string | null> = [];
+  let i = 0;
+  const impl = (async (url: string) => {
+    const u = new URL(url);
+    cursors.push(u.searchParams.get("cursor"));
+    limits.push(u.searchParams.get("limit"));
+    const page = pages[Math.min(i++, pages.length - 1)]!;
+    return new Response(JSON.stringify({ ...crawlBody, ...page }), { status: 200, headers: { "content-type": "application/json" } });
+  }) as unknown as typeof fetch;
+  return { impl, cursors, limits, calls: () => i };
+}
+
+test("listAllResults follows next_cursor and stops on null", async () => {
+  const { impl, cursors } = pagedFetch([
+    { status: "completed", results: [{ url: "https://a/1" }], next_cursor: "c1" },
+    { status: "completed", results: [{ url: "https://a/2" }], next_cursor: "c2" },
+    { status: "completed", results: [{ url: "https://a/3" }], next_cursor: null },
+  ]);
+  const { results, crawl } = await listAllResults("c_1", { apiKey: "k", fetchImpl: impl });
+  assert.deepEqual(results.map((r) => r.url), ["https://a/1", "https://a/2", "https://a/3"]);
+  assert.deepEqual(cursors, [null, "c1", "c2"]);
+  assert.equal(crawl.status, "completed");
+});
+
+test("listAllResults refuses a running crawl instead of polling forever", async () => {
+  const { impl, calls } = pagedFetch([{ status: "running", results: [], next_cursor: "c1" }]);
+  await assert.rejects(
+    () => listAllResults("c_1", { apiKey: "k", fetchImpl: impl }),
+    (e: unknown) => e instanceof ToolkitError && e.code === "INVALID_USAGE" && /still running/.test(e.message),
+  );
+  assert.equal(calls(), 1);
+});
+
+test("waitForCrawl polls with limit=1 until the status leaves running, backing off", async () => {
+  const { impl, limits, calls } = pagedFetch([
+    { status: "running", results: [], next_cursor: "c" },
+    { status: "running", results: [], next_cursor: "c" },
+    { status: "running", results: [], next_cursor: "c" },
+    { status: "completed", results: [], next_cursor: null },
+  ]);
+  const sleeps: number[] = [];
+  const c = await waitForCrawl("c_1", { apiKey: "k", fetchImpl: impl, sleepImpl: async (ms) => void sleeps.push(ms) });
+  assert.equal(c.status, "completed");
+  assert.equal(calls(), 4);
+  assert.ok(limits.every((l) => l === "1"));
+  assert.deepEqual(sleeps, [2000, 3000, 4500]);
+});
+
+test("waitForCrawl treats failed and stopped as terminal", async () => {
+  for (const status of ["failed", "stopped"]) {
+    const { impl } = pagedFetch([{ status, results: [], next_cursor: null }]);
+    const c = await waitForCrawl("c_1", { apiKey: "k", fetchImpl: impl, sleepImpl: async () => {} });
+    assert.equal(c.status, status);
+  }
+});
+
+test("waitForCrawl times out with CRAWL_TIMEOUT and does not stop the crawl", async () => {
+  const methods: string[] = [];
+  const impl = (async (_url: string, init?: RequestInit) => {
+    methods.push(init?.method ?? "GET");
+    return new Response(JSON.stringify({ ...crawlBody, results: [], next_cursor: "c" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as unknown as typeof fetch;
+  await assert.rejects(
+    () => waitForCrawl("c_1", { apiKey: "k", fetchImpl: impl, timeoutMs: 1, sleepImpl: async () => {} }),
+    (e: unknown) => e instanceof ToolkitError && e.code === "CRAWL_TIMEOUT" && /not stopped/.test(e.likely_cause),
+  );
+  assert.ok(methods.every((m) => m === "GET"), "no stop call on timeout");
+});
