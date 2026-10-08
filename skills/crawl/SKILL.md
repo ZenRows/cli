@@ -1,6 +1,6 @@
 ---
 name: crawl
-description: Discover the URLs behind one start page with Crawl (beta) — start a crawl, wait for it, read the kept URLs and optionally each page's HTML, stop it. Use when the user has a listing or section URL but not the item URLs.
+description: Collect the URLs behind one start page with Crawl — start a crawl, wait for it, read the kept URLs and optionally each page's HTML, stop it. Use when the user has a listing or section URL but not the item URLs.
 version: 0.1.0
 requires_backend_capabilities: [crawl]
 ---
@@ -14,10 +14,9 @@ section) but not the item URLs themselves. Once you have the URLs, read pages
 with `zenrows fetch` / `zenrows extract`, or ask Crawl for each page's HTML
 with `--html`.
 
-> Status: **beta**. This release supports link discovery with URL-only or
-> HTML output. JSON output and pagination discovery are not exposed. An
-> account without Crawl access gets 403 `REQS008` → `CRAWL_NOT_ENABLED`
-> ("Crawl is not enabled for this account"); do not retry it.
+Crawl stays on the start URL's domain. An account without Crawl access gets
+403 `REQS008` → `CRAWL_NOT_ENABLED` ("Crawl is not enabled for this account");
+do not retry it.
 
 ## Start, wait, read
 
@@ -61,14 +60,13 @@ zenrows crawl stop <id>                         # stop it; kept URLs stay readab
 
 A crawl ends `completed` (nothing left, or a cap hit: `stop_reason`
 `max_items` / `max_pages`), `stopped` (you stopped it) or `failed` (`error.code`
-says why: `seed_unreachable`, `no_items_found`, `insufficient_credits`,
-`internal_error`). Only `failed` exits non-zero (`CRAWL_FAILED`).
+and `error.detail` say why). Only `failed` exits non-zero (`CRAWL_FAILED`).
 
 ## Limits
 
-Crawls share the account's active Batch job slots (3 by default). A fourth
-start gets 429 `too_many_crawls` → `CRAWL_QUOTA_EXCEEDED`; nothing was created.
-Wait ~30s for one to finish, or stop one, then retry.
+When the account has too many crawls running, a start gets 429
+`too_many_crawls` → `CRAWL_QUOTA_EXCEEDED`; nothing was created. Retry after
+`Retry-After` (about 30s), or stop one of your crawls first.
 
 Rules: start small (`--depth 1`, low caps) and check the results before a
 deep crawl. Mind the cost ([[cost-control]]). Read errors with

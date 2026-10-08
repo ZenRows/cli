@@ -30,12 +30,12 @@
     },
     "crawl": {
       "key": "crawl",
-      "label": "Crawl (beta)",
-      "status": "beta",
+      "label": "Crawl",
+      "status": "available",
       "command": "zenrows crawl",
       "backend": "Crawl — https://api.zenrows.com/v1/crawls (X-API-Key header; same host as Fetch/Extract)",
       "requiresAuth": true,
-      "notes": "Beta. Link discovery from one start URL with URL-only or HTML output (start/status/wait/results/content/list/stop). JSON output and pagination discovery are not exposed. An account without Crawl access gets 403 REQS008 (CRAWL_NOT_ENABLED). Crawls share the account's 3 active Batch job slots (429 too_many_crawls → CRAWL_QUOTA_EXCEEDED)."
+      "notes": "Follows the links on each page from one start URL up to depth, on the start URL's domain, and returns the URLs it keeps, optionally with each page's HTML (start/status/wait/results/content/list/stop). An account without Crawl access gets 403 REQS008 (CRAWL_NOT_ENABLED). Too many crawls running on the account gives 429 too_many_crawls (CRAWL_QUOTA_EXCEEDED); retry after Retry-After."
     },
     "browser": {
       "key": "browser",

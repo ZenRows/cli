@@ -39,7 +39,7 @@ that endpoint with extraction parameters, not a separate product.
 | `zenrows fetch` | Fetch — retrieve a protected page | **available** — `GET https://api.zenrows.com/v1/` |
 | `zenrows extract` | Extract — `extract=auto` (domain-gated open beta; falls back to Autoparse) / CSS / Markdown | **beta** — same `/v1/` |
 | `zenrows batch` | Batch — fan out over many URLs | beta — cloud works with beta access; local validate/estimate always |
-| `zenrows crawl` | Crawl — discover the URLs behind one start page (URL-only or HTML output) | beta — `https://api.zenrows.com/v1/crawls` |
+| `zenrows crawl` | Crawl — collect the URLs behind one start page, optionally with each page's HTML | **available** — `https://api.zenrows.com/v1/crawls` |
 | `zenrows browser` | Browser Sessions REST API (same backend as MCP `browser_*`) | **available** — escalation-only; bills by bandwidth + time |
 | `zenrows mcp` | MCP server config (remote + local) | **available** |
 | Zenrows CLI | this repo | available |
@@ -157,13 +157,13 @@ An Extract task costs the same as a regular one (1 credit at base tier), so
 keys: `html` (the raw page) and `parsed` (the structured data) — validate a
 sample with `zenrows extract <url>` before running the full batch.
 
-## 10. Crawl (beta)
+## 10. Crawl
 
 Zenrows **Crawl** (`https://api.zenrows.com/v1/crawls`) takes one start URL and
 returns the URLs it finds behind it, optionally with each page's HTML. Use it
-when you know the listing or section but not the item URLs. Crawl is in beta.
-This release supports link discovery with URL-only or HTML output. JSON output
-and pagination discovery are not exposed. An account without Crawl access gets
+when you know the listing or section but not the item URLs. Crawl follows the
+links on each page up to `--depth` hops and stays on the start URL's domain.
+Without `--html` it returns URLs only. An account without Crawl access gets
 `CRAWL_NOT_ENABLED` ("Crawl is not enabled for this account", HTTP 403
 `REQS008`).
 
@@ -182,8 +182,8 @@ zenrows crawl stop <crawl-id>                     # stop a running crawl
 `--depth` (link hops) is required; `--max-items` and `--max-pages` cap the
 crawl (API default 10 each), and `--max-pages` bounds the cost, since each page
 is one fetch. `--include` / `--exclude` are repeatable substring filters on the
-URL. Crawls share the account's active Batch job slots (3 by default); a start
-over the limit gets `CRAWL_QUOTA_EXCEEDED` and creates nothing. Set
+URL. When the account has too many crawls running, a start gets
+`CRAWL_QUOTA_EXCEEDED` and creates nothing; retry after `Retry-After`. Set
 `ZENROWS_CRAWL_API_BASE` to point the CLI at another deployment.
 
 ## 11. Browser Sessions

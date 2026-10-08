@@ -57,9 +57,9 @@ ZENROWS_E2E=1 ZENROWS_CRAWL_API_BASE=https://api.zenrows.com/v1 npm run test:e2e
 ```
 
 To target a local or staging deployment, change `ZENROWS_CRAWL_API_BASE` to
-its `/v1` base. Crawls share the account's 3 active Batch job slots; when they
-are taken the test waits `Retry-After` and retries the start for up to 5
-minutes, so run concurrent e2e runs on one account one at a time.
+its `/v1` base. When the account has too many crawls running, the test waits
+`Retry-After` and retries the start for up to 5 minutes, so run concurrent e2e
+runs on one account one at a time.
 
 ## Rules
 
