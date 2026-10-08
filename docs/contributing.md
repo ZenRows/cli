@@ -37,6 +37,30 @@ npm run build          # tsc → dist/ (for publishing)
 4. Add a skill + recipe/eval and declare `requires_backend_capabilities`.
 5. Add tests. Never fake backend behavior; return a normalized error instead.
 
+## Running the Crawl e2e test
+
+`tests/e2e/crawl.e2e.test.ts` drives the built CLI (`zenrows crawl …`) against a
+live Zenrows API: it starts one small crawl of
+`https://www.scrapingcourse.com/ecommerce/` (depth 1, 3 items, 5 pages, HTML
+output), waits for it, reads its results, one page's HTML and the NDJSON
+export, lists crawls, stops the ended crawl and checks a missing id. It is not
+part of `npm test`, and it skips unless `ZENROWS_E2E=1` and `ZENROWS_API_KEY`
+are both set. It bills a few pages on the key's account.
+
+Set `ZENROWS_API_KEY` to a key with Crawl access, and `ZENROWS_CRAWL_API_BASE`
+to the API base (default `https://api.zenrows.com/v1`). Read the key from a
+file rather than typing it, so it stays out of your shell history:
+
+```bash
+export ZENROWS_API_KEY="$(tr -d '\n' < path/to/api.key)"
+ZENROWS_E2E=1 ZENROWS_CRAWL_API_BASE=https://api.zenrows.com/v1 npm run test:e2e
+```
+
+To target a local or staging deployment, change `ZENROWS_CRAWL_API_BASE` to
+its `/v1` base. Crawls share the account's 3 active Batch job slots; when they
+are taken the test waits `Retry-After` and retries the start for up to 5
+minutes, so run concurrent e2e runs on one account one at a time.
+
 ## Rules
 
 - Never print or persist API keys. Redact secrets in logs and artifacts.
