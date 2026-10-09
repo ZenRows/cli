@@ -169,7 +169,7 @@ the start URL's registrable domain (subdomains count). Without `--html` it retur
 
 ```bash
 zenrows crawl start https://example.com/products/ --depth 1 \
-  --max-items 20 --include /product/ --wait      # start and wait for the end
+  --max-items 20 --include /product/ --follow    # start and wait for the end
 zenrows crawl results <crawl-id> --out urls.jsonl # every kept URL (paginated)
 zenrows crawl start <url> --depth 2 --html        # also fetch each kept page's HTML
 zenrows crawl content <crawl-id> <content-id>     # one page's HTML
@@ -185,7 +185,7 @@ is one fetch. The local policy `max_pages_per_run` caps `--max-pages` (default
 1000). `--html` uses up the page budget: each kept page is one more fetch, and
 `--max-pages` counts it. `--include` / `--exclude` are repeatable substring
 filters on the URL. `results` on a running crawl returns the URLs kept so far,
-with `partial: true`. `--wait` gives up after `--timeout` (default 600000 ms)
+with `partial: true`. `--follow` gives up after `--timeout` (default 600000 ms)
 with `CRAWL_WAIT_TIMEOUT`; the crawl keeps running. Ctrl-C stops the wait, not
 the crawl, and exits 130; resume with `zenrows crawl wait <crawl-id>`.
 

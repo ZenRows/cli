@@ -84,7 +84,7 @@ test("crawl start rejects flags it does not declare, before any network call", a
   await withCrawlWorkspace(
     () => json(crawlBody, 202),
     async (calls) => {
-      for (const flag of ["--pagination", "--discovery", "--json-output", "--follow"]) {
+      for (const flag of ["--pagination", "--discovery", "--json-output", "--wait"]) {
         const { code, out } = await run(["start", "https://example.com/products/", "--depth", "1", flag]);
         assert.equal(code, 1, flag);
         assert.equal(out.error.code, "UNKNOWN_FLAG", flag);
@@ -163,7 +163,7 @@ test("crawl start honors the domain policy and the page cap before any network c
   );
 });
 
-test("crawl start --wait waits for the end and exits 1 with CRAWL_FAILED on a failed crawl", async () => {
+test("crawl start --follow waits for the end and exits 1 with CRAWL_FAILED on a failed crawl", async () => {
   await withCrawlWorkspace(
     (url, init) =>
       init?.method === "POST"
@@ -176,7 +176,7 @@ test("crawl start --wait waits for the end and exits 1 with CRAWL_FAILED on a fa
             next_cursor: null,
           }),
     async (calls) => {
-      const { code, out } = await run(["start", "https://example.com/products/", "--depth", "1", "--wait"]);
+      const { code, out } = await run(["start", "https://example.com/products/", "--depth", "1", "--follow"]);
       assert.equal(code, 1);
       assert.equal(out.ok, false);
       assert.equal(out.status, "failed");
