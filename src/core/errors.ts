@@ -36,11 +36,13 @@ export type ErrorCode =
   | "BATCH_NOT_FOUND"
   | "BATCH_FAILED"
   | "CRAWL_NOT_ENABLED"
-  | "CRAWL_QUOTA_EXCEEDED"
+  | "CRAWL_TOO_MANY_CRAWLS"
   | "CRAWL_NOT_FOUND"
-  | "CRAWL_INVALID"
+  | "CRAWL_CONTENT_NOT_FOUND"
+  | "CRAWL_INVALID_REQUEST"
+  | "CRAWL_REQUEST_IN_FLIGHT"
   | "CRAWL_FAILED"
-  | "CRAWL_TIMEOUT"
+  | "CRAWL_WAIT_TIMEOUT"
   | "PLUGIN_UNSUPPORTED"
   | "MCP_CLIENT_UNSUPPORTED"
   | "ASSET_NOT_FOUND"
@@ -54,6 +56,12 @@ export interface ToolkitErrorShape {
   likely_cause: string;
   next_action: string;
   suggested_commands?: string[];
+  /** The API's own `code`, when the error came from an API answer that had one. */
+  server_code?: string;
+  /** The crawl the error is about, once it exists. */
+  crawl_id?: string;
+  /** Seconds to wait before a retry (the `Retry-After` header). */
+  retry_after?: number;
 }
 
 export class ToolkitError extends Error {
@@ -61,6 +69,9 @@ export class ToolkitError extends Error {
   readonly likely_cause: string;
   readonly next_action: string;
   readonly suggested_commands: string[];
+  readonly server_code?: string;
+  readonly crawl_id?: string;
+  readonly retry_after?: number;
 
   constructor(shape: ToolkitErrorShape) {
     super(shape.message);
@@ -69,6 +80,9 @@ export class ToolkitError extends Error {
     this.likely_cause = shape.likely_cause;
     this.next_action = shape.next_action;
     this.suggested_commands = shape.suggested_commands ?? [];
+    this.server_code = shape.server_code;
+    this.crawl_id = shape.crawl_id;
+    this.retry_after = shape.retry_after;
   }
 
   toJSON(): ToolkitErrorShape {
@@ -78,6 +92,9 @@ export class ToolkitError extends Error {
       likely_cause: this.likely_cause,
       next_action: this.next_action,
       suggested_commands: this.suggested_commands,
+      ...(this.server_code ? { server_code: this.server_code } : {}),
+      ...(this.crawl_id ? { crawl_id: this.crawl_id } : {}),
+      ...(this.retry_after !== undefined ? { retry_after: this.retry_after } : {}),
     };
   }
 }

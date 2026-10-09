@@ -71,7 +71,7 @@ test("zenrows crawl end to end against a live API", { skip, timeout: 20 * 60_000
   const dir = mkdtempSync(join(tmpdir(), "zr-crawl-e2e-"));
   try {
     // 1. Start a small crawl and wait for it. Other runs may hold the account's
-    // active-crawl slots: on CRAWL_QUOTA_EXCEEDED wait Retry-After and try again.
+    // active-job slots: on CRAWL_TOO_MANY_CRAWLS wait retry_after and try again.
     const deadline = Date.now() + QUOTA_RETRY_MS;
     let start: CliResult;
     for (;;) {
@@ -79,10 +79,10 @@ test("zenrows crawl end to end against a live API", { skip, timeout: 20 * 60_000
         "crawl", "start", START_URL!,
         "--depth", "1", "--max-items", "3", "--max-pages", "5",
         ...(INCLUDE ? ["--include", INCLUDE] : []),
-        "--html", "--follow", "--timeout", "600000",
+        "--html", "--wait", "--timeout", "600000",
       ]);
-      if (start.out.error?.code !== "CRAWL_QUOTA_EXCEEDED" || Date.now() > deadline) break;
-      const wait = Number(/Retry after (\d+)s/.exec(start.out.error.likely_cause)?.[1] ?? 30);
+      if (start.out.error?.code !== "CRAWL_TOO_MANY_CRAWLS" || Date.now() > deadline) break;
+      const wait = Number(start.out.error.retry_after ?? 30);
       log(`too_many_crawls: retrying start in ${wait}s`);
       await new Promise((r) => setTimeout(r, wait * 1000));
     }

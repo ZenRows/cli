@@ -1,9 +1,9 @@
 /**
- * `zenrows crawl` — Crawl API.
+ * `zenrows crawl` — Crawl API (status: beta).
  *
  * Give Crawl one start URL and read back the URLs it finds behind it, optionally
  * with each page's HTML. A crawl is an async job: `start` returns at once
- * (or polls with `--follow`), then `status` / `wait` / `results` / `content`
+ * (or polls with `--wait`), then `status` / `wait` / `results` / `content`
  * read it and `stop` ends it. An account without Crawl access gets 403 REQS008
  * → CRAWL_NOT_ENABLED.
  */
@@ -24,6 +24,7 @@ import {
   stopCrawl,
   waitForCrawl,
   type Crawl,
+  type CrawlResult,
   type CrawlStop,
   type CreateCrawlParams,
 } from "../../core/crawl-api.ts";
@@ -39,25 +40,27 @@ const MAX_LIMIT = 100_000;
 
 export const crawl: Command = {
   name: "crawl",
-  summary: "Crawl a site from one start URL and collect the URLs behind it.",
+  summary: "Crawl a site from one start URL and collect the URLs behind it (beta).",
   usage:
     "zenrows crawl <start <url> --depth N|status <id>|results <id>|content <id> <content_id>|list|stop <id>|wait <id>>",
   help: [
-    "Cloud (needs a key with Crawl access):",
+    "Crawl is in beta. Cloud (needs a key with Crawl access):",
     "  start <url> --depth <n> [flags]  start a crawl from one URL (returns at once)",
     "    --depth <n>                    link hops to follow from the start URL (1-100000, required)",
     "    --max-items <n>                stop after keeping n URLs (API default 10)",
-    "    --max-pages <n>                stop after fetching n pages (API default 10; bounds cost)",
+    "    --max-pages <n>                stop after fetching n pages (API default 10; bounds cost);",
+    "                                   the local policy max_pages_per_run caps it (default 1000)",
     "    --include <pattern>            keep only URLs containing this substring (repeatable)",
     "    --exclude <pattern>            drop URLs containing this substring (repeatable)",
-    "    --html                         also fetch each kept URL's page HTML (read with `content`)",
-    "    --follow                       poll until the crawl ends (alias: --wait)",
-    "    --timeout <ms>                 with --follow: give up waiting after ms (default 600000)",
+    "    --html                         also fetch each kept URL's page HTML (read with `content`);",
+    "                                   each kept page is one more fetch counted by --max-pages",
+    "    --wait                         poll until the crawl ends (Ctrl-C stops the wait, not the crawl)",
+    "    --timeout <ms>                 with --wait: give up waiting after ms (default 600000)",
     "    --idempotency-key <key>        make a retried start create no second crawl",
     "    --no-signup                    do not auto-create a Free plan account if no key exists",
     "  status <id>                      show status, coverage, stop reason / error",
     "  wait <id> [--timeout <ms>]       poll until the crawl ends (it is not stopped on timeout)",
-    "  results <id>                     all kept URLs (crawl must have ended); paginated",
+    "  results <id>                     all kept URLs; on a running crawl, those kept so far (partial)",
     "    --out <file>                   write results as JSONL instead of printing",
     "    --cursor <c> [--limit <n>]     read one page only (works while running; prints next_cursor)",
     "    --download                     fetch the NDJSON export (with page HTML for --html crawls)",
@@ -65,7 +68,7 @@ export const crawl: Command = {
     "  content <id> <content_id>        print one kept URL's page (content_id or content_url)",
     "    --out <file>                   write it to a file instead",
     "  list [--limit <n>] [--cursor c]  list your crawls, newest first",
-    "  stop <id>                        stop a running crawl (idempotent)",
+    "  stop <id>                        stop a running crawl (an ended crawl answers as it ended)",
     "  --json                           print structured output",
   ].join("\n"),
   async run(argv: string[], ctx: RunContext): Promise<number> {
@@ -111,15 +114,14 @@ async function startCmd(rest: string[], ctx: RunContext): Promise<number> {
     include: { type: "string", multiple: true },
     exclude: { type: "string", multiple: true },
     html: { type: "boolean" },
-    follow: { type: "boolean" },
-    wait: { type: "boolean" }, // alias for --follow
+    wait: { type: "boolean" },
     timeout: { type: "string" },
     "idempotency-key": { type: "string" },
     "no-signup": { type: "boolean" },
     json: { type: "boolean" },
   });
   const json = ctx.json || values.json === true;
-  const follow = values.follow === true || values.wait === true;
+  const wait = values.wait === true;
   const url = positionals[0];
   if (!url) {
     throw new ToolkitError({
@@ -173,7 +175,7 @@ async function startCmd(rest: string[], ctx: RunContext): Promise<number> {
   log.step(`Starting crawl of ${url} (depth ${depth})…`);
   try {
     const created = await createCrawl(params, { apiKey, idempotencyKey });
-    const finished: Crawl = follow ? await waitForCrawl(created.crawl_id, { apiKey, timeoutMs }) : created;
+    const finished: Crawl = wait ? await waitUntilEnd(created.crawl_id, { apiKey, timeoutMs }) : created;
     const failure = crawlFailure(finished);
     const runDir = writeRun({
       runId,
@@ -190,7 +192,7 @@ async function startCmd(rest: string[], ctx: RunContext): Promise<number> {
     const code = printCrawl(finished, json, `Started crawl ${created.crawl_id}`);
     if (!json) {
       if (runDir) log.dim(`  artifact: ${runDir}`);
-      if (!follow) log.dim(`  next: zenrows crawl wait ${created.crawl_id}`);
+      if (!wait) log.dim(`  next: zenrows crawl wait ${created.crawl_id}`);
     }
     return code;
   } catch (err) {
@@ -224,7 +226,7 @@ async function waitCmd(rest: string[], ctx: RunContext): Promise<number> {
   const timeoutMs = normalizeTimeout(values.timeout);
   assertUsable("crawl");
   const apiKey = requireApiKey();
-  const c = await waitForCrawl(id, { apiKey, timeoutMs });
+  const c = await waitUntilEnd(id, { apiKey, timeoutMs });
   return printCrawl(c, ctx.json || values.json === true, `Crawl ${id} finished`);
 }
 
@@ -262,31 +264,38 @@ async function resultsCmd(rest: string[], ctx: RunContext): Promise<number> {
   // One page, as the API returns it — the way to follow a crawl while it runs.
   if (cursor !== undefined || limit !== undefined) {
     const page = await getCrawl(id, { apiKey, cursor, limit });
-    const body = { ok: true, crawlId: id, status: page.status, count: page.results.length, results: page.results, next_cursor: page.next_cursor };
-    if (outFile) {
-      writeOut(outFile, toJsonl(page.results));
-      log.success(`Wrote ${page.results.length} result(s) → ${outFile}`);
-      log.info(`next_cursor: ${page.next_cursor ?? "null (last page)"}`);
-    } else if (json) {
-      log.out(JSON.stringify(body, null, 2));
-    } else {
-      log.info(`${page.results.length} result(s) for crawl ${id} (status: ${page.status}):`);
-      log.out(toJsonl(page.results).trimEnd());
-      log.info(`next_cursor: ${page.next_cursor ?? "null (last page)"}`);
-    }
-    return 0;
+    return printResults(id, page.status, page.results, { outFile, json, next_cursor: page.next_cursor ?? null });
   }
 
-  const { crawl: c, results } = await listAllResults(id, { apiKey });
-  if (outFile) {
-    writeOut(outFile, toJsonl(results));
-    log.success(`Wrote ${results.length} result(s) → ${outFile}`);
-  } else if (json) {
-    log.out(JSON.stringify({ ok: true, crawlId: id, status: c.status, count: results.length, results }, null, 2));
+  const { crawl: c, results, partial } = await listAllResults(id, { apiKey });
+  return printResults(id, c.status, results, { outFile, json, partial });
+}
+
+/** Write or print results. Under --json, always print the envelope (`file` replaces `results` with --out). */
+function printResults(
+  id: string,
+  status: string,
+  results: CrawlResult[],
+  o: { outFile?: string; json: boolean; partial?: boolean; next_cursor?: string | null },
+): number {
+  const extra = {
+    ...(o.partial !== undefined ? { partial: o.partial } : {}),
+    ...(o.next_cursor !== undefined ? { next_cursor: o.next_cursor } : {}),
+  };
+  if (o.outFile) writeOut(o.outFile, toJsonl(results));
+  if (o.json) {
+    const rows = o.outFile ? { file: o.outFile } : { results };
+    log.out(JSON.stringify({ ok: true, crawlId: id, status, count: results.length, ...rows, ...extra }, null, 2));
+    return 0;
+  }
+  if (o.outFile) {
+    log.success(`Wrote ${results.length} result(s) → ${o.outFile}`);
   } else {
-    log.info(`${results.length} result(s) for crawl ${id} (status: ${c.status}):`);
+    log.info(`${results.length} result(s) for crawl ${id} (status: ${status}):`);
     log.out(toJsonl(results).trimEnd());
   }
+  if (o.partial) log.warn("  The crawl is still running: these results are partial. Read them again once it ends.");
+  if (o.next_cursor !== undefined) log.info(`next_cursor: ${o.next_cursor ?? "null (last page)"}`);
   return 0;
 }
 
@@ -356,7 +365,26 @@ async function stopCmd(rest: string[], ctx: RunContext): Promise<number> {
   assertUsable("crawl");
   const apiKey = requireApiKey();
   const s = await stopCrawl(id, { apiKey });
-  return printCrawl(s, ctx.json || values.json === true, `Stopped crawl ${id}`);
+  const headline = s.status === "stopped" ? `Stopped crawl ${id}` : `Nothing to stop: crawl ${id} had already ended`;
+  return printCrawl(s, ctx.json || values.json === true, headline);
+}
+
+/**
+ * Wait for a crawl to end. Ctrl-C ends the wait, not the crawl: say so, give
+ * the command that resumes the wait, and exit 130 as shells do on SIGINT.
+ */
+async function waitUntilEnd(id: string, opts: { apiKey: string; timeoutMs?: number }): Promise<Crawl> {
+  const onSigint = () => {
+    log.warn(`Stopped waiting. Crawl ${id} is still running; it was not stopped.`);
+    log.dim(`  resume: zenrows crawl wait ${id}`);
+    process.exit(130);
+  };
+  process.once("SIGINT", onSigint);
+  try {
+    return await waitForCrawl(id, opts);
+  } finally {
+    process.off("SIGINT", onSigint);
+  }
 }
 
 /**
@@ -379,6 +407,8 @@ export function crawlFailure(c: Crawl | CrawlStop): ToolkitError | null {
     likely_cause: why || "The crawl ended in status failed without a reason.",
     next_action: (code && next[code]) || "Read the error, fix the cause, then start a new crawl.",
     suggested_commands: [`zenrows crawl status ${c.crawl_id}`],
+    server_code: code,
+    crawl_id: c.crawl_id,
   });
 }
 

@@ -39,7 +39,7 @@ that endpoint with extraction parameters, not a separate product.
 | `zenrows fetch` | Fetch — retrieve a protected page | **available** — `GET https://api.zenrows.com/v1/` |
 | `zenrows extract` | Extract — `extract=auto` (domain-gated open beta; falls back to Autoparse) / CSS / Markdown | **beta** — same `/v1/` |
 | `zenrows batch` | Batch — fan out over many URLs | beta — cloud works with beta access; local validate/estimate always |
-| `zenrows crawl` | Crawl — collect the URLs behind one start page, optionally with each page's HTML | **available** — `https://api.zenrows.com/v1/crawls` |
+| `zenrows crawl` | Crawl (beta) — collect the URLs behind one start page, optionally with each page's HTML | beta — `https://api.zenrows.com/v1/crawls` |
 | `zenrows browser` | Browser Sessions REST API (same backend as MCP `browser_*`) | **available** — escalation-only; bills by bandwidth + time |
 | `zenrows mcp` | MCP server config (remote + local) | **available** |
 | Zenrows CLI | this repo | available |
@@ -157,19 +157,19 @@ An Extract task costs the same as a regular one (1 credit at base tier), so
 keys: `html` (the raw page) and `parsed` (the structured data) — validate a
 sample with `zenrows extract <url>` before running the full batch.
 
-## 10. Crawl
+## 10. Crawl (beta)
 
-Zenrows **Crawl** (`https://api.zenrows.com/v1/crawls`) takes one start URL and
-returns the URLs it finds behind it, optionally with each page's HTML. Use it
-when you know the listing or section but not the item URLs. Crawl follows the
-links on each page up to `--depth` hops and stays on the start URL's domain.
-Without `--html` it returns URLs only. An account without Crawl access gets
+Zenrows **Crawl** is in beta. Crawl (`https://api.zenrows.com/v1/crawls`)
+takes one start URL and returns the URLs it finds behind it, optionally with
+each page's HTML. Use it when you know the listing or section but not the item
+URLs. Crawl follows the links on each page up to `--depth` hops and stays on
+the start URL's registrable domain (subdomains count). Without `--html` it returns URLs only. An account without Crawl access gets
 `CRAWL_NOT_ENABLED` ("Crawl is not enabled for this account", HTTP 403
 `REQS008`).
 
 ```bash
 zenrows crawl start https://example.com/products/ --depth 1 \
-  --max-items 20 --include /product/ --follow    # start and wait for the end
+  --max-items 20 --include /product/ --wait      # start and wait for the end
 zenrows crawl results <crawl-id> --out urls.jsonl # every kept URL (paginated)
 zenrows crawl start <url> --depth 2 --html        # also fetch each kept page's HTML
 zenrows crawl content <crawl-id> <content-id>     # one page's HTML
@@ -181,10 +181,22 @@ zenrows crawl stop <crawl-id>                     # stop a running crawl
 
 `--depth` (link hops) is required; `--max-items` and `--max-pages` cap the
 crawl (API default 10 each), and `--max-pages` bounds the cost, since each page
-is one fetch. `--include` / `--exclude` are repeatable substring filters on the
-URL. When the account has too many crawls running, a start gets
-`CRAWL_QUOTA_EXCEEDED` and creates nothing; retry after `Retry-After`. Set
-`ZENROWS_CRAWL_API_BASE` to point the CLI at another deployment.
+is one fetch. The local policy `max_pages_per_run` caps `--max-pages` (default
+1000). `--html` uses up the page budget: each kept page is one more fetch, and
+`--max-pages` counts it. `--include` / `--exclude` are repeatable substring
+filters on the URL. `results` on a running crawl returns the URLs kept so far,
+with `partial: true`. `--wait` gives up after `--timeout` (default 600000 ms)
+with `CRAWL_WAIT_TIMEOUT`; the crawl keeps running. Ctrl-C stops the wait, not
+the crawl, and exits 130; resume with `zenrows crawl wait <crawl-id>`.
+
+Errors carry the API's code as `server_code`, and `crawl_id` once the crawl
+exists. When the account has reached its limit of active jobs (3 by default),
+shared with its Batch jobs, a start gets `CRAWL_TOO_MANY_CRAWLS` and creates
+nothing; retry after `retry_after` seconds. Other codes: `CRAWL_INVALID_REQUEST`
+(400/422, do not retry as is), `CRAWL_REQUEST_IN_FLIGHT` (409, retry once the
+first request ends), `CRAWL_NOT_FOUND`, `CRAWL_CONTENT_NOT_FOUND` and
+`CRAWL_FAILED`. Set `ZENROWS_CRAWL_API_BASE` to point the CLI at another
+deployment.
 
 ## 11. Browser Sessions
 

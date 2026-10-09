@@ -31,11 +31,11 @@
     "crawl": {
       "key": "crawl",
       "label": "Crawl",
-      "status": "available",
+      "status": "beta",
       "command": "zenrows crawl",
       "backend": "Crawl — https://api.zenrows.com/v1/crawls (X-API-Key header; same host as Fetch/Extract)",
       "requiresAuth": true,
-      "notes": "Follows the links on each page from one start URL up to depth, on the start URL's domain, and returns the URLs it keeps, optionally with each page's HTML (start/status/wait/results/content/list/stop). An account without Crawl access gets 403 REQS008 (CRAWL_NOT_ENABLED). Too many crawls running on the account gives 429 too_many_crawls (CRAWL_QUOTA_EXCEEDED); retry after Retry-After."
+      "notes": "Beta. Follows the links on each page from one start URL up to depth, on the start URL's registrable domain (subdomains count), and returns the URLs it keeps, optionally with each page's HTML (start/status/wait/results/content/list/stop). An account without Crawl access gets 403 REQS008 (CRAWL_NOT_ENABLED). When the account has reached its limit of active jobs (3 by default), shared with its Batch jobs, a start gets 429 too_many_crawls (CRAWL_TOO_MANY_CRAWLS); retry after retry_after seconds."
     },
     "browser": {
       "key": "browser",

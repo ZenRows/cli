@@ -47,8 +47,8 @@
     {
       "name": "crawl",
       "type": "skill",
-      "description": "Collect the URLs behind one start page with Crawl: start, wait, read results and page HTML, stop.",
-      "status": "available",
+      "description": "Collect the URLs behind one start page with Crawl (beta): start, wait, read results and page HTML, stop.",
+      "status": "beta",
       "requires_backend_capabilities": ["crawl"],
       "requires_auth": true,
       "version": "0.1.0",

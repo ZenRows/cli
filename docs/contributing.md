@@ -65,8 +65,9 @@ ZENROWS_E2E=1 ZENROWS_E2E_CRAWL_URL=https://example.com/products/ \
 ```
 
 To target a local or staging deployment, set `ZENROWS_CRAWL_API_BASE` to its
-`/v1` base. When the account has too many crawls running, the test waits
-`Retry-After` and retries the start for up to 5 minutes, so run concurrent e2e
+`/v1` base. When the account has reached its limit of active jobs (3 by
+default, shared with its Batch jobs), the test waits `retry_after` seconds and
+retries the start for up to 5 minutes, so run concurrent e2e
 runs on one account one at a time.
 
 ## Rules
