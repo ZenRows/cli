@@ -1,13 +1,13 @@
 ---
 name: crawl
-description: Collect the URLs behind one start page with Crawl (beta): create a crawl, wait for it, read the kept URLs and optionally each page's HTML, stop it. Use when the user has a listing or section URL but not the item URLs.
+description: Collect the URLs behind one start page with Crawl (new): create a crawl, wait for it, read the kept URLs and optionally each page's HTML, stop it. Use when the user has a listing or section URL but not the item URLs.
 version: 0.1.0
 requires_backend_capabilities: [crawl]
 ---
 
-# Crawl (beta)
+# Crawl (new)
 
-Crawl is in beta. Give Crawl one start URL; it follows the links on that page (and, with a
+Give Crawl one start URL; it follows the links on that page (and, with a
 higher depth, on the pages behind it) and returns the URLs it keeps. Use it
 when you know where the items live (a category page, a blog index, a docs
 section) but not the item URLs themselves. Once you have the URLs, read pages

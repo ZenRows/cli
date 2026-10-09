@@ -74,7 +74,7 @@ Run `zenrows status` for the live capability matrix. As of this toolkit:
 | Protected Fetch | `zenrows fetch` | available (`GET /v1/`) |
 | Extract (extract=auto / Autoparse/CSS/Markdown) | `zenrows extract` | beta (same `/v1/`; extract=auto falls back to autoparse) |
 | Batch | `zenrows batch` | beta — runs cloud jobs (create/status/results); cheapest path at scale. Estimate specs locally with no key |
-| Crawl | `zenrows crawl` | beta — collect the URLs behind one start page, optionally with each page's HTML |
+| Crawl | `zenrows crawl` | new — collect the URLs behind one start page, optionally with each page's HTML |
 | Browser | `zenrows browser` | available (Browser Sessions REST API / MCP) |
 | MCP | `zenrows mcp` | available (remote + local server) |
 

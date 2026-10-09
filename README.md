@@ -39,7 +39,7 @@ that endpoint with extraction parameters, not a separate product.
 | `zenrows fetch` | Fetch — retrieve a protected page | **available** — `GET https://api.zenrows.com/v1/` |
 | `zenrows extract` | Extract — `extract=auto` (domain-gated open beta; falls back to Autoparse) / CSS / Markdown | **beta** — same `/v1/` |
 | `zenrows batch` | Batch — fan out over many URLs | beta — cloud works with beta access; local validate/estimate always |
-| `zenrows crawl` | Crawl (beta) — collect the URLs behind one start page, optionally with each page's HTML | beta — `https://api.zenrows.com/v1/crawls` |
+| `zenrows crawl` | Crawl (new) — collect the URLs behind one start page, optionally with each page's HTML | **available** — `https://api.zenrows.com/v1/crawls` |
 | `zenrows browser` | Browser Sessions REST API (same backend as MCP `browser_*`) | **available** — escalation-only; bills by bandwidth + time |
 | `zenrows mcp` | MCP server config (remote + local) | **available** |
 | Zenrows CLI | this repo | available |
@@ -157,9 +157,11 @@ An Extract task costs the same as a regular one (1 credit at base tier), so
 keys: `html` (the raw page) and `parsed` (the structured data) — validate a
 sample with `zenrows extract <url>` before running the full batch.
 
-## 10. Crawl (beta)
+## 10. Crawl (new)
 
-Zenrows **Crawl** is in beta. Crawl (`https://api.zenrows.com/v1/crawls`)
+Crawl is still evolving: new features are coming, limits may be tuned, and the changelog announces each change.
+
+Crawl (`https://api.zenrows.com/v1/crawls`)
 takes one start URL and returns the URLs it finds behind it, optionally with
 each page's HTML. Use it when you know the listing or section but not the item
 URLs. Crawl follows the links on each page up to `--depth` hops and stays on
