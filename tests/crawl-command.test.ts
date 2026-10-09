@@ -1,4 +1,4 @@
-import { test } from "node:test";
+import { mock, test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -84,7 +84,7 @@ test("crawl start rejects flags it does not declare, before any network call", a
   await withCrawlWorkspace(
     () => json(crawlBody, 202),
     async (calls) => {
-      for (const flag of ["--pagination", "--discovery", "--json-output"]) {
+      for (const flag of ["--pagination", "--discovery", "--json-output", "--follow"]) {
         const { code, out } = await run(["start", "https://example.com/products/", "--depth", "1", flag]);
         assert.equal(code, 1, flag);
         assert.equal(out.error.code, "UNKNOWN_FLAG", flag);
@@ -163,7 +163,7 @@ test("crawl start honors the domain policy and the page cap before any network c
   );
 });
 
-test("crawl start --follow waits for the end and exits 1 with CRAWL_FAILED on a failed crawl", async () => {
+test("crawl start --wait waits for the end and exits 1 with CRAWL_FAILED on a failed crawl", async () => {
   await withCrawlWorkspace(
     (url, init) =>
       init?.method === "POST"
@@ -176,12 +176,14 @@ test("crawl start --follow waits for the end and exits 1 with CRAWL_FAILED on a 
             next_cursor: null,
           }),
     async (calls) => {
-      const { code, out } = await run(["start", "https://example.com/products/", "--depth", "1", "--follow"]);
+      const { code, out } = await run(["start", "https://example.com/products/", "--depth", "1", "--wait"]);
       assert.equal(code, 1);
       assert.equal(out.ok, false);
       assert.equal(out.status, "failed");
       assert.equal(out.error.code, "CRAWL_FAILED");
       assert.match(out.error.likely_cause, /seed_unreachable/);
+      assert.equal(out.error.server_code, "seed_unreachable");
+      assert.equal(out.error.crawl_id, "c_1");
       assert.equal(calls[1]!.url.searchParams.get("limit"), "1");
       assert.equal(out.crawl.results, undefined, "status output carries no partial result page");
     },
@@ -246,9 +248,29 @@ test("crawl results reads every page of an ended crawl and writes JSONL with --o
       assert.equal(out.count, 2);
       assert.deepEqual(out.results.map((r: { url: string }) => r.url), ["https://example.com/product/1", "https://example.com/product/2"]);
 
+      assert.equal(out.partial, false);
+
       const file = join(process.cwd(), "urls.jsonl");
-      await captureOut(() => crawl.run(["results", "c_1", "--out", file], ctx));
+      const written = await run(["results", "c_1", "--out", file]);
+      assert.deepEqual(written.out, { ok: true, crawlId: "c_1", status: "completed", count: 2, file, partial: false });
       assert.equal(readFileSync(file, "utf8"), '{"url":"https://example.com/product/1"}\n{"url":"https://example.com/product/2"}\n');
+    },
+  );
+});
+
+test("crawl results on a running crawl returns what is kept with partial: true", async () => {
+  const pages: Record<string, unknown> = {
+    "": { ...crawlBody, results: [{ url: "https://example.com/product/1" }], next_cursor: "p2" },
+    p2: { ...crawlBody, results: [], next_cursor: "p2" },
+  };
+  await withCrawlWorkspace(
+    (url) => json(pages[url.searchParams.get("cursor") ?? ""]),
+    async () => {
+      const { code, out } = await run(["results", "c_1"]);
+      assert.equal(code, 0);
+      assert.equal(out.status, "running");
+      assert.equal(out.partial, true);
+      assert.equal(out.count, 1);
     },
   );
 });
@@ -315,6 +337,61 @@ test("crawl list and stop call the right endpoints", async () => {
       assert.equal(calls[1]!.url.pathname, "/v1/crawls/c_1/stop");
     },
   );
+});
+
+/** Capture stderr (human output) for the duration of `fn`. */
+async function captureErr(fn: () => unknown): Promise<string> {
+  const orig = process.stderr.write.bind(process.stderr);
+  let buf = "";
+  process.stderr.write = ((s: string | Uint8Array) => {
+    buf += typeof s === "string" ? s : Buffer.from(s).toString();
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    await fn();
+  } finally {
+    process.stderr.write = orig;
+  }
+  return buf;
+}
+
+test("crawl stop on an ended crawl prints its real status, not Stopped", async () => {
+  await withCrawlWorkspace(
+    () => json({ crawl_id: "c_1", status: "completed", stop_reason: "max_items" }),
+    async () => {
+      let code = -1;
+      const err = await captureErr(async () => {
+        code = await crawl.run(["stop", "c_1"], { json: false, yes: false });
+      });
+      assert.equal(code, 0);
+      assert.match(err, /already ended · status: completed/);
+      assert.doesNotMatch(err, /Stopped crawl/);
+    },
+  );
+});
+
+test("Ctrl-C during crawl wait says the crawl keeps running and exits 130", async () => {
+  let interrupted = false;
+  const exit = mock.method(process, "exit", () => {
+    interrupted = true;
+  });
+  try {
+    await withCrawlWorkspace(
+      () => {
+        if (!interrupted) setImmediate(() => process.emit("SIGINT"));
+        return json({ ...crawlBody, status: interrupted ? "completed" : "running", results: [], next_cursor: null });
+      },
+      async () => {
+        const err = await captureErr(() => crawl.run(["wait", "c_1"], { json: false, yes: false }));
+        assert.deepEqual(exit.mock.calls[0]?.arguments, [130]);
+        assert.match(err, /c_1 is still running/);
+        assert.match(err, /zenrows crawl wait c_1/);
+        assert.equal(process.listenerCount("SIGINT"), 0, "the wait removes its SIGINT handler");
+      },
+    );
+  } finally {
+    exit.mock.restore();
+  }
 });
 
 test("unknown crawl subcommand is INVALID_USAGE", async () => {

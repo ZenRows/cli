@@ -154,7 +154,19 @@ test("403 REQS008 maps to CRAWL_NOT_ENABLED with the API's wording", async () =>
   await assert.rejects(
     () => createCrawl({ url: "https://example.com/products/", depth: 1 }, { apiKey: "k", fetchImpl: impl }),
     (e: unknown) =>
-      e instanceof ToolkitError && e.code === "CRAWL_NOT_ENABLED" && e.message === "Crawl is not enabled for this account.",
+      e instanceof ToolkitError &&
+      e.code === "CRAWL_NOT_ENABLED" &&
+      e.message === "Crawl is not enabled for this account." &&
+      e.server_code === "REQS008" &&
+      e.crawl_id === undefined,
+  );
+});
+
+test("any other 403 maps to CRAWL_FAILED", async () => {
+  const { impl } = problem(403, "REQS001");
+  await assert.rejects(
+    () => createCrawl({ url: "https://example.com/products/", depth: 1 }, { apiKey: "k", fetchImpl: impl }),
+    (e: unknown) => e instanceof ToolkitError && e.code === "CRAWL_FAILED" && e.server_code === "REQS001",
   );
 });
 
@@ -162,37 +174,71 @@ test("404 crawl_not_found maps to CRAWL_NOT_FOUND", async () => {
   const { impl } = problem(404, "crawl_not_found");
   await assert.rejects(
     () => getCrawl("c_nope", { apiKey: "k", fetchImpl: impl }),
-    (e: unknown) => e instanceof ToolkitError && e.code === "CRAWL_NOT_FOUND" && /crawl_not_found/.test(e.likely_cause),
+    (e: unknown) =>
+      e instanceof ToolkitError &&
+      e.code === "CRAWL_NOT_FOUND" &&
+      e.server_code === "crawl_not_found" &&
+      e.crawl_id === "c_nope",
   );
 });
 
-test("404 content_not_found maps to CRAWL_NOT_FOUND with content guidance", async () => {
+test("404 content_not_found maps to CRAWL_CONTENT_NOT_FOUND with content guidance", async () => {
   const { impl } = problem(404, "content_not_found");
   await assert.rejects(
     () => getCrawlContent("c_1", "ct_x", { apiKey: "k", fetchImpl: impl }),
-    (e: unknown) => e instanceof ToolkitError && e.code === "CRAWL_NOT_FOUND" && /content_status/.test(e.next_action),
+    (e: unknown) =>
+      e instanceof ToolkitError && e.code === "CRAWL_CONTENT_NOT_FOUND" && /content_status/.test(e.next_action) && e.crawl_id === "c_1",
   );
 });
 
-test("422 invalid_parameter and 400 unknown_parameter map to CRAWL_INVALID", async () => {
+test("400 and 422 map to CRAWL_INVALID_REQUEST with the server code", async () => {
   for (const [status, code] of [
     [422, "invalid_parameter"],
     [400, "unknown_parameter"],
-    [409, "idempotency_request_in_flight"],
   ] as const) {
     const { impl } = problem(status, code, "'depth' is out of range.");
     await assert.rejects(
       () => createCrawl({ url: "https://example.com/products/", depth: 1 }, { apiKey: "k", fetchImpl: impl }),
-      (e: unknown) => e instanceof ToolkitError && e.code === "CRAWL_INVALID" && e.likely_cause.includes(code),
+      (e: unknown) => e instanceof ToolkitError && e.code === "CRAWL_INVALID_REQUEST" && e.server_code === code,
     );
   }
 });
 
-test("429 too_many_crawls maps to CRAWL_QUOTA_EXCEEDED and carries Retry-After", async () => {
-  const { impl } = problem(429, "too_many_crawls", "Too many crawls.", { "retry-after": "30" });
+test("422 idempotency_key_reused says to send a new key, not to retry as is", async () => {
+  const { impl } = problem(422, "idempotency_key_reused");
   await assert.rejects(
-    () => createCrawl({ url: "https://example.com/products/", depth: 1 }, { apiKey: "k", fetchImpl: impl }),
-    (e: unknown) => e instanceof ToolkitError && e.code === "CRAWL_QUOTA_EXCEEDED" && /Retry after 30s/.test(e.likely_cause),
+    () => createCrawl({ url: "https://example.com/products/", depth: 1 }, { apiKey: "k", fetchImpl: impl, idempotencyKey: "k1" }),
+    (e: unknown) => e instanceof ToolkitError && e.code === "CRAWL_INVALID_REQUEST" && /new key, or no key/.test(e.next_action),
+  );
+});
+
+test("409 maps to CRAWL_REQUEST_IN_FLIGHT", async () => {
+  const { impl } = problem(409, "idempotency_request_in_flight");
+  await assert.rejects(
+    () => createCrawl({ url: "https://example.com/products/", depth: 1 }, { apiKey: "k", fetchImpl: impl, idempotencyKey: "k1" }),
+    (e: unknown) => e instanceof ToolkitError && e.code === "CRAWL_REQUEST_IN_FLIGHT" && /finished/.test(e.next_action),
+  );
+});
+
+test("429 too_many_crawls maps to CRAWL_TOO_MANY_CRAWLS with retry_after and no retry", async () => {
+  const { impl, calls } = problem(429, "too_many_crawls", "Too many crawls.", { "retry-after": "30" });
+  await assert.rejects(
+    () => createCrawl({ url: "https://example.com/products/", depth: 1 }, { apiKey: "k", fetchImpl: impl, idempotencyKey: "k1" }),
+    (e: unknown) =>
+      e instanceof ToolkitError &&
+      e.code === "CRAWL_TOO_MANY_CRAWLS" &&
+      e.retry_after === 30 &&
+      e.server_code === "too_many_crawls" &&
+      /shared with its Batch jobs/.test(e.likely_cause),
+  );
+  assert.equal(calls.length, 1);
+});
+
+test("an error body without a code leaves server_code unset", async () => {
+  const { impl } = stubFetch(500, "upstream exploded");
+  await assert.rejects(
+    () => getCrawl("c_1", { apiKey: "k", fetchImpl: impl }),
+    (e: unknown) => e instanceof ToolkitError && e.code === "CRAWL_FAILED" && !("server_code" in e.toJSON()),
   );
 });
 
@@ -207,7 +253,10 @@ test("a transport failure maps to BACKEND_UNAVAILABLE", async () => {
   const impl = (async () => {
     throw new TypeError("fetch failed");
   }) as unknown as typeof fetch;
-  await assert.rejects(() => getCrawl("c", { apiKey: "k", fetchImpl: impl }), (e: unknown) => e instanceof ToolkitError && e.code === "BACKEND_UNAVAILABLE");
+  await assert.rejects(
+    () => getCrawl("c", { apiKey: "k", fetchImpl: impl }),
+    (e: unknown) => e instanceof ToolkitError && e.code === "BACKEND_UNAVAILABLE" && e.crawl_id === "c",
+  );
 });
 
 /** A stub that serves `pages` in order, recording the cursor each call sent. */
@@ -231,19 +280,22 @@ test("listAllResults follows next_cursor and stops on null", async () => {
     { status: "completed", results: [{ url: "https://example.com/product/2" }], next_cursor: "c2" },
     { status: "completed", results: [{ url: "https://example.com/product/3" }], next_cursor: null },
   ]);
-  const { results, crawl } = await listAllResults("c_1", { apiKey: "k", fetchImpl: impl });
+  const { results, crawl, partial } = await listAllResults("c_1", { apiKey: "k", fetchImpl: impl });
+  assert.equal(partial, false);
   assert.deepEqual(results.map((r) => r.url), ["https://example.com/product/1", "https://example.com/product/2", "https://example.com/product/3"]);
   assert.deepEqual(cursors, [null, "c1", "c2"]);
   assert.equal(crawl.status, "completed");
 });
 
-test("listAllResults refuses a running crawl instead of polling forever", async () => {
-  const { impl, calls } = pagedFetch([{ status: "running", results: [], next_cursor: "c1" }]);
-  await assert.rejects(
-    () => listAllResults("c_1", { apiKey: "k", fetchImpl: impl }),
-    (e: unknown) => e instanceof ToolkitError && e.code === "INVALID_USAGE" && /still running/.test(e.message),
-  );
-  assert.equal(calls(), 1);
+test("listAllResults returns what a running crawl kept, ending at the first empty page", async () => {
+  const { impl, calls } = pagedFetch([
+    { status: "running", results: [{ url: "https://example.com/product/1" }], next_cursor: "c1" },
+    { status: "running", results: [], next_cursor: "c1" },
+  ]);
+  const { results, partial } = await listAllResults("c_1", { apiKey: "k", fetchImpl: impl });
+  assert.deepEqual(results.map((r) => r.url), ["https://example.com/product/1"]);
+  assert.equal(partial, true);
+  assert.equal(calls(), 2);
 });
 
 test("waitForCrawl polls with limit=1 until the status leaves running, backing off", async () => {
@@ -269,7 +321,7 @@ test("waitForCrawl treats failed and stopped as terminal", async () => {
   }
 });
 
-test("waitForCrawl times out with CRAWL_TIMEOUT and does not stop the crawl", async () => {
+test("waitForCrawl times out with CRAWL_WAIT_TIMEOUT, carries crawl_id and does not stop the crawl", async () => {
   const methods: string[] = [];
   const impl = (async (_url: string, init?: RequestInit) => {
     methods.push(init?.method ?? "GET");
@@ -280,7 +332,8 @@ test("waitForCrawl times out with CRAWL_TIMEOUT and does not stop the crawl", as
   }) as unknown as typeof fetch;
   await assert.rejects(
     () => waitForCrawl("c_1", { apiKey: "k", fetchImpl: impl, timeoutMs: 1, sleepImpl: async () => {} }),
-    (e: unknown) => e instanceof ToolkitError && e.code === "CRAWL_TIMEOUT" && /not stopped/.test(e.likely_cause),
+    (e: unknown) =>
+      e instanceof ToolkitError && e.code === "CRAWL_WAIT_TIMEOUT" && e.crawl_id === "c_1" && /not stopped/.test(e.likely_cause),
   );
   assert.ok(methods.every((m) => m === "GET"), "no stop call on timeout");
 });
