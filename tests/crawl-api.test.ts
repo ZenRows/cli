@@ -41,6 +41,27 @@ function stubFetch(status: number, payload: unknown, headers: Record<string, str
   return { impl, calls };
 }
 
+/** A sleep that records each wait instead of waiting. */
+function recordSleep() {
+  const waits: number[] = [];
+  return { waits, sleepImpl: async (ms: number) => void waits.push(ms) };
+}
+
+/** Serve `responses` in order (a thrown Error is a transport failure), recording each call. */
+function seqFetch(responses: Array<{ status: number; payload?: unknown; headers?: Record<string, string> } | Error>) {
+  const calls: Array<{ url: string; init?: RequestInit }> = [];
+  const impl = (async (url: string, init?: RequestInit) => {
+    calls.push({ url, init });
+    const r = responses[Math.min(calls.length - 1, responses.length - 1)]!;
+    if (r instanceof Error) throw r;
+    return new Response(JSON.stringify(r.payload ?? {}), {
+      status: r.status,
+      headers: { "content-type": "application/json", ...r.headers },
+    });
+  }) as unknown as typeof fetch;
+  return { impl, calls };
+}
+
 function problem(status: number, code: string, detail = "nope", headers: Record<string, string> = {}) {
   return stubFetch(status, { code, title: code, detail, status, instance: "urn:zenrows:request:x" }, {
     "content-type": "application/problem+json",
@@ -220,10 +241,14 @@ test("409 maps to CRAWL_REQUEST_IN_FLIGHT", async () => {
   );
 });
 
-test("429 too_many_crawls maps to CRAWL_TOO_MANY_CRAWLS with retry_after and no retry", async () => {
+test("429 too_many_crawls maps to CRAWL_TOO_MANY_CRAWLS with retry_after, and create never retries it, even with a key", async () => {
   const { impl, calls } = problem(429, "too_many_crawls", "Too many crawls.", { "retry-after": "30" });
   await assert.rejects(
-    () => createCrawl({ url: "https://example.com/products/", depth: 1 }, { apiKey: "k", fetchImpl: impl, idempotencyKey: "k1" }),
+    () =>
+      createCrawl(
+        { url: "https://example.com/products/", depth: 1 },
+        { apiKey: "k", fetchImpl: impl, idempotencyKey: "k1", sleepImpl: recordSleep().sleepImpl },
+      ),
     (e: unknown) =>
       e instanceof ToolkitError &&
       e.code === "CRAWL_TOO_MANY_CRAWLS" &&
@@ -256,7 +281,7 @@ test("402 maps to CRAWL_QUOTA_EXCEEDED, and AUTH014 to CRAWL_KEY_CAP_REACHED, wi
 test("an error body without a code leaves server_code unset", async () => {
   const { impl } = stubFetch(500, "upstream exploded");
   await assert.rejects(
-    () => getCrawl("c_1", { apiKey: "k", fetchImpl: impl }),
+    () => getCrawl("c_1", { apiKey: "k", fetchImpl: impl, sleepImpl: recordSleep().sleepImpl }),
     (e: unknown) => e instanceof ToolkitError && e.code === "CRAWL_FAILED" && !("server_code" in e.toJSON()),
   );
 });
@@ -272,10 +297,73 @@ test("a transport failure maps to BACKEND_UNAVAILABLE", async () => {
   const impl = (async () => {
     throw new TypeError("fetch failed");
   }) as unknown as typeof fetch;
+  const { waits, sleepImpl } = recordSleep();
   await assert.rejects(
-    () => getCrawl("c", { apiKey: "k", fetchImpl: impl }),
+    () => getCrawl("c", { apiKey: "k", fetchImpl: impl, sleepImpl }),
     (e: unknown) => e instanceof ToolkitError && e.code === "BACKEND_UNAVAILABLE" && e.crawl_id === "c",
   );
+  assert.equal(waits.length, 3, "a GET retries a transport failure 3 times before it gives up");
+});
+
+const unavailable = { status: 503, payload: { code: "unavailable", status: 503 } };
+
+test("a GET is retried on 503 with jittered backoff, then succeeds", async () => {
+  const { impl, calls } = seqFetch([unavailable, unavailable, { status: 200, payload: { ...crawlBody, results: [], next_cursor: null } }]);
+  const { waits, sleepImpl } = recordSleep();
+  const c = await getCrawl("c_1", { apiKey: "k", fetchImpl: impl, sleepImpl });
+  assert.equal(c.crawl_id, "c_1");
+  assert.equal(calls.length, 3);
+  assert.equal(waits.length, 2);
+  assert.ok(waits[0]! >= 200 && waits[0]! <= 300, `first wait ~250 ms, got ${waits[0]}`);
+  assert.ok(waits[1]! >= 400 && waits[1]! <= 600, `second wait ~500 ms, got ${waits[1]}`);
+});
+
+test("a GET gives up after 3 retries and reports the last error", async () => {
+  const { impl, calls } = seqFetch([unavailable]);
+  await assert.rejects(
+    () => listCrawls({ apiKey: "k", fetchImpl: impl, sleepImpl: recordSleep().sleepImpl }),
+    (e: unknown) => e instanceof ToolkitError && e.code === "CRAWL_FAILED" && e.server_code === "unavailable",
+  );
+  assert.equal(calls.length, 4);
+});
+
+test("a retry honors Retry-After in seconds", async () => {
+  const { impl } = seqFetch([
+    { status: 429, payload: { code: "rate_limited" }, headers: { "retry-after": "7" } },
+    { status: 200, payload: { crawls: [] } },
+  ]);
+  const { waits, sleepImpl } = recordSleep();
+  await listCrawls({ apiKey: "k", fetchImpl: impl, sleepImpl });
+  assert.deepEqual(waits, [7000]);
+});
+
+test("create without an Idempotency-Key is not retried on 503", async () => {
+  const { impl, calls } = seqFetch([unavailable, { status: 202, payload: crawlBody }]);
+  await assert.rejects(
+    () => createCrawl({ url: "https://example.com/", depth: 1 }, { apiKey: "k", fetchImpl: impl, sleepImpl: recordSleep().sleepImpl }),
+    (e: unknown) => e instanceof ToolkitError && e.code === "CRAWL_FAILED",
+  );
+  assert.equal(calls.length, 1);
+});
+
+test("create with an Idempotency-Key is retried on 503 with the same key", async () => {
+  const { impl, calls } = seqFetch([unavailable, { status: 202, payload: crawlBody }]);
+  const c = await createCrawl(
+    { url: "https://example.com/", depth: 1 },
+    { apiKey: "k", fetchImpl: impl, sleepImpl: recordSleep().sleepImpl, idempotencyKey: "k1" },
+  );
+  assert.equal(c.crawl_id, "c_1");
+  assert.equal(calls.length, 2);
+  assert.ok(calls.every((c) => (c.init?.headers as Record<string, string>)["Idempotency-Key"] === "k1"));
+});
+
+test("stop is never retried", async () => {
+  const { impl, calls } = seqFetch([unavailable, { status: 200, payload: { crawl_id: "c_1", status: "stopped" } }]);
+  await assert.rejects(
+    () => stopCrawl("c_1", { apiKey: "k", fetchImpl: impl, sleepImpl: recordSleep().sleepImpl }),
+    (e: unknown) => e instanceof ToolkitError && e.code === "CRAWL_FAILED" && e.crawl_id === "c_1",
+  );
+  assert.equal(calls.length, 1);
 });
 
 /** A stub that serves `pages` in order, recording the cursor each call sent. */

@@ -6,7 +6,8 @@
  * param: Crawl answers any query parameter it does not know with 400. Bodies are
  * JSON; errors come back as `application/problem+json` (RFC 9457) and we branch
  * on `status` + `code` only. A crawl is an async job: create it, then poll it
- * until its status leaves `running`. `fetchImpl` / `sleepImpl` are injectable
+ * until its status leaves `running`. Calls retry transient failures the way the
+ * Crawl SDKs do (see `retryStatuses`). `fetchImpl` / `sleepImpl` are injectable
  * for tests.
  *
  * `output_format` takes `html` only (absent = URLs only). Response fields we do
@@ -130,14 +131,19 @@ export function isTerminal(status: string | undefined): boolean {
   return !!status && status !== "running";
 }
 
-interface RequestOpts {
+interface CallOpts {
   apiKey: string;
+  fetchImpl?: typeof fetch;
+  /** Per HTTP attempt. */
+  timeoutMs?: number;
+  sleepImpl?: (ms: number) => Promise<void>;
+}
+
+interface RequestOpts extends CallOpts {
   body?: unknown;
   query?: Record<string, string | number | boolean | undefined>;
   headers?: Record<string, string>;
   accept?: string;
-  fetchImpl?: typeof fetch;
-  timeoutMs?: number;
   /** Set on every call about one crawl, so its errors carry `crawl_id`. */
   crawlId?: string;
 }
@@ -148,10 +154,49 @@ interface RawResponse {
   text: string;
 }
 
+const MAX_RETRIES = 3;
+const READ_RETRY_STATUSES: ReadonlySet<number> = new Set([429, 502, 503, 504]);
+// 429 on create is the active-job limit: a retry only waits for a slot that may never free.
+const CREATE_RETRY_STATUSES: ReadonlySet<number> = new Set([502, 503, 504]);
+
+/**
+ * The statuses to retry, or undefined when the request must run once: a GET is
+ * safe to repeat, a create only with an Idempotency-Key, and stop never.
+ */
+function retryStatuses(method: string, headers: Record<string, string>): ReadonlySet<number> | undefined {
+  if (method === "GET") return READ_RETRY_STATUSES;
+  return headers["Idempotency-Key"] ? CREATE_RETRY_STATUSES : undefined;
+}
+
+/** 250 ms x 2^attempt, capped at 10 s, +/-20% jitter. */
+function backoffMs(attempt: number): number {
+  return Math.min(250 * 2 ** attempt, 10_000) * (0.8 + Math.random() * 0.4);
+}
+
+/** `Retry-After` in whole seconds, as milliseconds. */
+function retryAfterMs(value: string | null): number | undefined {
+  return value && /^\d+$/.test(value.trim()) ? Number(value) * 1000 : undefined;
+}
+
+const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** One HTTP attempt with its own timeout; the body is read inside it. */
+async function attempt(url: string, init: RequestInit, opts: RequestOpts): Promise<RawResponse> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 60_000);
+  try {
+    const res = await (opts.fetchImpl ?? fetch)(url, { ...init, signal: controller.signal });
+    return { status: res.status, headers: res.headers, text: await res.text() };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 /**
  * Perform a Crawl API request and return the raw body. Sets `X-API-Key`, adds a
- * JSON content-type when a body is present, and on a non-2xx parses the
- * problem+json body into a normalized ToolkitError.
+ * JSON content-type when a body is present, retries transient failures as
+ * `retryStatuses` allows, and on a non-2xx parses the problem+json body into a
+ * normalized ToolkitError.
  */
 async function crawlFetch(method: string, path: string, opts: RequestOpts): Promise<RawResponse> {
   registerSecret(opts.apiKey);
@@ -159,10 +204,6 @@ async function crawlFetch(method: string, path: string, opts: RequestOpts): Prom
   for (const [k, v] of Object.entries(opts.query ?? {})) {
     if (v !== undefined && v !== null) url.searchParams.set(k, String(v));
   }
-  const doFetch = opts.fetchImpl ?? fetch;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 60_000);
-
   const headers: Record<string, string> = {
     "X-API-Key": opts.apiKey,
     Accept: opts.accept ?? "application/json",
@@ -171,35 +212,40 @@ async function crawlFetch(method: string, path: string, opts: RequestOpts): Prom
     ...(opts.headers ?? {}),
   };
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
+  const init: RequestInit = { method, headers, body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined };
+  const retryOn = retryStatuses(method, headers);
+  const sleep = opts.sleepImpl ?? defaultSleep;
 
-  let res: Response;
-  let text: string;
-  try {
-    res = await doFetch(url.toString(), {
-      method,
-      headers,
-      body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-      signal: controller.signal,
-    });
-    text = await res.text();
-  } catch (err) {
-    throw new ToolkitError({
-      code: "BACKEND_UNAVAILABLE",
-      message: "Could not reach the Zenrows Crawl API.",
-      likely_cause: err instanceof Error ? err.message : String(err),
-      next_action:
-        "Check connectivity and retry. Override the host with ZENROWS_CRAWL_API_BASE if you are testing against staging.",
-      suggested_commands: ["zenrows status"],
-      crawl_id: opts.crawlId,
-    });
-  } finally {
-    clearTimeout(timeout);
+  for (let n = 0; ; n++) {
+    const canRetry = retryOn !== undefined && n < MAX_RETRIES;
+    let res: RawResponse;
+    try {
+      res = await attempt(url.toString(), init, opts);
+    } catch (err) {
+      if (canRetry) {
+        await sleep(backoffMs(n));
+        continue;
+      }
+      throw new ToolkitError({
+        code: "BACKEND_UNAVAILABLE",
+        message: "Could not reach the Zenrows Crawl API.",
+        likely_cause: err instanceof Error ? err.message : String(err),
+        next_action:
+          "Check connectivity and retry. Override the host with ZENROWS_CRAWL_API_BASE if you are testing against staging.",
+        suggested_commands: ["zenrows status"],
+        crawl_id: opts.crawlId,
+      });
+    }
+    const retryAfter = res.headers.get("retry-after");
+    if (canRetry && retryOn.has(res.status)) {
+      await sleep(retryAfterMs(retryAfter) ?? backoffMs(n));
+      continue;
+    }
+    if (res.status < 200 || res.status >= 300) {
+      throw problemToError(res.status, res.text, `${method} ${path}`, retryAfter, opts.crawlId);
+    }
+    return res;
   }
-
-  if (res.status < 200 || res.status >= 300) {
-    throw problemToError(res.status, text, `${method} ${path}`, res.headers.get("retry-after"), opts.crawlId);
-  }
-  return { status: res.status, headers: res.headers, text };
 }
 
 /** `crawlFetch` + JSON parse. */
@@ -336,12 +382,6 @@ function classifyProblem(
   });
 }
 
-interface CallOpts {
-  apiKey: string;
-  fetchImpl?: typeof fetch;
-  timeoutMs?: number;
-}
-
 /** Start a crawl (202). Sends only the fields set in `params`. */
 export function createCrawl(params: CreateCrawlParams, opts: CallOpts & { idempotencyKey?: string }): Promise<Crawl> {
   const body: Record<string, unknown> = { url: params.url, depth: params.depth };
@@ -351,43 +391,29 @@ export function createCrawl(params: CreateCrawlParams, opts: CallOpts & { idempo
   if (params.exclude_patterns?.length) body.exclude_patterns = params.exclude_patterns;
   if (params.output_format !== undefined) body.output_format = params.output_format;
   return crawlJson<Crawl>("POST", "/crawls", {
-    apiKey: opts.apiKey,
+    ...opts,
     body,
     headers: opts.idempotencyKey ? { "Idempotency-Key": opts.idempotencyKey } : undefined,
-    fetchImpl: opts.fetchImpl,
-    timeoutMs: opts.timeoutMs,
   });
 }
 
 /** Read a crawl and one page of its results. */
 export function getCrawl(id: string, opts: CallOpts & { cursor?: string; limit?: number }): Promise<CrawlWithResults> {
   return crawlJson<CrawlWithResults>("GET", `/crawls/${encodeURIComponent(id)}`, {
-    apiKey: opts.apiKey,
+    ...opts,
     crawlId: id,
     query: { cursor: opts.cursor, limit: opts.limit },
-    fetchImpl: opts.fetchImpl,
-    timeoutMs: opts.timeoutMs,
   });
 }
 
 /** One page of the account's crawls, newest first. */
 export function listCrawls(opts: CallOpts & { cursor?: string; limit?: number }): Promise<CrawlList> {
-  return crawlJson<CrawlList>("GET", "/crawls", {
-    apiKey: opts.apiKey,
-    query: { cursor: opts.cursor, limit: opts.limit },
-    fetchImpl: opts.fetchImpl,
-    timeoutMs: opts.timeoutMs,
-  });
+  return crawlJson<CrawlList>("GET", "/crawls", { ...opts, query: { cursor: opts.cursor, limit: opts.limit } });
 }
 
 /** Stop a running crawl. Idempotent: an ended crawl answers as it ended. */
 export function stopCrawl(id: string, opts: CallOpts): Promise<CrawlStop> {
-  return crawlJson<CrawlStop>("POST", `/crawls/${encodeURIComponent(id)}/stop`, {
-    apiKey: opts.apiKey,
-    crawlId: id,
-    fetchImpl: opts.fetchImpl,
-    timeoutMs: opts.timeoutMs,
-  });
+  return crawlJson<CrawlStop>("POST", `/crawls/${encodeURIComponent(id)}/stop`, { ...opts, crawlId: id });
 }
 
 /** The page of one kept URL (HTML for `output_format: html`). */
@@ -397,11 +423,9 @@ export async function getCrawlContent(
   opts: CallOpts,
 ): Promise<{ contentType: string; body: string }> {
   const res = await crawlFetch("GET", `/crawls/${encodeURIComponent(id)}/contents/${encodeURIComponent(contentId)}`, {
-    apiKey: opts.apiKey,
+    ...opts,
     crawlId: id,
     accept: "text/html, application/json;q=0.9, application/problem+json;q=0.8",
-    fetchImpl: opts.fetchImpl,
-    timeoutMs: opts.timeoutMs,
   });
   return { contentType: res.headers.get("content-type") ?? "", body: res.text };
 }
@@ -412,10 +436,9 @@ export async function getCrawlContent(
  */
 export async function downloadCrawl(id: string, opts: CallOpts): Promise<{ status?: string; ndjson: string }> {
   const res = await crawlFetch("GET", `/crawls/${encodeURIComponent(id)}/download`, {
-    apiKey: opts.apiKey,
+    ...opts,
     crawlId: id,
     accept: "application/x-ndjson, application/problem+json;q=0.8",
-    fetchImpl: opts.fetchImpl,
     timeoutMs: opts.timeoutMs ?? 300_000,
   });
   return { status: res.headers.get("x-crawl-status") ?? undefined, ndjson: res.text };
@@ -458,15 +481,12 @@ export async function listAllResults(
  * `timeoutMs` (default 600 s) runs out, backing off 2s → ×1.5 → capped at 15s.
  * A timeout is not an error: it returns the crawl, still `running`.
  */
-export async function waitForCrawl(
-  id: string,
-  opts: CallOpts & { sleepImpl?: (ms: number) => Promise<void> },
-): Promise<CrawlWithResults> {
-  const sleep = opts.sleepImpl ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+export async function waitForCrawl(id: string, opts: CallOpts): Promise<CrawlWithResults> {
+  const sleep = opts.sleepImpl ?? defaultSleep;
   const deadline = Date.now() + (opts.timeoutMs ?? 600_000);
   let delay = 2000;
   for (;;) {
-    const crawl = await getCrawl(id, { apiKey: opts.apiKey, fetchImpl: opts.fetchImpl, limit: 1 });
+    const crawl = await getCrawl(id, { apiKey: opts.apiKey, fetchImpl: opts.fetchImpl, sleepImpl: opts.sleepImpl, limit: 1 });
     if (isTerminal(crawl.status)) return crawl;
     if (Date.now() + delay > deadline) return crawl;
     await sleep(delay);

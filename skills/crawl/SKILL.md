@@ -93,6 +93,13 @@ seconds (about 30), or stop one of your crawls or Batch jobs first.
 Every Crawl error carries the API's code as `server_code` (when the API sent
 one), and `crawl_id` on any call about one crawl.
 
+The CLI retries transient failures, as the Crawl SDKs do: up to 3 retries,
+waiting the `Retry-After` seconds or 250 ms x 2^n (+/-20% jitter, at most 10 s).
+Reads retry on 429, 502, 503, 504 and network errors (a timeout counts).
+`create` retries only with `--idempotency-key`, and only on 502, 503, 504 and
+network errors, never on 429. `stop` never retries.
+The "Retry?" column is for errors that remain after these retries.
+
 | Code | Meaning | Retry? |
 | --- | --- | --- |
 | `CRAWL_NOT_ENABLED` | 403 `REQS008`: Crawl is not enabled for this account | no |

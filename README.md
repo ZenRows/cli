@@ -215,6 +215,12 @@ same claim, top-up and key-cap advice as other commands),
 `CRAWL_CONTENT_NOT_FOUND` and `CRAWL_FAILED`. Set `ZENROWS_CRAWL_API_BASE` to
 point the CLI at another deployment.
 
+The CLI retries transient failures, as the Crawl SDKs do: up to 3 retries,
+waiting the `Retry-After` seconds or 250 ms x 2^n (+/-20% jitter, at most 10 s).
+Reads retry on 429, 502, 503, 504 and network errors (a timeout counts).
+`create` retries only with `--idempotency-key`, and only on 502, 503, 504 and
+network errors, never on 429. `stop` never retries.
+
 ## 11. Browser Sessions
 
 Escalation only — **prefer `fetch`/`extract` for the vast majority of cases**;
