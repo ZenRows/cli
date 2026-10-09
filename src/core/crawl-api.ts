@@ -212,7 +212,7 @@ async function crawlJson<T>(method: string, path: string, opts: RequestOpts): Pr
       code: "CRAWL_FAILED",
       message: "The Crawl API response was not valid JSON.",
       likely_cause: text.slice(0, 240) || "Empty response body.",
-      next_action: "Retry, or check the crawl with `zenrows crawl status <id>`.",
+      next_action: "Retry, or check the crawl with `zenrows crawl get <id>`.",
       crawl_id: opts.crawlId,
     });
   }
@@ -275,7 +275,7 @@ function classifyProblem(
     return new ToolkitError({
       code: "CRAWL_CONTENT_NOT_FOUND",
       message: "Crawl content not found.",
-      likely_cause: `${cause}. The page was not fetched (yet), its fetch failed, or the crawl ran without --html.`,
+      likely_cause: `${cause}. The page was not fetched (yet), its fetch failed, or the crawl ran without --output-format html.`,
       next_action: "Read the result's content_status with `zenrows crawl results <id>`; only `fetched` results have content.",
       suggested_commands: ["zenrows crawl list"],
     });
@@ -298,15 +298,15 @@ function classifyProblem(
       suggested_commands: ["zenrows crawl list"],
     });
   }
-  if (status === 402 && isKeyCapReached(serverCode)) {
-    return keyCapReached(request, { status: 402, detail: problem.detail || problem.title || undefined });
-  }
   if (status === 402) {
+    // Same advice as the shared credit errors, under Crawl's own codes.
+    const detail = problem.detail || problem.title || undefined;
+    if (isKeyCapReached(serverCode)) {
+      return new ToolkitError({ ...keyCapReached(request, { status, detail }).toJSON(), code: "CRAWL_KEY_CAP_REACHED" });
+    }
     const acct = readAccount();
-    return quotaExhausted(request, acct?.unclaimed ? acct.claimUrl : undefined, {
-      status: 402,
-      detail: problem.detail || problem.title || undefined,
-    });
+    const quota = quotaExhausted(request, acct?.unclaimed ? acct.claimUrl : undefined, { status, detail });
+    return new ToolkitError({ ...quota.toJSON(), code: "CRAWL_QUOTA_EXCEEDED" });
   }
   if (status === 409) {
     return new ToolkitError({
@@ -408,9 +408,9 @@ export async function getCrawlContent(
 
 /**
  * Every result in one NDJSON file (`{url, content_status?, content?}` per line).
- * `crawlStatus` is the `X-Crawl-Status` header: `running` means the file is partial.
+ * `status` is the `X-Crawl-Status` header: `running` means the file is partial.
  */
-export async function downloadCrawl(id: string, opts: CallOpts): Promise<{ crawlStatus?: string; ndjson: string }> {
+export async function downloadCrawl(id: string, opts: CallOpts): Promise<{ status?: string; ndjson: string }> {
   const res = await crawlFetch("GET", `/crawls/${encodeURIComponent(id)}/download`, {
     apiKey: opts.apiKey,
     crawlId: id,
@@ -418,7 +418,7 @@ export async function downloadCrawl(id: string, opts: CallOpts): Promise<{ crawl
     fetchImpl: opts.fetchImpl,
     timeoutMs: opts.timeoutMs ?? 300_000,
   });
-  return { crawlStatus: res.headers.get("x-crawl-status") ?? undefined, ndjson: res.text };
+  return { status: res.headers.get("x-crawl-status") ?? undefined, ndjson: res.text };
 }
 
 /**
@@ -434,7 +434,7 @@ export function contentIdOf(result: CrawlResult): string | undefined {
 /**
  * Read every kept result, following `next_cursor`. While a crawl runs its
  * `next_cursor` is never null, so the read also ends at the first empty page;
- * `partial` is true when the crawl was still running.
+ * `partial` is true when the crawl was still running or a cursor remains.
  */
 export async function listAllResults(
   id: string,
@@ -447,38 +447,28 @@ export async function listAllResults(
     const rows = page.results ?? [];
     results.push(...rows);
     if (!rows.length || !page.next_cursor || page.next_cursor === cursor) {
-      return { crawl: page, results, partial: !isTerminal(page.status) };
+      return { crawl: page, results, partial: !isTerminal(page.status) || !!page.next_cursor };
     }
     cursor = page.next_cursor;
   }
 }
 
 /**
- * Poll `GET /crawls/{id}?limit=1` until the status leaves `running`, backing off
- * 2s → ×1.5 → capped at 15s. On timeout throws CRAWL_WAIT_TIMEOUT
- * and leaves the crawl running. `sleepImpl` is injectable for tests.
+ * Poll `GET /crawls/{id}?limit=1` until the status leaves `running` or
+ * `timeoutMs` (default 600 s) runs out, backing off 2s → ×1.5 → capped at 15s.
+ * A timeout is not an error: it returns the crawl, still `running`.
  */
 export async function waitForCrawl(
   id: string,
   opts: CallOpts & { sleepImpl?: (ms: number) => Promise<void> },
 ): Promise<CrawlWithResults> {
   const sleep = opts.sleepImpl ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
-  const timeoutMs = opts.timeoutMs ?? 600_000;
-  const deadline = Date.now() + timeoutMs;
+  const deadline = Date.now() + (opts.timeoutMs ?? 600_000);
   let delay = 2000;
   for (;;) {
     const crawl = await getCrawl(id, { apiKey: opts.apiKey, fetchImpl: opts.fetchImpl, limit: 1 });
     if (isTerminal(crawl.status)) return crawl;
-    if (Date.now() + delay > deadline) {
-      throw new ToolkitError({
-        code: "CRAWL_WAIT_TIMEOUT",
-        message: `Timed out waiting for crawl ${id} to finish.`,
-        likely_cause: `The crawl was still running after ${Math.round(timeoutMs / 1000)}s. It keeps running; it was not stopped.`,
-        next_action: "Re-check progress with `zenrows crawl status <id>`, wait again with a larger --timeout, or stop it.",
-        suggested_commands: [`zenrows crawl status ${id}`, `zenrows crawl wait ${id}`, `zenrows crawl stop ${id}`],
-        crawl_id: id,
-      });
-    }
+    if (Date.now() + delay > deadline) return crawl;
     await sleep(delay);
     delay = Math.min(delay * 1.5, 15_000);
   }
