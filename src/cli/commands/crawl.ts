@@ -1,5 +1,5 @@
 /**
- * `zenrows crawl` — Crawl API (status: beta).
+ * `zenrows crawl` — Crawl API (new).
  *
  * Give Crawl one start URL and read back the URLs it finds behind it, optionally
  * with each page's HTML. A crawl is an async job: `create` returns at once
@@ -40,11 +40,11 @@ const MAX_LIMIT = 100_000;
 
 export const crawl: Command = {
   name: "crawl",
-  summary: "Crawl a site from one start URL and collect the URLs behind it (beta).",
+  summary: "Crawl a site from one start URL and collect the URLs behind it (new).",
   usage:
     "zenrows crawl <create <url> --depth N|get <id>|list|results <id>|content <id> <content_id>|download <id>|stop <id>|wait <id>>",
   help: [
-    "Crawl is in beta. Cloud (needs a key with Crawl access):",
+    "Crawl is new. Cloud (needs a key with Crawl access):",
     "  create <url> --depth <n> [flags]  start a crawl from one URL (returns at once)",
     "    --depth <n>                     link hops to follow from the start URL (1-100000, required)",
     "    --max-items <n>                 stop after keeping n URLs (API default 10)",

@@ -11,7 +11,7 @@ test("capability matrix loads with the honest classifications", () => {
   assert.equal(caps.mcp?.status, "available");
   // Batch is a real product in open beta.
   assert.equal(caps.batch?.status, "beta");
-  assert.equal(caps.crawl?.status, "beta");
+  assert.equal(caps.crawl?.status, "available");
 });
 
 test("isUsable true for available + open beta, false for absent capabilities", () => {
