@@ -159,7 +159,8 @@ test("crawl create sends only the flags the caller set as the create body", asyn
       ]);
       assert.equal(code, 0);
       assert.equal(out.ok, true);
-      assert.equal(out.crawlId, "c_1");
+      assert.deepEqual(Object.keys(out), ["ok", "crawl_id", "status", "crawl"]);
+      assert.equal(out.crawl_id, "c_1");
       assert.equal(out.status, "running");
       assert.equal(calls.length, 1);
       assert.equal(calls[0]!.url.pathname, "/v1/crawls");
@@ -246,7 +247,8 @@ test("crawl get exits 0 for completed and stopped crawls", async () => {
         const { code, out } = await run(["get", "c_1"]);
         assert.equal(code, 0, status);
         assert.equal(out.ok, true);
-        assert.equal(out.stop_reason, stop_reason);
+        assert.deepEqual(Object.keys(out), ["ok", "crawl_id", "status", "crawl", "results", "next_cursor"]);
+        assert.equal(out.crawl.stop_reason, stop_reason);
         assert.equal(out.results.length, 1);
         assert.equal(out.next_cursor, "c");
         assert.equal(out.crawl.results, undefined);
@@ -284,7 +286,7 @@ test("crawl results reads every page of an ended crawl and writes JSONL with --o
 
       const file = join(process.cwd(), "urls.jsonl");
       const written = await run(["results", "c_1", "--out", file]);
-      assert.deepEqual(written.out, { ok: true, crawlId: "c_1", status: "completed", count: 2, file, partial: false });
+      assert.deepEqual(written.out, { ok: true, crawl_id: "c_1", status: "completed", count: 2, file, partial: false });
       assert.equal(readFileSync(file, "utf8"), '{"url":"https://example.com/product/1"}\n{"url":"https://example.com/product/2"}\n');
     },
   );
@@ -333,8 +335,21 @@ test("crawl download writes the NDJSON export to <id>.jsonl", async () => {
       assert.equal(out.count, 1);
       assert.equal(out.status, "completed");
       assert.equal(out.partial, false);
+      assert.equal(out.crawl_id, "c_1");
       assert.equal(calls[0]!.url.pathname, "/v1/crawls/c_1/download");
       assert.ok(existsSync(join(process.cwd(), "c_1.jsonl")));
+    },
+  );
+});
+
+test("crawl download prints status: null when X-Crawl-Status is absent", async () => {
+  await withCrawlWorkspace(
+    () => new Response('{"url":"https://example.com/product/1"}\n', { status: 200 }),
+    async () => {
+      const { code, out } = await run(["download", "c_1"]);
+      assert.equal(code, 0);
+      assert.equal(out.status, null);
+      assert.equal(out.partial, false);
     },
   );
 });
@@ -346,6 +361,9 @@ test("crawl content accepts a content_url and prints the page", async () => {
       const { code, out } = await run(["content", "c_1", "/v1/crawls/c_1/contents/ct_9"]);
       assert.equal(code, 0);
       assert.equal(out.content, "<html>ok</html>");
+      assert.equal(out.crawl_id, "c_1");
+      assert.equal(out.content_id, "ct_9");
+      assert.equal(out.content_type, "text/html");
       assert.equal(calls[0]!.url.pathname, "/v1/crawls/c_1/contents/ct_9");
     },
   );
@@ -367,6 +385,7 @@ test("crawl list and stop call the right endpoints", async () => {
       const stop = await run(["stop", "c_1"]);
       assert.equal(stop.code, 0);
       assert.equal(stop.out.status, "stopped");
+      assert.deepEqual(Object.keys(stop.out), ["ok", "crawl_id", "status", "crawl"]);
       assert.equal(calls[1]!.url.pathname, "/v1/crawls/c_1/stop");
     },
   );
@@ -435,7 +454,8 @@ test("crawl wait that runs out exits 0 and prints the running crawl with the res
       assert.equal(code, 0);
       assert.equal(out.ok, true);
       assert.equal(out.status, "running");
-      assert.equal(out.crawlId, "c_1");
+      assert.equal(out.crawl_id, "c_1");
+      assert.equal(out.note, "The wait ran out and the crawl is still running. Run zenrows crawl wait c_1.");
       assert.ok(calls.every((c) => c.init?.method === "GET"), "the crawl is not stopped");
 
       let human = -1;

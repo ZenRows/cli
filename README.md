@@ -189,13 +189,18 @@ more fetch, and `--max-pages` counts it. `--include-pattern` /
 `--exclude-pattern` are repeatable substring filters on the URL. `get` and
 `list` read one page and take `--cursor` and `--limit`. `results` follows every
 page (`--limit` is the page size); on a running crawl it returns the URLs kept
-so far, with `partial: true`. `download` reports the crawl's `status`, and
-`partial: true` while it runs.
+so far, with `partial: true`. `download` reports the crawl's `status` (`null`
+when the API sends none), and `partial: true` while it runs.
+
+With `--json`, `create`, `get`, `wait` and `stop` print
+`{ok, crawl_id, status, crawl}`. The crawl object (with `coverage`,
+`stop_reason` and `error`) is under `crawl`. `get` adds `results` and
+`next_cursor`. All keys are snake_case.
 
 `wait`, and `create --follow`, poll until the crawl ends or `--timeout` seconds
 run out (default 600). When the time runs out, the command exits 0 and prints
-the crawl with status `running` and the hint `zenrows crawl wait <crawl-id>`;
-the crawl keeps running. Ctrl-C stops the wait, not the crawl, and exits 130;
+the crawl with status `running` and the hint `zenrows crawl wait <crawl-id>`
+(under `--json`, in `note`); the crawl keeps running. Ctrl-C stops the wait, not the crawl, and exits 130;
 resume with `zenrows crawl wait <crawl-id>`. A crawl that ends `failed` exits 1
 with `CRAWL_FAILED`.
 

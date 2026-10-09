@@ -87,10 +87,10 @@ test("zenrows crawl end to end against a live API", { skip, timeout: 20 * 60_000
       await new Promise((r) => setTimeout(r, wait * 1000));
     }
     assert.equal(start.code, 0, JSON.stringify(start.out.error ?? start.out));
-    const id = start.out.crawlId as string;
+    const id = start.out.crawl_id as string;
     assert.match(id, /\S/);
     assert.equal(start.out.status, "completed");
-    log(`crawl: ${start.out.status} (${start.out.stop_reason ?? "nothing left"})`);
+    log(`crawl: ${start.out.status} (${start.out.crawl.stop_reason ?? "nothing left"})`);
 
     // 2. Every kept URL, across all pages.
     const results = await cli(dir, ["crawl", "results", id]);
@@ -105,9 +105,9 @@ test("zenrows crawl end to end against a live API", { skip, timeout: 20 * 60_000
     assert.ok(fetched, "at least one result has fetched content");
     const content = await cli(dir, ["crawl", "content", id, fetched.content_url!]);
     assert.equal(content.code, 0, JSON.stringify(content.out));
-    assert.match(content.out.contentType, /text\/html/);
+    assert.match(content.out.content_type, /text\/html/);
     assert.match(content.out.content, /<html/i);
-    log(`content: HTML (${content.out.contentType})`);
+    log(`content: HTML (${content.out.content_type})`);
 
     // 4. The NDJSON export has one line per result.
     const file = join(dir, "export.jsonl");
