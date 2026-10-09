@@ -22,7 +22,7 @@ do not retry it.
 
 ```
 zenrows crawl start https://example.com/products/ --depth 1 \
-  --max-items 20 --max-pages 25 --include /product/ --wait --json
+  --max-items 20 --max-pages 25 --include /product/ --follow --json
 zenrows crawl results <id> --json            # every kept URL
 zenrows crawl results <id> --out urls.jsonl  # same, as JSONL
 ```
@@ -35,7 +35,7 @@ zenrows crawl results <id> --out urls.jsonl  # same, as JSONL
   above it the CLI refuses with `POLICY_LIMIT_EXCEEDED` before any request.
 - `--include` / `--exclude` are substring matches on the normalized URL and
   repeat: `--include /product/ --exclude ?add-to-cart`.
-- `start` returns at once. `--wait` (or `zenrows crawl wait <id>`) polls
+- `start` returns at once. `--follow` (or `zenrows crawl wait <id>`) polls
   until the crawl ends (default timeout 600000 ms). On `--timeout` the crawl
   keeps running (it is not stopped) and you get `CRAWL_WAIT_TIMEOUT` with
   `crawl_id`. Ctrl-C also stops the wait, not the crawl, and exits 130;
@@ -46,7 +46,7 @@ zenrows crawl results <id> --out urls.jsonl  # same, as JSONL
 ## Page HTML
 
 ```
-zenrows crawl start <url> --depth 1 --html --max-pages 20 --wait
+zenrows crawl start <url> --depth 1 --html --max-pages 20 --follow
 zenrows crawl results <id> --json        # fetched results carry content_url
 zenrows crawl content <id> <content_id>  # one page's HTML (or pass the content_url)
 zenrows crawl results <id> --download --out pages.jsonl  # every URL + HTML, NDJSON
