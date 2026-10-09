@@ -79,7 +79,7 @@ test("zenrows crawl end to end against a live API", { skip, timeout: 20 * 60_000
         "crawl", "start", START_URL!,
         "--depth", "1", "--max-items", "3", "--max-pages", "5",
         ...(INCLUDE ? ["--include", INCLUDE] : []),
-        "--html", "--wait", "--timeout", "600000",
+        "--html", "--follow", "--timeout", "600000",
       ]);
       if (start.out.error?.code !== "CRAWL_TOO_MANY_CRAWLS" || Date.now() > deadline) break;
       const wait = Number(start.out.error.retry_after ?? 30);

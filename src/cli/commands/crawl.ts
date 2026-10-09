@@ -3,7 +3,7 @@
  *
  * Give Crawl one start URL and read back the URLs it finds behind it, optionally
  * with each page's HTML. A crawl is an async job: `start` returns at once
- * (or polls with `--wait`), then `status` / `wait` / `results` / `content`
+ * (or polls with `--follow`), then `status` / `wait` / `results` / `content`
  * read it and `stop` ends it. An account without Crawl access gets 403 REQS008
  * → CRAWL_NOT_ENABLED.
  */
@@ -54,8 +54,8 @@ export const crawl: Command = {
     "    --exclude <pattern>            drop URLs containing this substring (repeatable)",
     "    --html                         also fetch each kept URL's page HTML (read with `content`);",
     "                                   each kept page is one more fetch counted by --max-pages",
-    "    --wait                         poll until the crawl ends (Ctrl-C stops the wait, not the crawl)",
-    "    --timeout <ms>                 with --wait: give up waiting after ms (default 600000)",
+    "    --follow                       poll until the crawl ends (Ctrl-C stops the wait, not the crawl)",
+    "    --timeout <ms>                 with --follow: give up waiting after ms (default 600000)",
     "    --idempotency-key <key>        make a retried start create no second crawl",
     "    --no-signup                    do not auto-create a Free plan account if no key exists",
     "  status <id>                      show status, coverage, stop reason / error",
@@ -114,14 +114,14 @@ async function startCmd(rest: string[], ctx: RunContext): Promise<number> {
     include: { type: "string", multiple: true },
     exclude: { type: "string", multiple: true },
     html: { type: "boolean" },
-    wait: { type: "boolean" },
+    follow: { type: "boolean" },
     timeout: { type: "string" },
     "idempotency-key": { type: "string" },
     "no-signup": { type: "boolean" },
     json: { type: "boolean" },
   });
   const json = ctx.json || values.json === true;
-  const wait = values.wait === true;
+  const wait = values.follow === true;
   const url = positionals[0];
   if (!url) {
     throw new ToolkitError({
