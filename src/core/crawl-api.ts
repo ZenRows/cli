@@ -138,6 +138,8 @@ interface RequestOpts {
   accept?: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  /** Set on every call about one crawl, so its errors carry `crawl_id`. */
+  crawlId?: string;
 }
 
 interface RawResponse {
@@ -188,13 +190,14 @@ async function crawlFetch(method: string, path: string, opts: RequestOpts): Prom
       next_action:
         "Check connectivity and retry. Override the host with ZENROWS_CRAWL_API_BASE if you are testing against staging.",
       suggested_commands: ["zenrows status"],
+      crawl_id: opts.crawlId,
     });
   } finally {
     clearTimeout(timeout);
   }
 
   if (res.status < 200 || res.status >= 300) {
-    throw problemToError(res.status, text, method, path, res.headers.get("retry-after"));
+    throw problemToError(res.status, text, `${method} ${path}`, res.headers.get("retry-after"), opts.crawlId);
   }
   return { status: res.status, headers: res.headers, text };
 }
@@ -210,17 +213,21 @@ async function crawlJson<T>(method: string, path: string, opts: RequestOpts): Pr
       message: "The Crawl API response was not valid JSON.",
       likely_cause: text.slice(0, 240) || "Empty response body.",
       next_action: "Retry, or check the crawl with `zenrows crawl status <id>`.",
+      crawl_id: opts.crawlId,
     });
   }
 }
 
-/** Map a problem+json body + HTTP status to a normalized ToolkitError. */
+/**
+ * Map a problem+json body + HTTP status to a normalized ToolkitError that
+ * carries the API's `code` as `server_code`, and `crawl_id` when known.
+ */
 function problemToError(
   status: number,
   body: string,
-  method: string,
-  path: string,
+  request: string,
   retryAfter: string | null,
+  crawlId?: string,
 ): ToolkitError {
   let problem: ProblemJson = {};
   try {
@@ -228,9 +235,22 @@ function problemToError(
   } catch {
     // non-JSON error body — fall through with an empty problem
   }
-  const serverCode = problem.code ?? "";
+  const serverCode = problem.code || undefined;
+  const seconds = status === 429 && retryAfter && /^\d+$/.test(retryAfter.trim()) ? Number(retryAfter) : undefined;
+  const err = classifyProblem(status, problem, body, request, serverCode, seconds);
+  return new ToolkitError({ ...err.toJSON(), server_code: serverCode, crawl_id: crawlId, retry_after: seconds });
+}
+
+function classifyProblem(
+  status: number,
+  problem: ProblemJson,
+  body: string,
+  request: string,
+  serverCode: string | undefined,
+  retryAfter: number | undefined,
+): ToolkitError {
   const detail = problem.detail || problem.title || body.slice(0, 240) || `HTTP ${status}`;
-  const cause = `HTTP ${status}${serverCode ? ` (${serverCode})` : ""} for ${method} ${path}: ${detail}`;
+  const cause = `HTTP ${status}${serverCode ? ` (${serverCode})` : ""} for ${request}: ${detail}`;
 
   if (status === 403 && serverCode === CRAWL_NOT_ENABLED_CODE) {
     return new ToolkitError({
@@ -251,49 +271,59 @@ function problemToError(
       suggested_commands: ["zenrows login --api-key <your-key>"],
     });
   }
+  if (status === 404 && serverCode === "content_not_found") {
+    return new ToolkitError({
+      code: "CRAWL_CONTENT_NOT_FOUND",
+      message: "Crawl content not found.",
+      likely_cause: `${cause}. The page was not fetched (yet), its fetch failed, or the crawl ran without --html.`,
+      next_action: "Read the result's content_status with `zenrows crawl results <id>`; only `fetched` results have content.",
+      suggested_commands: ["zenrows crawl list"],
+    });
+  }
   if (status === 404) {
-    const content = serverCode === "content_not_found";
     return new ToolkitError({
       code: "CRAWL_NOT_FOUND",
-      message: content ? "Crawl content not found." : "Crawl not found.",
-      likely_cause: content
-        ? `${cause}. The page was not fetched (yet), its fetch failed, or the crawl ran without --html.`
-        : `${cause}. The id may be wrong or the crawl is not owned by this account.`,
-      next_action: content
-        ? "Read the result's content_status with `zenrows crawl results <id>`; only `fetched` results have content."
-        : "Check the crawl id, or list your crawls with `zenrows crawl list`.",
+      message: "Crawl not found.",
+      likely_cause: `${cause}. The id may be wrong or the crawl is not owned by this account.`,
+      next_action: "Check the crawl id, or list your crawls with `zenrows crawl list`.",
       suggested_commands: ["zenrows crawl list"],
     });
   }
   if (status === 429) {
-    const wait = retryAfter && /^\d+$/.test(retryAfter.trim()) ? ` Retry after ${retryAfter.trim()}s.` : "";
     return new ToolkitError({
-      code: "CRAWL_QUOTA_EXCEEDED",
-      message: "Too many crawls running.",
-      likely_cause: `${cause}. The account has too many crawls running.${wait}`,
-      next_action:
-        "Retry after Retry-After, or stop one of your crawls with `zenrows crawl stop <id>` first. Nothing was created.",
+      code: "CRAWL_TOO_MANY_CRAWLS",
+      message: "The account has reached its limit of active jobs.",
+      likely_cause: `${cause}. The account has reached its limit of active jobs (3 by default), shared with its Batch jobs.`,
+      next_action: `Nothing was created. ${retryAfter !== undefined ? `Retry after ${retryAfter} seconds` : "Retry later"}, or stop one of your crawls (\`zenrows crawl stop <id>\`) or Batch jobs first.`,
       suggested_commands: ["zenrows crawl list"],
     });
   }
   if (status === 402 && isKeyCapReached(serverCode)) {
-    return keyCapReached(`${method} ${path}`, { status: 402, detail: problem.detail || problem.title || undefined });
+    return keyCapReached(request, { status: 402, detail: problem.detail || problem.title || undefined });
   }
   if (status === 402) {
     const acct = readAccount();
-    return quotaExhausted(`${method} ${path}`, acct?.unclaimed ? acct.claimUrl : undefined, {
+    return quotaExhausted(request, acct?.unclaimed ? acct.claimUrl : undefined, {
       status: 402,
       detail: problem.detail || problem.title || undefined,
     });
   }
-  if (status === 400 || status === 409 || status === 422) {
+  if (status === 409) {
     return new ToolkitError({
-      code: "CRAWL_INVALID",
+      code: "CRAWL_REQUEST_IN_FLIGHT",
+      message: "A request with the same Idempotency-Key is still in flight.",
+      likely_cause: `${cause}.`,
+      next_action: "Retry the same request once the first one has finished.",
+    });
+  }
+  if (status === 400 || status === 422) {
+    return new ToolkitError({
+      code: "CRAWL_INVALID_REQUEST",
       message: `Crawl rejected the request (HTTP ${status}).`,
       likely_cause: `${cause}.`,
       next_action:
-        status === 409
-          ? "A request with the same Idempotency-Key is still in flight; retry once it has finished."
+        serverCode === "idempotency_key_reused"
+          ? "This Idempotency-Key was already used for a different request. Send a new key, or no key. Do not retry as is."
           : "Fix the reported parameter and retry. See `zenrows crawl --help` for the accepted flags and ranges.",
     });
   }
@@ -333,6 +363,7 @@ export function createCrawl(params: CreateCrawlParams, opts: CallOpts & { idempo
 export function getCrawl(id: string, opts: CallOpts & { cursor?: string; limit?: number }): Promise<CrawlWithResults> {
   return crawlJson<CrawlWithResults>("GET", `/crawls/${encodeURIComponent(id)}`, {
     apiKey: opts.apiKey,
+    crawlId: id,
     query: { cursor: opts.cursor, limit: opts.limit },
     fetchImpl: opts.fetchImpl,
     timeoutMs: opts.timeoutMs,
@@ -353,6 +384,7 @@ export function listCrawls(opts: CallOpts & { cursor?: string; limit?: number })
 export function stopCrawl(id: string, opts: CallOpts): Promise<CrawlStop> {
   return crawlJson<CrawlStop>("POST", `/crawls/${encodeURIComponent(id)}/stop`, {
     apiKey: opts.apiKey,
+    crawlId: id,
     fetchImpl: opts.fetchImpl,
     timeoutMs: opts.timeoutMs,
   });
@@ -366,6 +398,7 @@ export async function getCrawlContent(
 ): Promise<{ contentType: string; body: string }> {
   const res = await crawlFetch("GET", `/crawls/${encodeURIComponent(id)}/contents/${encodeURIComponent(contentId)}`, {
     apiKey: opts.apiKey,
+    crawlId: id,
     accept: "text/html, application/json;q=0.9, application/problem+json;q=0.8",
     fetchImpl: opts.fetchImpl,
     timeoutMs: opts.timeoutMs,
@@ -380,6 +413,7 @@ export async function getCrawlContent(
 export async function downloadCrawl(id: string, opts: CallOpts): Promise<{ crawlStatus?: string; ndjson: string }> {
   const res = await crawlFetch("GET", `/crawls/${encodeURIComponent(id)}/download`, {
     apiKey: opts.apiKey,
+    crawlId: id,
     accept: "application/x-ndjson, application/problem+json;q=0.8",
     fetchImpl: opts.fetchImpl,
     timeoutMs: opts.timeoutMs ?? 300_000,
@@ -398,39 +432,30 @@ export function contentIdOf(result: CrawlResult): string | undefined {
 }
 
 /**
- * Read every result, following `next_cursor` until it is null. Only call this
- * on an ended crawl: while a crawl runs `next_cursor` is never null, so this
- * refuses a `running` crawl instead of looping forever (wait first).
+ * Read every kept result, following `next_cursor`. While a crawl runs its
+ * `next_cursor` is never null, so the read also ends at the first empty page;
+ * `partial` is true when the crawl was still running.
  */
 export async function listAllResults(
   id: string,
   opts: CallOpts & { pageSize?: number },
-): Promise<{ crawl: CrawlWithResults; results: CrawlResult[] }> {
+): Promise<{ crawl: CrawlWithResults; results: CrawlResult[]; partial: boolean }> {
   const results: CrawlResult[] = [];
   let cursor: string | undefined;
-  let first: CrawlWithResults | undefined;
   for (;;) {
     const page = await getCrawl(id, { ...opts, cursor, limit: opts.pageSize });
-    if (!isTerminal(page.status)) {
-      throw new ToolkitError({
-        code: "INVALID_USAGE",
-        message: `Crawl ${id} is still running.`,
-        likely_cause: "Reading all results needs an ended crawl: while it runs, more results keep arriving.",
-        next_action: "Wait for it first (`zenrows crawl wait <id>`), or stop it with `zenrows crawl stop <id>`.",
-        suggested_commands: [`zenrows crawl wait ${id}`, `zenrows crawl status ${id}`],
-      });
+    const rows = page.results ?? [];
+    results.push(...rows);
+    if (!rows.length || !page.next_cursor || page.next_cursor === cursor) {
+      return { crawl: page, results, partial: !isTerminal(page.status) };
     }
-    first ??= page;
-    results.push(...(page.results ?? []));
-    if (page.next_cursor === null || page.next_cursor === undefined || page.next_cursor === cursor) break;
     cursor = page.next_cursor;
   }
-  return { crawl: first!, results };
 }
 
 /**
  * Poll `GET /crawls/{id}?limit=1` until the status leaves `running`, backing off
- * 2s → ×1.5 → capped at 15s. On timeout throws CRAWL_TIMEOUT
+ * 2s → ×1.5 → capped at 15s. On timeout throws CRAWL_WAIT_TIMEOUT
  * and leaves the crawl running. `sleepImpl` is injectable for tests.
  */
 export async function waitForCrawl(
@@ -446,11 +471,12 @@ export async function waitForCrawl(
     if (isTerminal(crawl.status)) return crawl;
     if (Date.now() + delay > deadline) {
       throw new ToolkitError({
-        code: "CRAWL_TIMEOUT",
+        code: "CRAWL_WAIT_TIMEOUT",
         message: `Timed out waiting for crawl ${id} to finish.`,
         likely_cause: `The crawl was still running after ${Math.round(timeoutMs / 1000)}s. It keeps running; it was not stopped.`,
         next_action: "Re-check progress with `zenrows crawl status <id>`, wait again with a larger --timeout, or stop it.",
         suggested_commands: [`zenrows crawl status ${id}`, `zenrows crawl wait ${id}`, `zenrows crawl stop ${id}`],
+        crawl_id: id,
       });
     }
     await sleep(delay);

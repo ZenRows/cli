@@ -47,8 +47,9 @@ zenrows trace export <run-id>     # JSON for sharing
   `failure_detail` in `zenrows batch status <id> --json` say why.
 - `CRAWL_NOT_ENABLED` → the API answered 403 `REQS008`: Crawl is not
   enabled for this account. Do not retry; ask Zenrows support for access.
-- `CRAWL_QUOTA_EXCEEDED` → 429 `too_many_crawls`: the account has too many
-  crawls running. Nothing was created; retry after `Retry-After` (see
+- `CRAWL_TOO_MANY_CRAWLS` → 429 `too_many_crawls`: the account has reached
+  its limit of active jobs (3 by default), shared with its Batch jobs.
+  Nothing was created; retry after `retry_after` seconds (see
   `zenrows crawl list`).
 - `CRAWL_FAILED` → the crawl ended `failed`; `error.code` in
   `zenrows crawl status <id> --json` says why, with `error.detail`. See
