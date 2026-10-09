@@ -45,6 +45,18 @@ zenrows trace export <run-id>     # JSON for sharing
   auto-created Free plan.
 - `BATCH_FAILED` → the batch run ended `failed`; `failure_reason` and
   `failure_detail` in `zenrows batch status <id> --json` say why.
+- `CRAWL_NOT_ENABLED` → the API answered 403 `REQS008`: Crawl is not
+  enabled for this account. Do not retry; ask Zenrows support for access.
+- `CRAWL_QUOTA_EXCEEDED` / `CRAWL_KEY_CAP_REACHED` → Crawl's 402: the
+  account is out of credits, or this key reached its credit cap (`AUTH014`).
+  Same advice as `POLICY_MAX_CREDITS_EXCEEDED` / `KEY_CREDIT_CAP_REACHED`.
+- `CRAWL_TOO_MANY_CRAWLS` → 429 `too_many_crawls`: the account has reached
+  its limit of active jobs (3 by default), shared with its Batch jobs.
+  Nothing was created; retry after `retry_after` seconds (see
+  `zenrows crawl list`).
+- `CRAWL_FAILED` → the crawl ended `failed`; `error.code` in
+  `zenrows crawl get <id> --json` says why, with `error.detail`. See
+  [[crawl]].
 - `PARAM_CONFLICT_AUTO_MANUAL` → drop the managed flags or add `--manual`.
 - `CAPABILITY_UNAVAILABLE` → the primitive is not available on this account (e.g. beta/invite-only); use the local-spec path where offered.
 

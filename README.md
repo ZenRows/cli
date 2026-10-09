@@ -39,6 +39,7 @@ that endpoint with extraction parameters, not a separate product.
 | `zenrows fetch` | Fetch — retrieve a protected page | **available** — `GET https://api.zenrows.com/v1/` |
 | `zenrows extract` | Extract — `extract=auto` (domain-gated open beta; falls back to Autoparse) / CSS / Markdown | **beta** — same `/v1/` |
 | `zenrows batch` | Batch — fan out over many URLs | beta — cloud works with beta access; local validate/estimate always |
+| `zenrows crawl` | Crawl (new) — collect the URLs behind one start page, optionally with each page's HTML | **available** — `https://api.zenrows.com/v1/crawls` |
 | `zenrows browser` | Browser Sessions REST API (same backend as MCP `browser_*`) | **available** — escalation-only; bills by bandwidth + time |
 | `zenrows mcp` | MCP server config (remote + local) | **available** |
 | Zenrows CLI | this repo | available |
@@ -156,7 +157,73 @@ An Extract task costs the same as a regular one (1 credit at base tier), so
 keys: `html` (the raw page) and `parsed` (the structured data) — validate a
 sample with `zenrows extract <url>` before running the full batch.
 
-## 10. Browser Sessions
+## 10. Crawl (new)
+
+Crawl is still evolving: new features are coming, limits may be tuned, and the changelog announces each change.
+
+Crawl (`https://api.zenrows.com/v1/crawls`)
+takes one start URL and returns the URLs it finds behind it, optionally with
+each page's HTML. Use it when you know the listing or section but not the item
+URLs. Crawl follows the links on each page up to `--depth` hops and stays on
+the start URL's registrable domain (subdomains count). Without
+`--output-format html` it returns URLs only. An account without Crawl access gets
+`CRAWL_NOT_ENABLED` ("Crawl is not enabled for this account", HTTP 403
+`REQS008`).
+
+```bash
+zenrows crawl create https://example.com/products/ --depth 1 \
+  --max-items 20 --include-pattern /product/ --follow  # create and wait for the end
+zenrows crawl results <crawl-id> --out urls.jsonl       # every kept URL (paginated)
+zenrows crawl create <url> --depth 2 --output-format html  # also fetch each kept page's HTML
+zenrows crawl content <crawl-id> <content-id>           # one page's HTML
+zenrows crawl download <crawl-id>                       # NDJSON export (URLs + HTML) → <crawl-id>.jsonl
+zenrows crawl get <crawl-id>                            # status, coverage, stop reason, one page of results
+zenrows crawl wait <crawl-id>                           # wait for the end
+zenrows crawl list                                      # your crawls, newest first
+zenrows crawl stop <crawl-id>                           # stop a running crawl
+```
+
+`--depth` (link hops) is required; `--max-items` and `--max-pages` cap the
+crawl (API default 10 each), and `--max-pages` bounds the cost, since each page
+is one fetch. The local policy `max_pages_per_run` caps `--max-pages` (default
+1000). `--output-format html` uses up the page budget: each kept page is one
+more fetch, and `--max-pages` counts it. `--include-pattern` /
+`--exclude-pattern` are repeatable substring filters on the URL. `get` and
+`list` read one page and take `--cursor` and `--limit`. `results` follows every
+page (`--limit` is the page size); on a running crawl it returns the URLs kept
+so far, with `partial: true`. `download` reports the crawl's `status` (`null`
+when the API sends none), and `partial: true` while it runs.
+
+With `--json`, `create`, `get`, `wait` and `stop` print
+`{ok, crawl_id, status, crawl}`. The crawl object (with `coverage`,
+`stop_reason` and `error`) is under `crawl`. `get` adds `results` and
+`next_cursor`. All keys are snake_case.
+
+`wait`, and `create --follow`, poll until the crawl ends or `--timeout` seconds
+run out (default 600). When the time runs out, the command exits 0 and prints
+the crawl with status `running` and the hint `zenrows crawl wait <crawl-id>`
+(under `--json`, in `note`); the crawl keeps running. Ctrl-C stops the wait, not the crawl, and exits 130;
+resume with `zenrows crawl wait <crawl-id>`. A crawl that ends `failed` exits 1
+with `CRAWL_FAILED`.
+
+Errors carry the API's code as `server_code`, `crawl_id` on any call about one
+crawl, and `retry_after` on a 429. When the account has reached its limit of
+active jobs (3 by default), shared with its Batch jobs, a create gets
+`CRAWL_TOO_MANY_CRAWLS` and creates nothing; retry after `retry_after` seconds.
+Other codes: `CRAWL_QUOTA_EXCEEDED` and `CRAWL_KEY_CAP_REACHED` (402, with the
+same claim, top-up and key-cap advice as other commands),
+`CRAWL_INVALID_REQUEST` (400/422, do not retry as is), `CRAWL_REQUEST_IN_FLIGHT`
+(409, retry once the first request ends), `CRAWL_NOT_FOUND`,
+`CRAWL_CONTENT_NOT_FOUND` and `CRAWL_FAILED`. Set `ZENROWS_CRAWL_API_BASE` to
+point the CLI at another deployment.
+
+The CLI retries transient failures, as the Crawl SDKs do: up to 3 retries,
+waiting the `Retry-After` seconds or 250 ms x 2^n (+/-20% jitter, at most 10 s).
+Reads retry on 429, 502, 503, 504 and network errors (a timeout counts).
+`create` retries only with `--idempotency-key`, and only on 502, 503, 504 and
+network errors, never on 429. `stop` never retries.
+
+## 11. Browser Sessions
 
 Escalation only — **prefer `fetch`/`extract` for the vast majority of cases**;
 they cost less. Use the browser for logins, forms, and multi-step JS flows that
@@ -170,7 +237,7 @@ bring-your-own Playwright/Puppeteer.
 close interactive sessions with `zenrows browser close`. On by default; opt out
 with `zenrows policy set allow_browser false`.
 
-## 11. MCP
+## 12. MCP
 
 ```bash
 zenrows mcp status
@@ -188,7 +255,7 @@ both servers in `mcp.json` (no secrets) and ships MCP-native skills under
 `agent-plugin/skills/`. It is included in the published `@zenrows/cli` npm
 tarball (`node_modules/@zenrows/cli/agent-plugin`).
 
-## 12. Plugins
+## 13. Plugins
 
 ```bash
 zenrows plugin list
@@ -201,7 +268,7 @@ MCP-native skills). See [`agent-plugin/README.md`](agent-plugin/README.md).
 Legacy per-client snippets from `zenrows plugin install` remain available.
 CLI-oriented skills stay under repo-root `skills/`.
 
-## 13. Skills
+## 14. Skills
 
 Agent-readable playbooks that teach agents how to choose primitives.
 
@@ -213,28 +280,28 @@ zenrows skill validate zenrows
 
 The master skill `skills/zenrows/SKILL.md` teaches the full decision tree.
 
-## 14. Templates
+## 15. Templates
 
 ```bash
 zenrows template list
 zenrows template create protected-fetch-node --output ./my-project
 ```
 
-## 15. Workflows
+## 16. Workflows
 
 ```bash
 zenrows workflow list
 zenrows workflow explain competitor-intelligence
 ```
 
-## 16. Recipes
+## 17. Recipes
 
 ```bash
 zenrows recipe list
 zenrows recipe run fetch-protected-page
 ```
 
-## 17. Evals
+## 18. Evals
 
 Reproducible, transparent benchmarks. **No competitor keys are bundled** and
 nothing is hardcoded to make Zenrows win — comparison evals require you to supply
@@ -249,7 +316,7 @@ zenrows eval report protected-fetch-smoke
 Reports write `input.json`, `results.json`, `report.md`, `failures.jsonl`,
 `cost.json`, and `traces/` under `.zenrows/evals/<run-id>/`.
 
-## 18. Security
+## 19. Security
 
 - API keys are never printed or written into run artifacts/assets.
 - Secrets live in `.zenrows/secrets.json` (0600, gitignored); logs are redacted.
@@ -259,12 +326,12 @@ Reports write `input.json`, `results.json`, `report.md`, `failures.jsonl`,
 - Destructive `uninstall` requires `--yes`. Browser is on by default; opt out with
   `zenrows policy set allow_browser false`. Experimental features are off by default.
 
-## 19. Capability matrix
+## 20. Capability matrix
 
 See [`registry/capabilities.json`](registry/capabilities.json). `zenrows status
 --json` emits it.
 
-## 20. Contributing
+## 21. Contributing
 
 The CLI is TypeScript with **zero runtime dependencies** (native `fetch`,
 `node:util` `parseArgs`, `node:test`). Node 20+ runs the published build;
