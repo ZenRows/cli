@@ -35,7 +35,7 @@ If the user has a known URL and wants structured data:
   → Use Extract.                    (zenrows extract <url> | --autoparse | --css)
 
 If the user has a start page (listing, index, section) but not the item URLs:
-  → Use Crawl.                      (zenrows crawl start <url> --depth 1 --follow,
+  → Use Crawl.                      (zenrows crawl create <url> --depth 1 --follow,
                                      then `zenrows crawl results <id>`)
 
 If the user has many URLs (bulk):

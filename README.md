@@ -163,40 +163,52 @@ Zenrows **Crawl** is in beta. Crawl (`https://api.zenrows.com/v1/crawls`)
 takes one start URL and returns the URLs it finds behind it, optionally with
 each page's HTML. Use it when you know the listing or section but not the item
 URLs. Crawl follows the links on each page up to `--depth` hops and stays on
-the start URL's registrable domain (subdomains count). Without `--html` it returns URLs only. An account without Crawl access gets
+the start URL's registrable domain (subdomains count). Without
+`--output-format html` it returns URLs only. An account without Crawl access gets
 `CRAWL_NOT_ENABLED` ("Crawl is not enabled for this account", HTTP 403
 `REQS008`).
 
 ```bash
-zenrows crawl start https://example.com/products/ --depth 1 \
-  --max-items 20 --include /product/ --follow    # start and wait for the end
-zenrows crawl results <crawl-id> --out urls.jsonl # every kept URL (paginated)
-zenrows crawl start <url> --depth 2 --html        # also fetch each kept page's HTML
-zenrows crawl content <crawl-id> <content-id>     # one page's HTML
-zenrows crawl results <crawl-id> --download       # NDJSON export (URLs + HTML) → <crawl-id>.jsonl
-zenrows crawl status <crawl-id>                   # status, coverage, stop reason
-zenrows crawl list                                # your crawls, newest first
-zenrows crawl stop <crawl-id>                     # stop a running crawl
+zenrows crawl create https://example.com/products/ --depth 1 \
+  --max-items 20 --include-pattern /product/ --follow  # create and wait for the end
+zenrows crawl results <crawl-id> --out urls.jsonl       # every kept URL (paginated)
+zenrows crawl create <url> --depth 2 --output-format html  # also fetch each kept page's HTML
+zenrows crawl content <crawl-id> <content-id>           # one page's HTML
+zenrows crawl download <crawl-id>                       # NDJSON export (URLs + HTML) → <crawl-id>.jsonl
+zenrows crawl get <crawl-id>                            # status, coverage, stop reason, one page of results
+zenrows crawl wait <crawl-id>                           # wait for the end
+zenrows crawl list                                      # your crawls, newest first
+zenrows crawl stop <crawl-id>                           # stop a running crawl
 ```
 
 `--depth` (link hops) is required; `--max-items` and `--max-pages` cap the
 crawl (API default 10 each), and `--max-pages` bounds the cost, since each page
 is one fetch. The local policy `max_pages_per_run` caps `--max-pages` (default
-1000). `--html` uses up the page budget: each kept page is one more fetch, and
-`--max-pages` counts it. `--include` / `--exclude` are repeatable substring
-filters on the URL. `results` on a running crawl returns the URLs kept so far,
-with `partial: true`. `--follow` gives up after `--timeout` (default 600000 ms)
-with `CRAWL_WAIT_TIMEOUT`; the crawl keeps running. Ctrl-C stops the wait, not
-the crawl, and exits 130; resume with `zenrows crawl wait <crawl-id>`.
+1000). `--output-format html` uses up the page budget: each kept page is one
+more fetch, and `--max-pages` counts it. `--include-pattern` /
+`--exclude-pattern` are repeatable substring filters on the URL. `get` and
+`list` read one page and take `--cursor` and `--limit`. `results` follows every
+page (`--limit` is the page size); on a running crawl it returns the URLs kept
+so far, with `partial: true`. `download` reports the crawl's `status`, and
+`partial: true` while it runs.
 
-Errors carry the API's code as `server_code`, and `crawl_id` once the crawl
-exists. When the account has reached its limit of active jobs (3 by default),
-shared with its Batch jobs, a start gets `CRAWL_TOO_MANY_CRAWLS` and creates
-nothing; retry after `retry_after` seconds. Other codes: `CRAWL_INVALID_REQUEST`
-(400/422, do not retry as is), `CRAWL_REQUEST_IN_FLIGHT` (409, retry once the
-first request ends), `CRAWL_NOT_FOUND`, `CRAWL_CONTENT_NOT_FOUND` and
-`CRAWL_FAILED`. Set `ZENROWS_CRAWL_API_BASE` to point the CLI at another
-deployment.
+`wait`, and `create --follow`, poll until the crawl ends or `--timeout` seconds
+run out (default 600). When the time runs out, the command exits 0 and prints
+the crawl with status `running` and the hint `zenrows crawl wait <crawl-id>`;
+the crawl keeps running. Ctrl-C stops the wait, not the crawl, and exits 130;
+resume with `zenrows crawl wait <crawl-id>`. A crawl that ends `failed` exits 1
+with `CRAWL_FAILED`.
+
+Errors carry the API's code as `server_code`, `crawl_id` on any call about one
+crawl, and `retry_after` on a 429. When the account has reached its limit of
+active jobs (3 by default), shared with its Batch jobs, a create gets
+`CRAWL_TOO_MANY_CRAWLS` and creates nothing; retry after `retry_after` seconds.
+Other codes: `CRAWL_QUOTA_EXCEEDED` and `CRAWL_KEY_CAP_REACHED` (402, with the
+same claim, top-up and key-cap advice as other commands),
+`CRAWL_INVALID_REQUEST` (400/422, do not retry as is), `CRAWL_REQUEST_IN_FLIGHT`
+(409, retry once the first request ends), `CRAWL_NOT_FOUND`,
+`CRAWL_CONTENT_NOT_FOUND` and `CRAWL_FAILED`. Set `ZENROWS_CRAWL_API_BASE` to
+point the CLI at another deployment.
 
 ## 11. Browser Sessions
 

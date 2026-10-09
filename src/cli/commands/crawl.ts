@@ -2,10 +2,10 @@
  * `zenrows crawl` — Crawl API (status: beta).
  *
  * Give Crawl one start URL and read back the URLs it finds behind it, optionally
- * with each page's HTML. A crawl is an async job: `start` returns at once
- * (or polls with `--follow`), then `status` / `wait` / `results` / `content`
- * read it and `stop` ends it. An account without Crawl access gets 403 REQS008
- * → CRAWL_NOT_ENABLED.
+ * with each page's HTML. A crawl is an async job: `create` returns at once
+ * (or waits with `--follow`), then `get` / `wait` / `results` / `content` /
+ * `download` read it and `stop` ends it. An account without Crawl access gets
+ * 403 REQS008 → CRAWL_NOT_ENABLED.
  */
 import { log } from "../../core/logger.ts";
 import { requireApiKey } from "../../core/auth.ts";
@@ -19,6 +19,7 @@ import {
   downloadCrawl,
   getCrawl,
   getCrawlContent,
+  isTerminal,
   listAllResults,
   listCrawls,
   stopCrawl,
@@ -31,7 +32,6 @@ import {
 import { asNumber, asString, parse, type Command, type RunContext } from "../command.ts";
 import { ToolkitError } from "../../core/errors.ts";
 import { printError, writeOut } from "../output.ts";
-import { normalizeTimeout } from "./fetch.ts";
 
 /** The API's default for `max_pages` (and `max_items`) when the flag is unset. */
 const DEFAULT_MAX_PAGES = 10;
@@ -42,60 +42,64 @@ export const crawl: Command = {
   name: "crawl",
   summary: "Crawl a site from one start URL and collect the URLs behind it (beta).",
   usage:
-    "zenrows crawl <start <url> --depth N|status <id>|results <id>|content <id> <content_id>|list|stop <id>|wait <id>>",
+    "zenrows crawl <create <url> --depth N|get <id>|list|results <id>|content <id> <content_id>|download <id>|stop <id>|wait <id>>",
   help: [
     "Crawl is in beta. Cloud (needs a key with Crawl access):",
-    "  start <url> --depth <n> [flags]  start a crawl from one URL (returns at once)",
-    "    --depth <n>                    link hops to follow from the start URL (1-100000, required)",
-    "    --max-items <n>                stop after keeping n URLs (API default 10)",
-    "    --max-pages <n>                stop after fetching n pages (API default 10; bounds cost);",
-    "                                   the local policy max_pages_per_run caps it (default 1000)",
-    "    --include <pattern>            keep only URLs containing this substring (repeatable)",
-    "    --exclude <pattern>            drop URLs containing this substring (repeatable)",
-    "    --html                         also fetch each kept URL's page HTML (read with `content`);",
-    "                                   each kept page is one more fetch counted by --max-pages",
-    "    --follow                       poll until the crawl ends (Ctrl-C stops the wait, not the crawl)",
-    "    --timeout <ms>                 with --follow: give up waiting after ms (default 600000)",
-    "    --idempotency-key <key>        make a retried start create no second crawl",
-    "    --no-signup                    do not auto-create a Free plan account if no key exists",
-    "  status <id>                      show status, coverage, stop reason / error",
-    "  wait <id> [--timeout <ms>]       poll until the crawl ends (it is not stopped on timeout)",
-    "  results <id>                     all kept URLs; on a running crawl, those kept so far (partial)",
-    "    --out <file>                   write results as JSONL instead of printing",
-    "    --cursor <c> [--limit <n>]     read one page only (works while running; prints next_cursor)",
-    "    --download                     fetch the NDJSON export (with page HTML for --html crawls)",
-    "                                   into --out, or <id>.jsonl",
-    "  content <id> <content_id>        print one kept URL's page (content_id or content_url)",
-    "    --out <file>                   write it to a file instead",
-    "  list [--limit <n>] [--cursor c]  list your crawls, newest first",
-    "  stop <id>                        stop a running crawl (an ended crawl answers as it ended)",
-    "  --json                           print structured output",
+    "  create <url> --depth <n> [flags]  start a crawl from one URL (returns at once)",
+    "    --depth <n>                     link hops to follow from the start URL (1-100000, required)",
+    "    --max-items <n>                 stop after keeping n URLs (API default 10)",
+    "    --max-pages <n>                 stop after fetching n pages (API default 10; bounds cost);",
+    "                                    the local policy max_pages_per_run caps it (default 1000)",
+    "    --include-pattern <p>           keep only URLs containing this substring (repeatable)",
+    "    --exclude-pattern <p>           drop URLs containing this substring (repeatable)",
+    "    --output-format html            also fetch each kept URL's page HTML (read with content/download);",
+    "                                    each kept page is one more fetch counted by --max-pages",
+    "    --follow                        wait until the crawl ends (Ctrl-C stops the wait, not the crawl)",
+    "    --timeout <s>                   with --follow: stop waiting after s seconds (default 600)",
+    "    --idempotency-key <key>         so a retried create starts no second crawl",
+    "    --no-signup                     do not auto-create a Free plan account if no key exists",
+    "  get <id> [--cursor <c>] [--limit <n>]",
+    "                                    the crawl and one page of its results (limit up to 10000)",
+    "  list [--cursor <c>] [--limit <n>] your crawls, newest first (limit up to 100)",
+    "  results <id> [--limit <n>]        every kept URL as JSONL; on a running crawl, those kept so far",
+    "                                    (partial). --limit is the page size per request",
+    "    --out <file>                    write the results to a file instead of printing",
+    "  content <id> <content_id>         print one kept URL's page (content_id or content_url)",
+    "    --out <file>                    write it to a file instead",
+    "  download <id> [--out <file>]      save the NDJSON export (with page HTML for html crawls),",
+    "                                    default <id>.jsonl; partial while the crawl runs",
+    "  stop <id>                         stop a running crawl (an ended crawl answers as it ended)",
+    "  wait <id> [--timeout <s>]         poll until the crawl ends or s seconds (default 600) run out;",
+    "                                    a crawl still running then is printed, not stopped",
+    "  --json                            print structured output",
   ].join("\n"),
   async run(argv: string[], ctx: RunContext): Promise<number> {
     const [sub, ...rest] = argv;
     try {
       switch (sub) {
-        case "start":
-          return await startCmd(rest, ctx);
-        case "status":
-          return await statusCmd(rest, ctx);
-        case "wait":
-          return await waitCmd(rest, ctx);
+        case "create":
+          return await createCmd(rest, ctx);
+        case "get":
+          return await getCmd(rest, ctx);
+        case "list":
+          return await listCmd(rest, ctx);
         case "results":
           return await resultsCmd(rest, ctx);
         case "content":
           return await contentCmd(rest, ctx);
-        case "list":
-          return await listCmd(rest, ctx);
+        case "download":
+          return await downloadCmd(rest, ctx);
         case "stop":
           return await stopCmd(rest, ctx);
+        case "wait":
+          return await waitCmd(rest, ctx);
         default:
           throw new ToolkitError({
             code: "INVALID_USAGE",
             message: `Unknown crawl subcommand: ${sub ?? "(none)"}`,
             likely_cause: "Subcommand not recognized.",
             next_action:
-              "Use start <url> --depth N | status <id> | wait <id> | results <id> | content <id> <content_id> | list | stop <id>.",
+              "Use create <url> --depth N | get <id> | list | results <id> | content <id> <content_id> | download <id> | stop <id> | wait <id>.",
             suggested_commands: ["zenrows crawl --help"],
           });
       }
@@ -106,14 +110,14 @@ export const crawl: Command = {
   },
 };
 
-async function startCmd(rest: string[], ctx: RunContext): Promise<number> {
+async function createCmd(rest: string[], ctx: RunContext): Promise<number> {
   const { values, positionals } = parse(rest, {
     depth: { type: "string" },
     "max-items": { type: "string" },
     "max-pages": { type: "string" },
-    include: { type: "string", multiple: true },
-    exclude: { type: "string", multiple: true },
-    html: { type: "boolean" },
+    "include-pattern": { type: "string", multiple: true },
+    "exclude-pattern": { type: "string", multiple: true },
+    "output-format": { type: "string" },
     follow: { type: "boolean" },
     timeout: { type: "string" },
     "idempotency-key": { type: "string" },
@@ -121,15 +125,14 @@ async function startCmd(rest: string[], ctx: RunContext): Promise<number> {
     json: { type: "boolean" },
   });
   const json = ctx.json || values.json === true;
-  const wait = values.follow === true;
   const url = positionals[0];
   if (!url) {
     throw new ToolkitError({
       code: "INVALID_USAGE",
       message: "Provide the start URL.",
       likely_cause: "No <url> positional was given.",
-      next_action: "Usage: zenrows crawl start <url> --depth 1",
-      suggested_commands: ["zenrows crawl start https://example.com/ --depth 1"],
+      next_action: "Usage: zenrows crawl create <url> --depth 1",
+      suggested_commands: ["zenrows crawl create https://example.com/ --depth 1"],
     });
   }
   const depth = limitFlag("depth", values.depth);
@@ -139,7 +142,7 @@ async function startCmd(rest: string[], ctx: RunContext): Promise<number> {
       message: "--depth is required.",
       likely_cause: "Crawl has no default depth yet; every crawl states how many link hops to follow.",
       next_action: "Pass --depth 1 to collect the start page's links, --depth 2 to also open each of those.",
-      suggested_commands: [`zenrows crawl start ${url} --depth 1`],
+      suggested_commands: [`zenrows crawl create ${url} --depth 1`],
     });
   }
   const params: CreateCrawlParams = { url, depth };
@@ -147,12 +150,23 @@ async function startCmd(rest: string[], ctx: RunContext): Promise<number> {
   if (maxItems !== undefined) params.max_items = maxItems;
   const maxPages = limitFlag("max-pages", values["max-pages"]);
   if (maxPages !== undefined) params.max_pages = maxPages;
-  const include = patterns(values.include);
+  const include = patterns(values["include-pattern"]);
   if (include.length) params.include_patterns = include;
-  const exclude = patterns(values.exclude);
+  const exclude = patterns(values["exclude-pattern"]);
   if (exclude.length) params.exclude_patterns = exclude;
-  if (values.html === true) params.output_format = "html";
-  const timeoutMs = normalizeTimeout(values.timeout);
+  const outputFormat = asString(values["output-format"]);
+  if (outputFormat !== undefined) {
+    if (outputFormat !== "html") {
+      throw new ToolkitError({
+        code: "INVALID_USAGE",
+        message: `Invalid --output-format value '${outputFormat}'.`,
+        likely_cause: "--output-format takes html only. Without it, a crawl returns URLs only.",
+        next_action: "Pass --output-format html, or leave it out.",
+      });
+    }
+    params.output_format = outputFormat;
+  }
+  const timeoutMs = timeoutFlag(values.timeout);
   const idempotencyKey = asString(values["idempotency-key"]);
 
   assertUsable("crawl");
@@ -175,11 +189,12 @@ async function startCmd(rest: string[], ctx: RunContext): Promise<number> {
   log.step(`Starting crawl of ${url} (depth ${depth})…`);
   try {
     const created = await createCrawl(params, { apiKey, idempotencyKey });
-    const finished: Crawl = wait ? await waitUntilEnd(created.crawl_id, { apiKey, timeoutMs }) : created;
+    const follow = values.follow === true;
+    const finished: Crawl = follow ? await waitUntilEnd(created.crawl_id, { apiKey, timeoutMs }) : created;
     const failure = crawlFailure(finished);
     const runDir = writeRun({
       runId,
-      command: "zenrows crawl start",
+      command: "zenrows crawl create",
       capability: "crawl",
       url,
       startedAt,
@@ -189,16 +204,14 @@ async function startCmd(rest: string[], ctx: RunContext): Promise<number> {
       result: { crawlId: created.crawl_id, status: finished.status, coverage: finished.coverage },
       ...(failure ? { error: failure.toJSON() } : {}),
     });
-    const code = printCrawl(finished, json, `Started crawl ${created.crawl_id}`);
-    if (!json) {
-      if (runDir) log.dim(`  artifact: ${runDir}`);
-      if (!wait) log.dim(`  next: zenrows crawl wait ${created.crawl_id}`);
-    }
+    const code = printCrawl(finished, json, follow ? waitHeadline(finished) : `Started crawl ${created.crawl_id}`);
+    if (!json && runDir) log.dim(`  artifact: ${runDir}`);
+    printWaitHint(finished, json);
     return code;
   } catch (err) {
     writeRun({
       runId,
-      command: "zenrows crawl start",
+      command: "zenrows crawl create",
       capability: "crawl",
       url,
       startedAt,
@@ -211,64 +224,85 @@ async function startCmd(rest: string[], ctx: RunContext): Promise<number> {
   }
 }
 
-async function statusCmd(rest: string[], ctx: RunContext): Promise<number> {
-  const { values, positionals } = parse(rest, { json: { type: "boolean" } });
-  const id = requireId(positionals[0], "status");
+async function getCmd(rest: string[], ctx: RunContext): Promise<number> {
+  const { values, positionals } = parse(rest, {
+    cursor: { type: "string" },
+    limit: { type: "string" },
+    json: { type: "boolean" },
+  });
+  const json = ctx.json || values.json === true;
+  const id = requireId(positionals[0], "get");
+  const cursor = asString(values.cursor);
+  const limit = pageLimit(values.limit, 10_000);
   assertUsable("crawl");
   const apiKey = requireApiKey();
-  const c = await getCrawl(id, { apiKey, limit: 1 });
-  return printCrawl(c, ctx.json || values.json === true, `Crawl ${id}`);
+  const page = await getCrawl(id, { apiKey, cursor, limit });
+  const results = page.results ?? [];
+  const nextCursor = page.next_cursor ?? null;
+  const code = printCrawl(page, json, `Crawl ${id}`, { results, next_cursor: nextCursor });
+  if (!json) {
+    log.info(`${results.length} result(s) on this page:`);
+    if (results.length) log.out(toJsonl(results).trimEnd());
+    log.info(`next_cursor: ${nextCursor ?? "null (last page)"}`);
+  }
+  return code;
 }
 
 async function waitCmd(rest: string[], ctx: RunContext): Promise<number> {
   const { values, positionals } = parse(rest, { timeout: { type: "string" }, json: { type: "boolean" } });
+  const json = ctx.json || values.json === true;
   const id = requireId(positionals[0], "wait");
-  const timeoutMs = normalizeTimeout(values.timeout);
+  const timeoutMs = timeoutFlag(values.timeout);
   assertUsable("crawl");
   const apiKey = requireApiKey();
   const c = await waitUntilEnd(id, { apiKey, timeoutMs });
-  return printCrawl(c, ctx.json || values.json === true, `Crawl ${id} finished`);
+  const code = printCrawl(c, json, waitHeadline(c));
+  printWaitHint(c, json);
+  return code;
+}
+
+function waitHeadline(c: Crawl): string {
+  return isTerminal(c.status) ? `Crawl ${c.crawl_id} finished` : `Stopped waiting: crawl ${c.crawl_id} is still running`;
+}
+
+function printWaitHint(c: Crawl, json: boolean): void {
+  if (!json && !isTerminal(c.status)) log.dim(`  next: zenrows crawl wait ${c.crawl_id}`);
 }
 
 async function resultsCmd(rest: string[], ctx: RunContext): Promise<number> {
   const { values, positionals } = parse(rest, {
     out: { type: "string" },
-    cursor: { type: "string" },
     limit: { type: "string" },
-    download: { type: "boolean" },
     json: { type: "boolean" },
   });
   const json = ctx.json || values.json === true;
   const id = requireId(positionals[0], "results");
   const outFile = asString(values.out);
-  const cursor = asString(values.cursor);
-  const limit = pageLimit(values.limit, 10_000);
+  const pageSize = pageLimit(values.limit, 10_000);
   assertUsable("crawl");
   const apiKey = requireApiKey();
-
-  if (values.download === true) {
-    const file = outFile ?? `${id.replace(/[^A-Za-z0-9._-]+/g, "_")}.jsonl`;
-    const { crawlStatus, ndjson } = await downloadCrawl(id, { apiKey });
-    writeOut(file, ndjson);
-    const lines = ndjson.split("\n").filter((l) => l.trim()).length;
-    const partial = crawlStatus === "running";
-    if (json) {
-      log.out(JSON.stringify({ ok: true, crawlId: id, crawlStatus, partial, count: lines, file }, null, 2));
-    } else {
-      log.success(`Downloaded ${lines} result(s) → ${file}`);
-      if (partial) log.warn("  The crawl is still running: this file is partial. Download again once it ends.");
-    }
-    return 0;
-  }
-
-  // One page, as the API returns it — the way to follow a crawl while it runs.
-  if (cursor !== undefined || limit !== undefined) {
-    const page = await getCrawl(id, { apiKey, cursor, limit });
-    return printResults(id, page.status, page.results, { outFile, json, next_cursor: page.next_cursor ?? null });
-  }
-
-  const { crawl: c, results, partial } = await listAllResults(id, { apiKey });
+  const { crawl: c, results, partial } = await listAllResults(id, { apiKey, pageSize });
   return printResults(id, c.status, results, { outFile, json, partial });
+}
+
+async function downloadCmd(rest: string[], ctx: RunContext): Promise<number> {
+  const { values, positionals } = parse(rest, { out: { type: "string" }, json: { type: "boolean" } });
+  const json = ctx.json || values.json === true;
+  const id = requireId(positionals[0], "download");
+  const file = asString(values.out) ?? `${id.replace(/[^A-Za-z0-9._-]+/g, "_")}.jsonl`;
+  assertUsable("crawl");
+  const apiKey = requireApiKey();
+  const { status, ndjson } = await downloadCrawl(id, { apiKey });
+  writeOut(file, ndjson);
+  const count = ndjson.split("\n").filter((l) => l.trim()).length;
+  const partial = status === "running";
+  if (json) {
+    log.out(JSON.stringify({ ok: true, crawlId: id, status, partial, count, file }, null, 2));
+  } else {
+    log.success(`Downloaded ${count} result(s) → ${file}`);
+    if (partial) log.warn("  The crawl is still running: this file is partial. Download again once it ends.");
+  }
+  return 0;
 }
 
 /** Write or print results. Under --json, always print the envelope (`file` replaces `results` with --out). */
@@ -276,16 +310,12 @@ function printResults(
   id: string,
   status: string,
   results: CrawlResult[],
-  o: { outFile?: string; json: boolean; partial?: boolean; next_cursor?: string | null },
+  o: { outFile?: string; json: boolean; partial: boolean },
 ): number {
-  const extra = {
-    ...(o.partial !== undefined ? { partial: o.partial } : {}),
-    ...(o.next_cursor !== undefined ? { next_cursor: o.next_cursor } : {}),
-  };
   if (o.outFile) writeOut(o.outFile, toJsonl(results));
   if (o.json) {
     const rows = o.outFile ? { file: o.outFile } : { results };
-    log.out(JSON.stringify({ ok: true, crawlId: id, status, count: results.length, ...rows, ...extra }, null, 2));
+    log.out(JSON.stringify({ ok: true, crawlId: id, status, count: results.length, ...rows, partial: o.partial }, null, 2));
     return 0;
   }
   if (o.outFile) {
@@ -295,7 +325,6 @@ function printResults(
     log.out(toJsonl(results).trimEnd());
   }
   if (o.partial) log.warn("  The crawl is still running: these results are partial. Read them again once it ends.");
-  if (o.next_cursor !== undefined) log.info(`next_cursor: ${o.next_cursor ?? "null (last page)"}`);
   return 0;
 }
 
@@ -312,7 +341,7 @@ async function contentCmd(rest: string[], ctx: RunContext): Promise<number> {
       message: "Missing content id.",
       likely_cause: "No <content_id> positional was provided.",
       next_action:
-        "Pass the id from a fetched result's content_url (the last path segment), e.g. `zenrows crawl content <id> ct_…`. Only crawls started with --html have content.",
+        "Pass the id from a fetched result's content_url (the last path segment), e.g. `zenrows crawl content <id> ct_…`. Only crawls created with --output-format html have content.",
       suggested_commands: [`zenrows crawl results ${id}`],
     });
   }
@@ -399,14 +428,14 @@ export function crawlFailure(c: Crawl | CrawlStop): ToolkitError | null {
     insufficient_credits: "The account ran out of credits. Check `zenrows usage`, add credits, then start a new crawl.",
     seed_unreachable: "The start URL could not be fetched (the site may be blocking it). Check it with `zenrows fetch <url>`.",
     no_items_found:
-      "Nothing matched. Loosen --include / --exclude, raise --depth, or check the start page with `zenrows fetch <url>`.",
+      "Nothing matched. Loosen --include-pattern / --exclude-pattern, raise --depth, or check the start page with `zenrows fetch <url>`.",
   };
   return new ToolkitError({
     code: "CRAWL_FAILED",
     message: `Crawl ${c.crawl_id} failed.`,
     likely_cause: why || "The crawl ended in status failed without a reason.",
     next_action: (code && next[code]) || "Read the error, fix the cause, then start a new crawl.",
-    suggested_commands: [`zenrows crawl status ${c.crawl_id}`],
+    suggested_commands: [`zenrows crawl get ${c.crawl_id}`],
     server_code: code,
     crawl_id: c.crawl_id,
   });
@@ -415,12 +444,17 @@ export function crawlFailure(c: Crawl | CrawlStop): ToolkitError | null {
 /**
  * Print a crawl (or a stop answer), structured under --json, and return the exit
  * code: 1 when it ended `failed`, else 0. `stopped` is a deliberate outcome, so
- * it exits 0 but prints as a warning.
+ * it exits 0 but prints as a warning. `page` carries the results a `get` read.
  */
-function printCrawl(c: Crawl | CrawlStop, json: boolean, headline: string): number {
+function printCrawl(
+  c: Crawl | CrawlStop,
+  json: boolean,
+  headline: string,
+  page?: { results: CrawlResult[]; next_cursor: string | null },
+): number {
   const err = crawlFailure(c);
   const crawlFields = { ...c } as Record<string, unknown>;
-  // A status read asks for one result to keep polls cheap; that page is not "the results".
+  // A wait polls with one result to stay cheap; that page is not "the results".
   delete crawlFields.results;
   delete crawlFields.next_cursor;
   if (json) {
@@ -432,6 +466,7 @@ function printCrawl(c: Crawl | CrawlStop, json: boolean, headline: string): numb
           status: c.status,
           ...(c.stop_reason ? { stop_reason: c.stop_reason } : {}),
           crawl: crawlFields,
+          ...page,
           ...(err ? { error: err.toJSON() } : {}),
         },
         null,
@@ -465,6 +500,21 @@ function limitFlag(name: string, v: unknown): number | undefined {
     });
   }
   return n;
+}
+
+/** `--timeout` in seconds, returned in milliseconds; undefined when unset. */
+function timeoutFlag(v: unknown): number | undefined {
+  if (v === undefined) return undefined;
+  const seconds = asNumber(v);
+  if (seconds === undefined || seconds <= 0) {
+    throw new ToolkitError({
+      code: "INVALID_USAGE",
+      message: `Invalid --timeout value '${String(v)}'.`,
+      likely_cause: "--timeout takes a positive number of seconds.",
+      next_action: "Pass seconds, e.g. --timeout 600 for ten minutes.",
+    });
+  }
+  return seconds * 1000;
 }
 
 /** `--limit` for a paged read: a whole number from 1 to `max`. */

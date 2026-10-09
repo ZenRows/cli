@@ -40,7 +40,7 @@ npm run build          # tsc → dist/ (for publishing)
 ## Running the Crawl e2e test
 
 `tests/e2e/crawl.e2e.test.ts` drives the built CLI (`zenrows crawl …`) against a
-live Zenrows API: it starts one small crawl of the target you give it (depth 1,
+live Zenrows API: it creates one small crawl of the target you give it (depth 1,
 3 items, 5 pages, HTML output), waits for it, reads its results, one page's
 HTML and the NDJSON export, lists crawls, stops the ended crawl and checks a
 missing id. It is not part of `npm test`, and it skips unless `ZENROWS_E2E=1`,
@@ -67,7 +67,7 @@ ZENROWS_E2E=1 ZENROWS_E2E_CRAWL_URL=https://example.com/products/ \
 To target a local or staging deployment, set `ZENROWS_CRAWL_API_BASE` to its
 `/v1` base. When the account has reached its limit of active jobs (3 by
 default, shared with its Batch jobs), the test waits `retry_after` seconds and
-retries the start for up to 5 minutes, so run concurrent e2e
+retries the create for up to 5 minutes, so run concurrent e2e
 runs on one account one at a time.
 
 ## Rules

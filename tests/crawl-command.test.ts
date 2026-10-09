@@ -80,26 +80,39 @@ async function run(args: string[]): Promise<{ code: number; out: Record<string, 
   return { code, out: JSON.parse(raw) as Record<string, any> };
 }
 
-test("crawl start rejects flags it does not declare, before any network call", async () => {
+test("crawl create rejects flags it does not declare, before any network call", async () => {
   await withCrawlWorkspace(
     () => json(crawlBody, 202),
     async (calls) => {
-      for (const flag of ["--pagination", "--discovery", "--json-output", "--wait"]) {
-        const { code, out } = await run(["start", "https://example.com/products/", "--depth", "1", flag]);
+      for (const flag of ["--pagination", "--discovery", "--json-output", "--wait", "--html", "--include", "--exclude"]) {
+        const { code, out } = await run(["create", "https://example.com/products/", "--depth", "1", flag, "x"]);
         assert.equal(code, 1, flag);
         assert.equal(out.error.code, "UNKNOWN_FLAG", flag);
+      }
+      for (const args of [["results", "c_1", "--download"], ["results", "c_1", "--cursor", "p2"]]) {
+        const { code, out } = await run(args);
+        assert.equal(code, 1, args.join(" "));
+        assert.equal(out.error.code, "UNKNOWN_FLAG", args.join(" "));
       }
       assert.equal(calls.length, 0);
     },
   );
 });
 
-test("crawl start requires --depth and a whole number in range", async () => {
+test("the old start and status subcommands are gone", async () => {
+  for (const sub of ["start", "status"]) {
+    const { code, out } = await run([sub, "c_1"]);
+    assert.equal(code, 1, sub);
+    assert.equal(out.error.code, "INVALID_USAGE", sub);
+  }
+});
+
+test("crawl create takes --output-format html only and --timeout in positive seconds", async () => {
   await withCrawlWorkspace(
     () => json(crawlBody, 202),
     async (calls) => {
-      for (const args of [[], ["--depth", "0"], ["--depth", "1.5"], ["--depth", "100001"], ["--depth", "x"]]) {
-        const { code, out } = await run(["start", "https://example.com/products/", ...args]);
+      for (const args of [["--output-format", "json"], ["--follow", "--timeout", "0"], ["--follow", "--timeout", "x"]]) {
+        const { code, out } = await run(["create", "https://example.com/products/", "--depth", "1", ...args]);
         assert.equal(code, 1, args.join(" "));
         assert.equal(out.error.code, "INVALID_USAGE", args.join(" "));
       }
@@ -108,12 +121,26 @@ test("crawl start requires --depth and a whole number in range", async () => {
   );
 });
 
-test("crawl start sends only the flags the caller set as the create body", async () => {
+test("crawl create requires --depth and a whole number in range", async () => {
+  await withCrawlWorkspace(
+    () => json(crawlBody, 202),
+    async (calls) => {
+      for (const args of [[], ["--depth", "0"], ["--depth", "1.5"], ["--depth", "100001"], ["--depth", "x"]]) {
+        const { code, out } = await run(["create", "https://example.com/products/", ...args]);
+        assert.equal(code, 1, args.join(" "));
+        assert.equal(out.error.code, "INVALID_USAGE", args.join(" "));
+      }
+      assert.equal(calls.length, 0);
+    },
+  );
+});
+
+test("crawl create sends only the flags the caller set as the create body", async () => {
   await withCrawlWorkspace(
     () => json(crawlBody, 202, { location: "/v1/crawls/c_1" }),
     async (calls) => {
       const { code, out } = await run([
-        "start",
+        "create",
         "https://example.com/products/",
         "--depth",
         "1",
@@ -121,13 +148,14 @@ test("crawl start sends only the flags the caller set as the create body", async
         "3",
         "--max-pages",
         "5",
-        "--include",
+        "--include-pattern",
         "/product/",
-        "--include",
+        "--include-pattern",
         "/item/",
-        "--exclude",
+        "--exclude-pattern",
         "?add",
-        "--html",
+        "--output-format",
+        "html",
       ]);
       assert.equal(code, 0);
       assert.equal(out.ok, true);
@@ -148,13 +176,13 @@ test("crawl start sends only the flags the caller set as the create body", async
   );
 });
 
-test("crawl start honors the domain policy and the page cap before any network call", async () => {
+test("crawl create honors the domain policy and the page cap before any network call", async () => {
   await withCrawlWorkspace(
     () => json(crawlBody, 202),
     async (calls) => {
-      const blocked = await run(["start", "https://blocked.example.com/", "--depth", "1"]);
+      const blocked = await run(["create", "https://blocked.example.com/", "--depth", "1"]);
       assert.equal(blocked.code, 1);
-      const overCap = await run(["start", "https://example.com/products/", "--depth", "1", "--max-pages", "50"]);
+      const overCap = await run(["create", "https://example.com/products/", "--depth", "1", "--max-pages", "50"]);
       assert.equal(overCap.code, 1);
       assert.equal(overCap.out.error.code, "POLICY_LIMIT_EXCEEDED");
       assert.equal(calls.length, 0);
@@ -163,7 +191,7 @@ test("crawl start honors the domain policy and the page cap before any network c
   );
 });
 
-test("crawl start --follow waits for the end and exits 1 with CRAWL_FAILED on a failed crawl", async () => {
+test("crawl create --follow waits for the end and exits 1 with CRAWL_FAILED on a failed crawl", async () => {
   await withCrawlWorkspace(
     (url, init) =>
       init?.method === "POST"
@@ -176,7 +204,7 @@ test("crawl start --follow waits for the end and exits 1 with CRAWL_FAILED on a 
             next_cursor: null,
           }),
     async (calls) => {
-      const { code, out } = await run(["start", "https://example.com/products/", "--depth", "1", "--follow"]);
+      const { code, out } = await run(["create", "https://example.com/products/", "--depth", "1", "--follow"]);
       assert.equal(code, 1);
       assert.equal(out.ok, false);
       assert.equal(out.status, "failed");
@@ -190,7 +218,7 @@ test("crawl start --follow waits for the end and exits 1 with CRAWL_FAILED on a 
   );
 });
 
-test("crawl start surfaces 403 REQS008 as CRAWL_NOT_ENABLED", async () => {
+test("crawl create surfaces 403 REQS008 as CRAWL_NOT_ENABLED", async () => {
   await withCrawlWorkspace(
     () =>
       json(
@@ -199,7 +227,7 @@ test("crawl start surfaces 403 REQS008 as CRAWL_NOT_ENABLED", async () => {
         { "content-type": "application/problem+json" },
       ),
     async () => {
-      const { code, out } = await run(["start", "https://example.com/products/", "--depth", "1"]);
+      const { code, out } = await run(["create", "https://example.com/products/", "--depth", "1"]);
       assert.equal(code, 1);
       assert.equal(out.error.code, "CRAWL_NOT_ENABLED");
       assert.equal(out.error.message, "Crawl is not enabled for this account.");
@@ -207,7 +235,7 @@ test("crawl start surfaces 403 REQS008 as CRAWL_NOT_ENABLED", async () => {
   );
 });
 
-test("crawl status exits 0 for completed and stopped crawls", async () => {
+test("crawl get exits 0 for completed and stopped crawls", async () => {
   for (const [status, stop_reason] of [
     ["completed", "max_items"],
     ["stopped", "user"],
@@ -215,20 +243,23 @@ test("crawl status exits 0 for completed and stopped crawls", async () => {
     await withCrawlWorkspace(
       () => json({ ...crawlBody, status, stop_reason, results: [{ url: "https://example.com/product/a" }], next_cursor: "c" }),
       async () => {
-        const { code, out } = await run(["status", "c_1"]);
+        const { code, out } = await run(["get", "c_1"]);
         assert.equal(code, 0, status);
         assert.equal(out.ok, true);
         assert.equal(out.stop_reason, stop_reason);
+        assert.equal(out.results.length, 1);
+        assert.equal(out.next_cursor, "c");
+        assert.equal(out.crawl.results, undefined);
       },
     );
   }
 });
 
-test("crawl status on an unknown id exits 1 with CRAWL_NOT_FOUND", async () => {
+test("crawl get on an unknown id exits 1 with CRAWL_NOT_FOUND", async () => {
   await withCrawlWorkspace(
     () => json({ code: "crawl_not_found", title: "Crawl not found", detail: "No crawl c_x.", status: 404 }, 404),
     async () => {
-      const { code, out } = await run(["status", "c_x"]);
+      const { code, out } = await run(["get", "c_x"]);
       assert.equal(code, 1);
       assert.equal(out.error.code, "CRAWL_NOT_FOUND");
     },
@@ -242,8 +273,9 @@ test("crawl results reads every page of an ended crawl and writes JSONL with --o
   };
   await withCrawlWorkspace(
     (url) => json(pages[url.searchParams.get("cursor") ?? ""]),
-    async () => {
-      const { code, out } = await run(["results", "c_1"]);
+    async (calls) => {
+      const { code, out } = await run(["results", "c_1", "--limit", "500"]);
+      assert.ok(calls.every((c) => c.url.searchParams.get("limit") === "500"), "--limit is the page size");
       assert.equal(code, 0);
       assert.equal(out.count, 2);
       assert.deepEqual(out.results.map((r: { url: string }) => r.url), ["https://example.com/product/1", "https://example.com/product/2"]);
@@ -275,11 +307,11 @@ test("crawl results on a running crawl returns what is kept with partial: true",
   );
 });
 
-test("crawl results --cursor reads one page and returns next_cursor while running", async () => {
+test("crawl get --cursor reads one page and returns next_cursor while running", async () => {
   await withCrawlWorkspace(
     () => json({ ...crawlBody, results: [{ url: "https://example.com/product/3" }], next_cursor: "p4" }),
     async (calls) => {
-      const { code, out } = await run(["results", "c_1", "--cursor", "p3", "--limit", "500"]);
+      const { code, out } = await run(["get", "c_1", "--cursor", "p3", "--limit", "500"]);
       assert.equal(code, 0);
       assert.equal(out.next_cursor, "p4");
       assert.equal(calls[0]!.url.searchParams.get("cursor"), "p3");
@@ -288,7 +320,7 @@ test("crawl results --cursor reads one page and returns next_cursor while runnin
   );
 });
 
-test("crawl results --download writes the NDJSON export to <id>.jsonl", async () => {
+test("crawl download writes the NDJSON export to <id>.jsonl", async () => {
   await withCrawlWorkspace(
     () =>
       new Response('{"url":"https://example.com/product/1","content_status":"fetched","content":"<html></html>"}\n', {
@@ -296,9 +328,10 @@ test("crawl results --download writes the NDJSON export to <id>.jsonl", async ()
         headers: { "content-type": "application/x-ndjson", "x-crawl-status": "completed" },
       }),
     async (calls) => {
-      const { code, out } = await run(["results", "c_1", "--download"]);
+      const { code, out } = await run(["download", "c_1"]);
       assert.equal(code, 0);
       assert.equal(out.count, 1);
+      assert.equal(out.status, "completed");
       assert.equal(out.partial, false);
       assert.equal(calls[0]!.url.pathname, "/v1/crawls/c_1/download");
       assert.ok(existsSync(join(process.cwd(), "c_1.jsonl")));
@@ -392,6 +425,28 @@ test("Ctrl-C during crawl wait says the crawl keeps running and exits 130", asyn
   } finally {
     exit.mock.restore();
   }
+});
+
+test("crawl wait that runs out exits 0 and prints the running crawl with the resume hint", async () => {
+  await withCrawlWorkspace(
+    () => json({ ...crawlBody, results: [], next_cursor: "c" }),
+    async (calls) => {
+      const { code, out } = await run(["wait", "c_1", "--timeout", "0.001"]);
+      assert.equal(code, 0);
+      assert.equal(out.ok, true);
+      assert.equal(out.status, "running");
+      assert.equal(out.crawlId, "c_1");
+      assert.ok(calls.every((c) => c.init?.method === "GET"), "the crawl is not stopped");
+
+      let human = -1;
+      const err = await captureErr(async () => {
+        human = await crawl.run(["wait", "c_1", "--timeout", "0.001"], { json: false, yes: false });
+      });
+      assert.equal(human, 0);
+      assert.match(err, /still running/);
+      assert.match(err, /next: zenrows crawl wait c_1/);
+    },
+  );
 });
 
 test("unknown crawl subcommand is INVALID_USAGE", async () => {

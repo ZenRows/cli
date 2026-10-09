@@ -14,7 +14,7 @@
  * Run with `npm run test:e2e`, which does NOT load tests/setup.ts (that file
  * scrubs every ZENROWS_* variable to keep the unit suite hermetic).
  *
- * The test starts one real, small crawl (bills a few pages on the key's account).
+ * The test creates one real, small crawl (bills a few pages on the key's account).
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -32,7 +32,7 @@ const skip = enabled
   : "set ZENROWS_E2E=1, ZENROWS_API_KEY and ZENROWS_E2E_CRAWL_URL to run the Crawl e2e test";
 
 const BIN = fileURLToPath(new URL("../../bin/zenrows.js", import.meta.url));
-/** How long to keep retrying a start that hits the account's active-crawl limit. */
+/** How long to keep retrying a create that hits the account's active-crawl limit. */
 const QUOTA_RETRY_MS = 5 * 60_000;
 
 interface CliResult {
@@ -70,20 +70,20 @@ function log(msg: string): void {
 test("zenrows crawl end to end against a live API", { skip, timeout: 20 * 60_000 }, async () => {
   const dir = mkdtempSync(join(tmpdir(), "zr-crawl-e2e-"));
   try {
-    // 1. Start a small crawl and wait for it. Other runs may hold the account's
+    // 1. Create a small crawl and wait for it. Other runs may hold the account's
     // active-job slots: on CRAWL_TOO_MANY_CRAWLS wait retry_after and try again.
     const deadline = Date.now() + QUOTA_RETRY_MS;
     let start: CliResult;
     for (;;) {
       start = await cli(dir, [
-        "crawl", "start", START_URL!,
+        "crawl", "create", START_URL!,
         "--depth", "1", "--max-items", "3", "--max-pages", "5",
-        ...(INCLUDE ? ["--include", INCLUDE] : []),
-        "--html", "--follow", "--timeout", "600000",
+        ...(INCLUDE ? ["--include-pattern", INCLUDE] : []),
+        "--output-format", "html", "--follow", "--timeout", "600",
       ]);
       if (start.out.error?.code !== "CRAWL_TOO_MANY_CRAWLS" || Date.now() > deadline) break;
       const wait = Number(start.out.error.retry_after ?? 30);
-      log(`too_many_crawls: retrying start in ${wait}s`);
+      log(`too_many_crawls: retrying create in ${wait}s`);
       await new Promise((r) => setTimeout(r, wait * 1000));
     }
     assert.equal(start.code, 0, JSON.stringify(start.out.error ?? start.out));
@@ -97,7 +97,7 @@ test("zenrows crawl end to end against a live API", { skip, timeout: 20 * 60_000
     assert.equal(results.code, 0, JSON.stringify(results.out));
     const rows = results.out.results as Array<{ url: string; content_status?: string; content_url?: string }>;
     assert.ok(rows.length >= 1, "at least one result");
-    if (INCLUDE) for (const r of rows) assert.ok(r.url.includes(INCLUDE), `${r.url} matches --include`);
+    if (INCLUDE) for (const r of rows) assert.ok(r.url.includes(INCLUDE), `${r.url} matches --include-pattern`);
     log(`results: ${rows.length} URL(s)${INCLUDE ? ", all matching the include pattern" : ""}`);
 
     // 3. One fetched page's HTML.
@@ -111,12 +111,12 @@ test("zenrows crawl end to end against a live API", { skip, timeout: 20 * 60_000
 
     // 4. The NDJSON export has one line per result.
     const file = join(dir, "export.jsonl");
-    const download = await cli(dir, ["crawl", "results", id, "--download", "--out", file]);
+    const download = await cli(dir, ["crawl", "download", id, "--out", file]);
     assert.equal(download.code, 0, JSON.stringify(download.out));
     const lines = readFileSync(file, "utf8").split("\n").filter((l) => l.trim());
     assert.equal(lines.length, rows.length);
     assert.equal(download.out.count, rows.length);
-    log(`download: ${lines.length} NDJSON line(s), X-Crawl-Status ${download.out.crawlStatus}`);
+    log(`download: ${lines.length} NDJSON line(s), X-Crawl-Status ${download.out.status}`);
 
     // 5. The new crawl is listed.
     const list = await cli(dir, ["crawl", "list", "--limit", "100"]);
@@ -131,10 +131,10 @@ test("zenrows crawl end to end against a live API", { skip, timeout: 20 * 60_000
     log(`stop on ended crawl: status ${stop.out.status}`);
 
     // 7. An unknown id is CRAWL_NOT_FOUND.
-    const missing = await cli(dir, ["crawl", "status", "c_does_not_exist_e2e"]);
+    const missing = await cli(dir, ["crawl", "get", "c_does_not_exist_e2e"]);
     assert.equal(missing.code, 1);
     assert.equal(missing.out.error.code, "CRAWL_NOT_FOUND");
-    log("status on unknown id: CRAWL_NOT_FOUND");
+    log("get on unknown id: CRAWL_NOT_FOUND");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

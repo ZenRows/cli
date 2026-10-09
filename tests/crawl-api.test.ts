@@ -145,7 +145,7 @@ test("downloadCrawl returns the NDJSON and X-Crawl-Status", async () => {
   });
   const out = await downloadCrawl("c_1", { apiKey: "k", fetchImpl: impl });
   assert.match(calls[0]!.url, /\/crawls\/c_1\/download$/);
-  assert.equal(out.crawlStatus, "running");
+  assert.equal(out.status, "running");
   assert.equal(out.ndjson.trim().split("\n").length, 2);
 });
 
@@ -234,6 +234,25 @@ test("429 too_many_crawls maps to CRAWL_TOO_MANY_CRAWLS with retry_after and no 
   assert.equal(calls.length, 1);
 });
 
+test("402 maps to CRAWL_QUOTA_EXCEEDED, and AUTH014 to CRAWL_KEY_CAP_REACHED, with the shared advice", async () => {
+  const quota = problem(402, "AUTH004", "Usage limit reached.");
+  await assert.rejects(
+    () => createCrawl({ url: "https://example.com/products/", depth: 1 }, { apiKey: "k", fetchImpl: quota.impl }),
+    (e: unknown) =>
+      e instanceof ToolkitError && e.code === "CRAWL_QUOTA_EXCEEDED" && e.server_code === "AUTH004" && /zenrows usage/.test(e.next_action),
+  );
+  const cap = problem(402, "AUTH014", "Key cap reached.");
+  await assert.rejects(
+    () => getCrawl("c_1", { apiKey: "k", fetchImpl: cap.impl }),
+    (e: unknown) =>
+      e instanceof ToolkitError &&
+      e.code === "CRAWL_KEY_CAP_REACHED" &&
+      e.server_code === "AUTH014" &&
+      e.crawl_id === "c_1" &&
+      /settings\/api-keys/.test(e.next_action),
+  );
+});
+
 test("an error body without a code leaves server_code unset", async () => {
   const { impl } = stubFetch(500, "upstream exploded");
   await assert.rejects(
@@ -274,14 +293,15 @@ function pagedFetch(pages: Array<Partial<CrawlWithResults>>) {
   return { impl, cursors, limits, calls: () => i };
 }
 
-test("listAllResults follows next_cursor and stops on null", async () => {
-  const { impl, cursors } = pagedFetch([
+test("listAllResults follows next_cursor with the page size and stops on null", async () => {
+  const { impl, cursors, limits } = pagedFetch([
     { status: "completed", results: [{ url: "https://example.com/product/1" }], next_cursor: "c1" },
     { status: "completed", results: [{ url: "https://example.com/product/2" }], next_cursor: "c2" },
     { status: "completed", results: [{ url: "https://example.com/product/3" }], next_cursor: null },
   ]);
-  const { results, crawl, partial } = await listAllResults("c_1", { apiKey: "k", fetchImpl: impl });
+  const { results, crawl, partial } = await listAllResults("c_1", { apiKey: "k", fetchImpl: impl, pageSize: 500 });
   assert.equal(partial, false);
+  assert.ok(limits.every((l) => l === "500"));
   assert.deepEqual(results.map((r) => r.url), ["https://example.com/product/1", "https://example.com/product/2", "https://example.com/product/3"]);
   assert.deepEqual(cursors, [null, "c1", "c2"]);
   assert.equal(crawl.status, "completed");
@@ -321,7 +341,7 @@ test("waitForCrawl treats failed and stopped as terminal", async () => {
   }
 });
 
-test("waitForCrawl times out with CRAWL_WAIT_TIMEOUT, carries crawl_id and does not stop the crawl", async () => {
+test("waitForCrawl returns the running crawl when the timeout runs out, and does not stop it", async () => {
   const methods: string[] = [];
   const impl = (async (_url: string, init?: RequestInit) => {
     methods.push(init?.method ?? "GET");
@@ -330,10 +350,8 @@ test("waitForCrawl times out with CRAWL_WAIT_TIMEOUT, carries crawl_id and does 
       headers: { "content-type": "application/json" },
     });
   }) as unknown as typeof fetch;
-  await assert.rejects(
-    () => waitForCrawl("c_1", { apiKey: "k", fetchImpl: impl, timeoutMs: 1, sleepImpl: async () => {} }),
-    (e: unknown) =>
-      e instanceof ToolkitError && e.code === "CRAWL_WAIT_TIMEOUT" && e.crawl_id === "c_1" && /not stopped/.test(e.likely_cause),
-  );
+  const c = await waitForCrawl("c_1", { apiKey: "k", fetchImpl: impl, timeoutMs: 1, sleepImpl: async () => {} });
+  assert.equal(c.status, "running");
+  assert.equal(c.crawl_id, "c_1");
   assert.ok(methods.every((m) => m === "GET"), "no stop call on timeout");
 });
