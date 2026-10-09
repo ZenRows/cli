@@ -71,7 +71,9 @@ export const crawl: Command = {
     "  stop <id>                         stop a running crawl (an ended crawl answers as it ended)",
     "  wait <id> [--timeout <s>]         poll until the crawl ends or s seconds (default 600) run out;",
     "                                    a crawl still running then is printed, not stopped",
-    "  --json                            print structured output",
+    "  --json                            print structured output: create/get/wait/stop print",
+    "                                    {ok, crawl_id, status, crawl}; get adds results and next_cursor;",
+    "                                    a wait that runs out adds note",
   ].join("\n"),
   async run(argv: string[], ctx: RunContext): Promise<number> {
     const [sub, ...rest] = argv;
@@ -204,9 +206,10 @@ async function createCmd(rest: string[], ctx: RunContext): Promise<number> {
       result: { crawlId: created.crawl_id, status: finished.status, coverage: finished.coverage },
       ...(failure ? { error: failure.toJSON() } : {}),
     });
-    const code = printCrawl(finished, json, follow ? waitHeadline(finished) : `Started crawl ${created.crawl_id}`);
+    const code = follow
+      ? printCrawl(finished, json, waitHeadline(finished), { note: waitNote(finished) })
+      : printCrawl(finished, json, `Started crawl ${created.crawl_id}`);
     if (!json && runDir) log.dim(`  artifact: ${runDir}`);
-    printWaitHint(finished, json);
     return code;
   } catch (err) {
     writeRun({
@@ -256,17 +259,17 @@ async function waitCmd(rest: string[], ctx: RunContext): Promise<number> {
   assertUsable("crawl");
   const apiKey = requireApiKey();
   const c = await waitUntilEnd(id, { apiKey, timeoutMs });
-  const code = printCrawl(c, json, waitHeadline(c));
-  printWaitHint(c, json);
-  return code;
+  return printCrawl(c, json, waitHeadline(c), { note: waitNote(c) });
 }
 
 function waitHeadline(c: Crawl): string {
   return isTerminal(c.status) ? `Crawl ${c.crawl_id} finished` : `Stopped waiting: crawl ${c.crawl_id} is still running`;
 }
 
-function printWaitHint(c: Crawl, json: boolean): void {
-  if (!json && !isTerminal(c.status)) log.dim(`  next: zenrows crawl wait ${c.crawl_id}`);
+/** Set only when a wait ran out with the crawl still running. */
+function waitNote(c: Crawl): string | undefined {
+  if (isTerminal(c.status)) return undefined;
+  return `The wait ran out and the crawl is still running. Run zenrows crawl wait ${c.crawl_id}.`;
 }
 
 async function resultsCmd(rest: string[], ctx: RunContext): Promise<number> {
@@ -297,7 +300,7 @@ async function downloadCmd(rest: string[], ctx: RunContext): Promise<number> {
   const count = ndjson.split("\n").filter((l) => l.trim()).length;
   const partial = status === "running";
   if (json) {
-    log.out(JSON.stringify({ ok: true, crawlId: id, status, partial, count, file }, null, 2));
+    log.out(JSON.stringify({ ok: true, crawl_id: id, status: status ?? null, partial, count, file }, null, 2));
   } else {
     log.success(`Downloaded ${count} result(s) → ${file}`);
     if (partial) log.warn("  The crawl is still running: this file is partial. Download again once it ends.");
@@ -315,7 +318,7 @@ function printResults(
   if (o.outFile) writeOut(o.outFile, toJsonl(results));
   if (o.json) {
     const rows = o.outFile ? { file: o.outFile } : { results };
-    log.out(JSON.stringify({ ok: true, crawlId: id, status, count: results.length, ...rows, partial: o.partial }, null, 2));
+    log.out(JSON.stringify({ ok: true, crawl_id: id, status, count: results.length, ...rows, partial: o.partial }, null, 2));
     return 0;
   }
   if (o.outFile) {
@@ -352,12 +355,12 @@ async function contentCmd(rest: string[], ctx: RunContext): Promise<number> {
   if (outFile) {
     writeOut(outFile, body);
     if (json) {
-      log.out(JSON.stringify({ ok: true, crawlId: id, contentId, contentType, bytes: Buffer.byteLength(body), file: outFile }, null, 2));
+      log.out(JSON.stringify({ ok: true, crawl_id: id, content_id: contentId, content_type: contentType, bytes: Buffer.byteLength(body), file: outFile }, null, 2));
     } else {
       log.success(`Wrote ${Buffer.byteLength(body)} bytes (${contentType || "unknown type"}) → ${outFile}`);
     }
   } else if (json) {
-    log.out(JSON.stringify({ ok: true, crawlId: id, contentId, contentType, bytes: Buffer.byteLength(body), content: body }, null, 2));
+    log.out(JSON.stringify({ ok: true, crawl_id: id, content_id: contentId, content_type: contentType, bytes: Buffer.byteLength(body), content: body }, null, 2));
   } else {
     log.out(body);
   }
@@ -444,13 +447,14 @@ export function crawlFailure(c: Crawl | CrawlStop): ToolkitError | null {
 /**
  * Print a crawl (or a stop answer), structured under --json, and return the exit
  * code: 1 when it ended `failed`, else 0. `stopped` is a deliberate outcome, so
- * it exits 0 but prints as a warning. `page` carries the results a `get` read.
+ * it exits 0 but prints as a warning. `extra` carries the results a `get` read,
+ * or the note of a wait that ran out.
  */
 function printCrawl(
   c: Crawl | CrawlStop,
   json: boolean,
   headline: string,
-  page?: { results: CrawlResult[]; next_cursor: string | null },
+  extra: { results?: CrawlResult[]; next_cursor?: string | null; note?: string } = {},
 ): number {
   const err = crawlFailure(c);
   const crawlFields = { ...c } as Record<string, unknown>;
@@ -462,11 +466,10 @@ function printCrawl(
       JSON.stringify(
         {
           ok: !err,
-          crawlId: c.crawl_id,
+          crawl_id: c.crawl_id,
           status: c.status,
-          ...(c.stop_reason ? { stop_reason: c.stop_reason } : {}),
           crawl: crawlFields,
-          ...page,
+          ...extra,
           ...(err ? { error: err.toJSON() } : {}),
         },
         null,
@@ -483,6 +486,7 @@ function printCrawl(
   if (cov) {
     log.info(`  ${cov.items_found} item(s) found · ${cov.pages_fetched} page(s) fetched · ${cov.pages_failed} failed`);
   }
+  if (extra.note) log.dim(`  next: zenrows crawl wait ${c.crawl_id}`);
   if (err) printError(err, false);
   return err ? 1 : 0;
 }

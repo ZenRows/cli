@@ -39,7 +39,8 @@ zenrows crawl results <id> --out urls.jsonl  # same, as JSONL
 - `create` returns at once. `--follow` (or `zenrows crawl wait <id>`) polls
   until the crawl ends or `--timeout` seconds run out (default 600). When the
   time runs out, the command exits 0 and prints the crawl with status
-  `running` and the hint `zenrows crawl wait <id>`. The crawl keeps running;
+  `running` and the hint `zenrows crawl wait <id>` (under `--json`, in
+  `note`). The crawl keeps running;
   it is not stopped. Ctrl-C also stops the wait, not the crawl, and exits 130;
   resume with `zenrows crawl wait <id>`.
 - `results` on a running crawl returns the URLs kept so far, with
@@ -74,6 +75,11 @@ A crawl ends `completed` (nothing left, or a cap hit: `stop_reason`
 `max_items` / `max_pages`), `stopped` (you stopped it) or `failed` (`error.code`
 and `error.detail` say why). Only `failed` exits non-zero (`CRAWL_FAILED`).
 `stop` on a crawl that already ended prints the status it ended with.
+
+With `--json`, `create`, `get`, `wait` and `stop` print
+`{ok, crawl_id, status, crawl}`; read `coverage`, `stop_reason` and `error`
+under `crawl`. `get` adds `results` and `next_cursor`. `download` prints
+`status: null` when the API sends no status.
 
 ## Limits
 
