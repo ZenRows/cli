@@ -60,7 +60,7 @@ and signal checks.
 
 | # | Feature | Expected |
 | --- | --- | --- |
-| 1 | Create | returns at once: `running`, a `crawl_id`, the echoed parameters; only the fields set are sent |
+| 1 | Create | returns at once: `running`, a `crawl_id`, the echoed parameters; only the fields set are sent (no `--depth` sends no `depth`) |
 | 2 | Create with html | results get `content_status` and, once fetched, `content_url` |
 | 3 | Idempotency | same key and body → same `crawl_id`; different body → 422 `idempotency_key_reused` (MCP, CLI: `CRAWL_INVALID_REQUEST` with the advice to send a new key) |
 | 4 | Wait | returns the ended crawl; `failed` is returned, not raised (CLI: exit 1) |
@@ -80,13 +80,15 @@ and signal checks.
 | 18 | Copy | Crawl is "new", never "beta"; one "still evolving" line; the 429 limit reads as the account's active jobs, shared with Batch |
 | 19 | Failed crawl | an include pattern that matches nothing ends `failed` with `no_items_found`; SDKs return it, not raise it; MCP and CLI say `ok: false` (CLI: exit 1, `CRAWL_FAILED`) |
 | 20 | Results after stop | the html crawl is stopped while its pages are still being fetched: reading its results ends at once (MCP and CLI: `partial: false`, no note to call again), and the same URLs come back once the pages in flight finish |
-| 21 | Documented defaults | a create without `max_pages` and `max_items` gets the default the docs state (10) |
+| 21 | Documented defaults | a create without `max_pages` and `max_items` gets the default the docs state (100) |
 
 Extra checks for this surface: every subcommand prints JSON with `--json` (`create`, `get`, `wait` and `stop` print `{ok, crawl_id, status, crawl, note?}`), Ctrl-C during `crawl wait` prints the resume hint and exits 130, and `--wait` and `--html` are rejected as unknown flags.
 
 ## What it costs
 
-Every crawl uses `depth` 1 and `max_pages` 10 or less. A run starts five crawls: the README run,
+Every crawl uses `depth` 1, and `max_pages` 10 or less except check 19's, which leaves `max_pages`
+and `max_items` at the API default (100) for check 21; at `depth` 1 without html it fetches one
+page. A run starts five crawls: the README run,
 one URLs-only crawl, one idempotency crawl that is stopped at once, one html crawl that is
 stopped with its pages in flight (check 20), and one that keeps nothing (check 19). On the default `CRAWL_URL`, a URLs-only crawl fetches 1 page and the
 html crawl 6, so a run costs about **10 pages**, and at most 50 if every crawl reaches its

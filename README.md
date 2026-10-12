@@ -164,8 +164,8 @@ Crawl is still evolving: new features are coming, limits may be tuned, and the c
 Crawl (`https://api.zenrows.com/v1/crawls`)
 takes one start URL and returns the URLs it finds behind it, optionally with
 each page's HTML. Use it when you know the listing or section but not the item
-URLs. Crawl follows the links on each page up to `--depth` hops and stays on
-the start URL's registrable domain (subdomains count). Without
+URLs. Crawl follows the links on each page, up to `--depth` hops when you set
+it, and stays on the start URL's registrable domain (subdomains count). Without
 `--output-format html` it returns URLs only. An account without Crawl access gets
 `CRAWL_NOT_ENABLED` ("Crawl is not enabled for this account", HTTP 403
 `REQS008`).
@@ -183,9 +183,10 @@ zenrows crawl list                                      # your crawls, newest fi
 zenrows crawl stop <crawl-id>                           # stop a running crawl
 ```
 
-`--depth` (link hops) is required; `--max-items` and `--max-pages` cap the
-crawl (API default 10 each), and `--max-pages` bounds the cost, since each page
-is one fetch. The local policy `max_pages_per_run` caps `--max-pages` (default
+`--depth` (link hops, 1 to 100000) is optional: leave it out and the crawl
+follows links until `--max-items` or `--max-pages` stops it, or nothing is left
+to open. `--max-items` and `--max-pages` cap the crawl (API default 100 each),
+and `--max-pages` bounds the cost, since each page is one fetch. The local policy `max_pages_per_run` caps `--max-pages` (default
 1000). `--output-format html` uses up the page budget: each kept page is one
 more fetch, and `--max-pages` counts it. `--include-patterns` /
 `--exclude-patterns` are repeatable substring filters on the URL. `get` and

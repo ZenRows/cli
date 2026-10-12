@@ -123,11 +123,11 @@ test("crawl create takes --output-format html only and --timeout in positive sec
   );
 });
 
-test("crawl create requires --depth as a whole number up to 100000", async () => {
+test("crawl create takes --depth as a whole number up to 100000", async () => {
   await withCrawlWorkspace(
     () => json(crawlBody, 202),
     async (calls) => {
-      for (const args of [[], ["--depth", "1.5"], ["--depth", "100001"], ["--depth", "x"]]) {
+      for (const args of [["--depth", "1.5"], ["--depth", "100001"], ["--depth", "x"]]) {
         const { code, out } = await run(["create", "https://example.com/products/", ...args]);
         assert.equal(code, 1, args.join(" "));
         assert.equal(out.error.code, "INVALID_USAGE", args.join(" "));
@@ -141,7 +141,7 @@ test("crawl create leaves the lower bound to the API: --depth 0 comes back as CR
   await withCrawlWorkspace(
     () =>
       json(
-        { type: "about:blank", title: "Invalid parameter", status: 422, code: "invalid_parameter", detail: "'depth' is required, and at least 1." },
+        { type: "about:blank", title: "Invalid parameter", status: 422, code: "invalid_parameter", detail: "'depth' is between 1 and 100000. Leave it out for no depth limit." },
         422,
       ),
     async (calls) => {
@@ -193,6 +193,35 @@ test("crawl create sends only the flags the caller set as the create body", asyn
         output_format: "html",
       });
     },
+  );
+});
+
+test("crawl create without --depth sends no depth and prints a crawl that has none", async () => {
+  const { depth: _depth, ...noDepth } = crawlBody;
+  await withCrawlWorkspace(
+    () => json({ ...noDepth, max_items: 100, max_pages: 100 }, 202, { location: "/v1/crawls/c_1" }),
+    async (calls) => {
+      const { code, out } = await run(["create", "https://example.com/products/"]);
+      assert.equal(code, 0);
+      assert.equal(out.ok, true);
+      assert.equal(calls.length, 1);
+      assert.deepEqual(JSON.parse(String(calls[0]!.init?.body)), { url: "https://example.com/products/" });
+      assert.ok(!("depth" in out.crawl), "a crawl without a depth limit echoes no depth");
+      assert.equal(out.crawl.max_pages, 100);
+    },
+  );
+});
+
+test("crawl create without --max-pages counts the API default of 100 against the page cap", async () => {
+  await withCrawlWorkspace(
+    () => json(crawlBody, 202),
+    async (calls) => {
+      const { code, out } = await run(["create", "https://example.com/products/"]);
+      assert.equal(code, 1);
+      assert.equal(out.error.code, "POLICY_LIMIT_EXCEEDED");
+      assert.equal(calls.length, 0);
+    },
+    { max_pages_per_run: 99 },
   );
 });
 

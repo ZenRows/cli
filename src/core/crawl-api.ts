@@ -54,7 +54,8 @@ export interface Crawl {
   /** running | completed | stopped | failed. Terminal = anything but `running`. */
   status: string;
   url: string;
-  depth: number;
+  /** Absent when the crawl was created without one: no depth limit. */
+  depth?: number;
   max_items: number;
   max_pages: number;
   coverage: CrawlCoverage;
@@ -106,7 +107,8 @@ export interface CrawlStop {
 /** Create body. Only the fields the caller set are sent. */
 export interface CreateCrawlParams {
   url: string;
-  depth: number;
+  /** Link hops from the start URL. Unset = no depth limit: max_pages / max_items stop the crawl. */
+  depth?: number;
   max_items?: number;
   max_pages?: number;
   include_patterns?: string[];
@@ -421,7 +423,8 @@ function classifyProblem(
 
 /** Start a crawl (202). Sends only the fields set in `params`. */
 export function createCrawl(params: CreateCrawlParams, opts: CallOpts & { idempotencyKey?: string }): Promise<Crawl> {
-  const body: Record<string, unknown> = { url: params.url, depth: params.depth };
+  const body: Record<string, unknown> = { url: params.url };
+  if (params.depth !== undefined) body.depth = params.depth;
   if (params.max_items !== undefined) body.max_items = params.max_items;
   if (params.max_pages !== undefined) body.max_pages = params.max_pages;
   if (params.include_patterns?.length) body.include_patterns = params.include_patterns;

@@ -100,6 +100,14 @@ test("createCrawl posts /crawls with X-API-Key and sends only the fields the cal
   assert.ok(!("output_format" in body));
 });
 
+test("createCrawl leaves depth out when the caller set none", async () => {
+  const { depth: _depth, ...noDepth } = crawlBody;
+  const { impl, calls } = stubFetch(202, noDepth);
+  const c = await createCrawl({ url: "https://example.com/products/" }, { apiKey: "k", fetchImpl: impl });
+  assert.deepEqual(JSON.parse(String(calls[0]!.init?.body)), { url: "https://example.com/products/" });
+  assert.equal(c.depth, undefined);
+});
+
 test("createCrawl sends output_format html and Idempotency-Key when asked", async () => {
   const { impl, calls } = stubFetch(202, crawlBody);
   await createCrawl({ url: "https://example.com/products/", depth: 2, max_pages: 5, output_format: "html" }, {
