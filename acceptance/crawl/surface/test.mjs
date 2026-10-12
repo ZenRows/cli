@@ -621,21 +621,25 @@ await liveCheck(
   "crawl content by content id, then by content_url: the same HTML",
   async () => {
     if (!B) return { status: SKIP, actual: "no html crawl" };
-    const row = (z(["crawl", "results", B.crawl_id, "--json"]).json?.results ?? []).find(
-      (x) => x.content_url,
-    );
-    if (!row)
-      return stopInfo?.status === "stopped"
-        ? {
-            status: SKIP,
-            actual:
-              "the stop cancelled every page fetch, so no page has content to read (see check 20)",
-          }
-        : { status: FAIL, actual: "no result with content_url" };
+    const firstFetched = (id) =>
+      (z(["crawl", "results", id, "--json"]).json?.results ?? []).find((x) => x.content_url);
+    // The stop in check 20 can land before any page is fetched. Then read a
+    // one-item html crawl that runs to the end instead.
+    let src = B.crawl_id;
+    let row = firstFetched(src);
+    if (!row) {
+      const own = createWith([CRAWL_URL, "--depth", "1", "--max-items", "1", "--max-pages", "10",
+        "--include-patterns", INCLUDE, "--output-format", "html"]);
+      if (!own.json?.crawl_id) return { status: FAIL, actual: `create: exit ${own.code}`, evidence: show(own) };
+      z(["crawl", "wait", own.json.crawl_id, "--json"]);
+      src = own.json.crawl_id;
+      row = firstFetched(src);
+    }
+    if (!row) return { status: FAIL, actual: `no result with content_url on ${src}` };
     const id = row.content_url.split("/").pop();
-    const a = z(["crawl", "content", B.crawl_id, id, "--out", "/work/a.html"]);
-    const b = z(["crawl", "content", B.crawl_id, row.content_url, "--out", "/work/b.html"]);
-    noteShape("content", z(["crawl", "content", B.crawl_id, id, "--json"]));
+    const a = z(["crawl", "content", src, id, "--out", "/work/a.html"]);
+    const b = z(["crawl", "content", src, row.content_url, "--out", "/work/b.html"]);
+    noteShape("content", z(["crawl", "content", src, id, "--json"]));
     const ha = existsSync("/work/a.html") ? readFileSync("/work/a.html", "utf8") : "";
     const hb = existsSync("/work/b.html") ? readFileSync("/work/b.html", "utf8") : "";
     const ok = a.code === 0 && b.code === 0 && ha === hb && /<html|<!doctype/i.test(ha);
@@ -711,7 +715,7 @@ await liveCheck(
     };
   },
 );
-await liveCheck("14", "Gated option", "--output-format json → 422 invalid_parameter", async () => {
+await liveCheck("14", "Gated option", "--output-format json is refused: INVALID_USAGE before the API, or 422 invalid_parameter", async () => {
   const r = z(["crawl", "create", CRAWL_URL, "--depth", "1", "--output-format", "json", "--json"]);
   if (r.json?.crawl_id) {
     ledger(r.json.crawl_id, "output_format json (accepted)");
@@ -721,9 +725,11 @@ await liveCheck("14", "Gated option", "--output-format json → 422 invalid_para
       actual: `accepted (${r.json.crawl_id}): the key is in a beta segment, not a bug; stopped it`,
     };
   }
+  // Refusing a gated value before it reaches the API is the behavior we want.
+  const code = r.json?.error?.code;
   return {
-    status: SKIP,
-    actual: `the client does not allow it: ${r.json?.error?.code}: ${r.json?.error?.message}`,
+    status: passIf(r.code !== 0 && (code === "INVALID_USAGE" || code === "CRAWL_INVALID_REQUEST")),
+    actual: `exit ${r.code} ${code}: ${r.json?.error?.message}`,
   };
 });
 await check("15", "Bad key", "AUTH_INVALID", async () => {
