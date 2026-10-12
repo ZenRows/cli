@@ -22,7 +22,7 @@ do not retry it.
 
 ```
 zenrows crawl create https://example.com/products/ --depth 1 \
-  --max-items 20 --max-pages 25 --include-pattern /product/ --follow --json
+  --max-items 20 --max-pages 25 --include-patterns /product/ --follow --json
 zenrows crawl results <id> --json            # every kept URL
 zenrows crawl results <id> --out urls.jsonl  # same, as JSONL
 ```
@@ -33,9 +33,9 @@ zenrows crawl results <id> --out urls.jsonl  # same, as JSONL
   both default to 10. `--max-pages` bounds the cost: each page is one fetch.
   The local policy `max_pages_per_run` caps `--max-pages` (default 1000);
   above it the CLI refuses with `POLICY_LIMIT_EXCEEDED` before any request.
-- `--include-pattern` / `--exclude-pattern` are substring matches on the
+- `--include-patterns` / `--exclude-patterns` are substring matches on the
   normalized URL and repeat:
-  `--include-pattern /product/ --exclude-pattern ?add-to-cart`.
+  `--include-patterns /product/ --exclude-patterns ?add-to-cart`.
 - `create` returns at once. `--follow` (or `zenrows crawl wait <id>`) polls
   until the crawl ends or `--timeout` seconds run out (default 600). When the
   time runs out, the command exits 0 and prints the crawl with status

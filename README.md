@@ -172,7 +172,7 @@ the start URL's registrable domain (subdomains count). Without
 
 ```bash
 zenrows crawl create https://example.com/products/ --depth 1 \
-  --max-items 20 --include-pattern /product/ --follow  # create and wait for the end
+  --max-items 20 --include-patterns /product/ --follow  # create and wait for the end
 zenrows crawl results <crawl-id> --out urls.jsonl       # every kept URL (paginated)
 zenrows crawl create <url> --depth 2 --output-format html  # also fetch each kept page's HTML
 zenrows crawl content <crawl-id> <content-id>           # one page's HTML
@@ -187,8 +187,8 @@ zenrows crawl stop <crawl-id>                           # stop a running crawl
 crawl (API default 10 each), and `--max-pages` bounds the cost, since each page
 is one fetch. The local policy `max_pages_per_run` caps `--max-pages` (default
 1000). `--output-format html` uses up the page budget: each kept page is one
-more fetch, and `--max-pages` counts it. `--include-pattern` /
-`--exclude-pattern` are repeatable substring filters on the URL. `get` and
+more fetch, and `--max-pages` counts it. `--include-patterns` /
+`--exclude-patterns` are repeatable substring filters on the URL. `get` and
 `list` read one page and take `--cursor` and `--limit`. `results` follows every
 page (`--limit` is the page size); on a running crawl it returns the URLs kept
 so far, with `partial: true`. `download` reports the crawl's `status` (`null`

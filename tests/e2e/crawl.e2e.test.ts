@@ -78,7 +78,7 @@ test("zenrows crawl end to end against a live API", { skip, timeout: 20 * 60_000
       start = await cli(dir, [
         "crawl", "create", START_URL!,
         "--depth", "1", "--max-items", "3", "--max-pages", "5",
-        ...(INCLUDE ? ["--include-pattern", INCLUDE] : []),
+        ...(INCLUDE ? ["--include-patterns", INCLUDE] : []),
         "--output-format", "html", "--follow", "--timeout", "600",
       ]);
       if (start.out.error?.code !== "CRAWL_TOO_MANY_CRAWLS" || Date.now() > deadline) break;
@@ -97,7 +97,7 @@ test("zenrows crawl end to end against a live API", { skip, timeout: 20 * 60_000
     assert.equal(results.code, 0, JSON.stringify(results.out));
     const rows = results.out.results as Array<{ url: string; content_status?: string; content_url?: string }>;
     assert.ok(rows.length >= 1, "at least one result");
-    if (INCLUDE) for (const r of rows) assert.ok(r.url.includes(INCLUDE), `${r.url} matches --include-pattern`);
+    if (INCLUDE) for (const r of rows) assert.ok(r.url.includes(INCLUDE), `${r.url} matches --include-patterns`);
     log(`results: ${rows.length} URL(s)${INCLUDE ? ", all matching the include pattern" : ""}`);
 
     // 3. One fetched page's HTML.
@@ -138,4 +138,5 @@ test("zenrows crawl end to end against a live API", { skip, timeout: 20 * 60_000
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
-});
+}
+);

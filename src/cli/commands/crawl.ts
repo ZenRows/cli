@@ -50,8 +50,8 @@ export const crawl: Command = {
     "    --max-items <n>                 stop after keeping n URLs (API default 10)",
     "    --max-pages <n>                 stop after fetching n pages (API default 10; bounds cost);",
     "                                    the local policy max_pages_per_run caps it (default 1000)",
-    "    --include-pattern <p>           keep only URLs containing this substring (repeatable)",
-    "    --exclude-pattern <p>           drop URLs containing this substring (repeatable)",
+    "    --include-patterns <p>          keep only URLs containing this substring (repeatable)",
+    "    --exclude-patterns <p>          drop URLs containing this substring (repeatable)",
     "    --output-format html            also fetch each kept URL's page HTML (read with content/download);",
     "                                    each kept page is one more fetch counted by --max-pages",
     "    --follow                        wait until the crawl ends (Ctrl-C stops the wait, not the crawl)",
@@ -117,8 +117,8 @@ async function createCmd(rest: string[], ctx: RunContext): Promise<number> {
     depth: { type: "string" },
     "max-items": { type: "string" },
     "max-pages": { type: "string" },
-    "include-pattern": { type: "string", multiple: true },
-    "exclude-pattern": { type: "string", multiple: true },
+    "include-patterns": { type: "string", multiple: true },
+    "exclude-patterns": { type: "string", multiple: true },
     "output-format": { type: "string" },
     follow: { type: "boolean" },
     timeout: { type: "string" },
@@ -152,9 +152,9 @@ async function createCmd(rest: string[], ctx: RunContext): Promise<number> {
   if (maxItems !== undefined) params.max_items = maxItems;
   const maxPages = limitFlag("max-pages", values["max-pages"]);
   if (maxPages !== undefined) params.max_pages = maxPages;
-  const include = patterns(values["include-pattern"]);
+  const include = patterns(values["include-patterns"]);
   if (include.length) params.include_patterns = include;
-  const exclude = patterns(values["exclude-pattern"]);
+  const exclude = patterns(values["exclude-patterns"]);
   if (exclude.length) params.exclude_patterns = exclude;
   const outputFormat = asString(values["output-format"]);
   if (outputFormat !== undefined) {
@@ -431,7 +431,7 @@ export function crawlFailure(c: Crawl | CrawlStop): ToolkitError | null {
     insufficient_credits: "The account ran out of credits. Check `zenrows usage`, add credits, then start a new crawl.",
     seed_unreachable: "The start URL could not be fetched (the site may be blocking it). Check it with `zenrows fetch <url>`.",
     no_items_found:
-      "Nothing matched. Loosen --include-pattern / --exclude-pattern, raise --depth, or check the start page with `zenrows fetch <url>`.",
+      "Nothing matched. Loosen --include-patterns / --exclude-patterns, raise --depth, or check the start page with `zenrows fetch <url>`.",
   };
   return new ToolkitError({
     code: "CRAWL_FAILED",
