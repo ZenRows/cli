@@ -214,14 +214,17 @@ Other codes: `CRAWL_QUOTA_EXCEEDED` and `CRAWL_KEY_CAP_REACHED` (402, with the
 same claim, top-up and key-cap advice as other commands),
 `CRAWL_INVALID_REQUEST` (400/422, do not retry as is), `CRAWL_REQUEST_IN_FLIGHT`
 (409, retry once the first request ends), `CRAWL_NOT_FOUND`,
-`CRAWL_CONTENT_NOT_FOUND` and `CRAWL_FAILED`. Set `ZENROWS_CRAWL_API_BASE` to
+`CRAWL_CONTENT_NOT_FOUND`, `CRAWL_BUSY` (503 on a stop that was not saved yet;
+run it again, it is safe) and `CRAWL_FAILED`. Set `ZENROWS_CRAWL_API_BASE` to
 point the CLI at another deployment.
 
 The CLI retries transient failures, as the Crawl SDKs do: up to 3 retries,
-waiting the `Retry-After` seconds or 250 ms x 2^n (+/-20% jitter, at most 10 s).
+waiting the `Retry-After` seconds (at most 30) or 250 ms x 2^n (+/-20% jitter,
+at most 10 s).
 Reads retry on 429, 502, 503, 504 and network errors (a timeout counts).
 `create` retries only with `--idempotency-key`, and only on 502, 503, 504 and
-network errors, never on 429. `stop` never retries.
+network errors, never on 429. `stop` retries only a 503 `crawl_busy`, which
+means the stop was not saved and the crawl still runs.
 
 ## 11. Browser Sessions
 

@@ -146,6 +146,8 @@ interface RequestOpts extends CallOpts {
   accept?: string;
   /** Set on every call about one crawl, so its errors carry `crawl_id`. */
   crawlId?: string;
+  /** Retry a 503 crawl_busy (stop only): the stop was not saved and the crawl still runs. */
+  retryBusy?: boolean;
 }
 
 interface RawResponse {
@@ -155,13 +157,16 @@ interface RawResponse {
 }
 
 const MAX_RETRIES = 3;
+/** The longest a Retry-After may make one retry wait, so a large server value cannot hang a command. */
+const MAX_RETRY_AFTER_SECONDS = 30;
 const READ_RETRY_STATUSES: ReadonlySet<number> = new Set([429, 502, 503, 504]);
 // 429 on create is the active-job limit: a retry only waits for a slot that may never free.
 const CREATE_RETRY_STATUSES: ReadonlySet<number> = new Set([502, 503, 504]);
 
 /**
  * The statuses to retry, or undefined when the request must run once: a GET is
- * safe to repeat, a create only with an Idempotency-Key, and stop never.
+ * safe to repeat, a create only with an Idempotency-Key. Stop retries only a 503
+ * crawl_busy (see `crawlFetch`).
  */
 function retryStatuses(method: string, headers: Record<string, string>): ReadonlySet<number> | undefined {
   if (method === "GET") return READ_RETRY_STATUSES;
@@ -173,9 +178,17 @@ function backoffMs(attempt: number): number {
   return Math.min(250 * 2 ** attempt, 10_000) * (0.8 + Math.random() * 0.4);
 }
 
-/** `Retry-After` in whole seconds, as milliseconds. */
+/** `Retry-After` in whole seconds, as milliseconds, at most `MAX_RETRY_AFTER_SECONDS`. */
 function retryAfterMs(value: string | null): number | undefined {
-  return value && /^\d+$/.test(value.trim()) ? Number(value) * 1000 : undefined;
+  return value && /^\d+$/.test(value.trim()) ? Math.min(Number(value), MAX_RETRY_AFTER_SECONDS) * 1000 : undefined;
+}
+
+function problemCode(body: string): string | undefined {
+  try {
+    return (JSON.parse(body) as ProblemJson).code;
+  } catch {
+    return undefined;
+  }
 }
 
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -241,6 +254,10 @@ async function crawlFetch(method: string, path: string, opts: RequestOpts): Prom
       await sleep(retryAfterMs(retryAfter) ?? backoffMs(n));
       continue;
     }
+    if (opts.retryBusy && n < MAX_RETRIES && res.status === 503 && problemCode(res.text) === "crawl_busy") {
+      await sleep(retryAfterMs(retryAfter) ?? 1000);
+      continue;
+    }
     if (res.status < 200 || res.status >= 300) {
       throw problemToError(res.status, res.text, `${method} ${path}`, retryAfter, opts.crawlId);
     }
@@ -282,7 +299,8 @@ function problemToError(
     // non-JSON error body — fall through with an empty problem
   }
   const serverCode = problem.code || undefined;
-  const seconds = status === 429 && retryAfter && /^\d+$/.test(retryAfter.trim()) ? Number(retryAfter) : undefined;
+  const throttled = status === 429 || (status === 503 && serverCode === "crawl_busy");
+  const seconds = throttled && retryAfter && /^\d+$/.test(retryAfter.trim()) ? Number(retryAfter) : undefined;
   const err = classifyProblem(status, problem, body, request, serverCode, seconds);
   return new ToolkitError({ ...err.toJSON(), server_code: serverCode, crawl_id: crawlId, retry_after: seconds });
 }
@@ -296,13 +314,15 @@ function classifyProblem(
   retryAfter: number | undefined,
 ): ToolkitError {
   const detail = problem.detail || problem.title || body.slice(0, 240) || `HTTP ${status}`;
-  const cause = `HTTP ${status}${serverCode ? ` (${serverCode})` : ""} for ${request}: ${detail}`;
+  // The API's detail often ends in a period already; add one only when it does not.
+  const raw = `HTTP ${status}${serverCode ? ` (${serverCode})` : ""} for ${request}: ${detail}`;
+  const cause = /[.!?]$/.test(raw) ? raw : `${raw}.`;
 
   if (status === 403 && serverCode === CRAWL_NOT_ENABLED_CODE) {
     return new ToolkitError({
       code: "CRAWL_NOT_ENABLED",
       message: "Crawl is not enabled for this account.",
-      likely_cause: `${cause}. Crawl is not enabled for this account yet.`,
+      likely_cause: `${cause} Crawl is not enabled for this account yet.`,
       next_action:
         "Ask Zenrows support to enable Crawl for this account. Meanwhile fetch known URLs with `zenrows fetch`.",
       suggested_commands: ["zenrows fetch <url>"],
@@ -321,7 +341,7 @@ function classifyProblem(
     return new ToolkitError({
       code: "CRAWL_CONTENT_NOT_FOUND",
       message: "Crawl content not found.",
-      likely_cause: `${cause}. The page was not fetched (yet), its fetch failed, or the crawl ran without --output-format html.`,
+      likely_cause: `${cause} The page was not fetched (yet), its fetch failed, or the crawl ran without --output-format html.`,
       next_action: "Read the result's content_status with `zenrows crawl results <id>`; only `fetched` results have content.",
       suggested_commands: ["zenrows crawl list"],
     });
@@ -330,7 +350,7 @@ function classifyProblem(
     return new ToolkitError({
       code: "CRAWL_NOT_FOUND",
       message: "Crawl not found.",
-      likely_cause: `${cause}. The id may be wrong or the crawl is not owned by this account.`,
+      likely_cause: `${cause} The id may be wrong or the crawl is not owned by this account.`,
       next_action: "Check the crawl id, or list your crawls with `zenrows crawl list`.",
       suggested_commands: ["zenrows crawl list"],
     });
@@ -339,7 +359,7 @@ function classifyProblem(
     return new ToolkitError({
       code: "CRAWL_TOO_MANY_CRAWLS",
       message: "The account has reached its limit of active jobs.",
-      likely_cause: `${cause}. The account has reached its limit of active jobs (3 by default), shared with its Batch jobs.`,
+      likely_cause: `${cause} The account has reached its limit of active jobs (3 by default), shared with its Batch jobs.`,
       next_action: `Nothing was created. ${retryAfter !== undefined ? `Retry after ${retryAfter} seconds` : "Retry later"}, or stop one of your crawls (\`zenrows crawl stop <id>\`) or Batch jobs first.`,
       suggested_commands: ["zenrows crawl list"],
     });
@@ -358,15 +378,24 @@ function classifyProblem(
     return new ToolkitError({
       code: "CRAWL_REQUEST_IN_FLIGHT",
       message: "A request with the same Idempotency-Key is still in flight.",
-      likely_cause: `${cause}.`,
+      likely_cause: cause,
       next_action: "Retry the same request once the first one has finished.",
+    });
+  }
+  if (status === 503 && serverCode === "crawl_busy") {
+    return new ToolkitError({
+      code: "CRAWL_BUSY",
+      message: "The stop was not saved yet; the crawl is still running.",
+      likely_cause: cause,
+      next_action: `Run the stop again${retryAfter !== undefined ? ` after ${retryAfter} seconds` : ""}. Repeating a stop is safe.`,
+      suggested_commands: ["zenrows crawl stop <id>"],
     });
   }
   if (status === 400 || status === 422) {
     return new ToolkitError({
       code: "CRAWL_INVALID_REQUEST",
       message: `Crawl rejected the request (HTTP ${status}).`,
-      likely_cause: `${cause}.`,
+      likely_cause: cause,
       next_action:
         serverCode === "idempotency_key_reused"
           ? "This Idempotency-Key was already used for a different request. Send a new key, or no key. Do not retry as is."
@@ -376,7 +405,7 @@ function classifyProblem(
   return new ToolkitError({
     code: "CRAWL_FAILED",
     message: `Crawl request failed (HTTP ${status}).`,
-    likely_cause: `${cause}.`,
+    likely_cause: cause,
     next_action:
       status >= 500 ? "Retry with a short backoff." : "Fix the reported problem and retry.",
   });
@@ -413,7 +442,7 @@ export function listCrawls(opts: CallOpts & { cursor?: string; limit?: number })
 
 /** Stop a running crawl. Idempotent: an ended crawl answers as it ended. */
 export function stopCrawl(id: string, opts: CallOpts): Promise<CrawlStop> {
-  return crawlJson<CrawlStop>("POST", `/crawls/${encodeURIComponent(id)}/stop`, { ...opts, crawlId: id });
+  return crawlJson<CrawlStop>("POST", `/crawls/${encodeURIComponent(id)}/stop`, { ...opts, crawlId: id, retryBusy: true });
 }
 
 /** The page of one kept URL (HTML for `output_format: html`). */
@@ -470,7 +499,9 @@ export async function listAllResults(
     const rows = page.results ?? [];
     results.push(...rows);
     if (!rows.length || !page.next_cursor || page.next_cursor === cursor) {
-      return { crawl: page, results, partial: !isTerminal(page.status) || !!page.next_cursor };
+      // Every page was read. An ended crawl keeps no new URLs, even while pages in flight after
+      // a stop keep next_cursor set, so only a running crawl's results are partial.
+      return { crawl: page, results, partial: !isTerminal(page.status) };
     }
     cursor = page.next_cursor;
   }

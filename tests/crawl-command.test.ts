@@ -121,16 +121,33 @@ test("crawl create takes --output-format html only and --timeout in positive sec
   );
 });
 
-test("crawl create requires --depth and a whole number in range", async () => {
+test("crawl create requires --depth as a whole number up to 100000", async () => {
   await withCrawlWorkspace(
     () => json(crawlBody, 202),
     async (calls) => {
-      for (const args of [[], ["--depth", "0"], ["--depth", "1.5"], ["--depth", "100001"], ["--depth", "x"]]) {
+      for (const args of [[], ["--depth", "1.5"], ["--depth", "100001"], ["--depth", "x"]]) {
         const { code, out } = await run(["create", "https://example.com/products/", ...args]);
         assert.equal(code, 1, args.join(" "));
         assert.equal(out.error.code, "INVALID_USAGE", args.join(" "));
       }
       assert.equal(calls.length, 0);
+    },
+  );
+});
+
+test("crawl create leaves the lower bound to the API: --depth 0 comes back as CRAWL_INVALID_REQUEST", async () => {
+  await withCrawlWorkspace(
+    () =>
+      json(
+        { type: "about:blank", title: "Invalid parameter", status: 422, code: "invalid_parameter", detail: "'depth' is required, and at least 1." },
+        422,
+      ),
+    async (calls) => {
+      const { code, out } = await run(["create", "https://example.com/products/", "--depth", "0"]);
+      assert.equal(code, 1);
+      assert.equal(out.error.code, "CRAWL_INVALID_REQUEST");
+      assert.equal(out.error.server_code, "invalid_parameter");
+      assert.equal(calls.length, 1);
     },
   );
 });

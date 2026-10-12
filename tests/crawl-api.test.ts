@@ -357,13 +357,68 @@ test("create with an Idempotency-Key is retried on 503 with the same key", async
   assert.ok(calls.every((c) => (c.init?.headers as Record<string, string>)["Idempotency-Key"] === "k1"));
 });
 
-test("stop is never retried", async () => {
+test("stop is not retried on a plain 503", async () => {
   const { impl, calls } = seqFetch([unavailable, { status: 200, payload: { crawl_id: "c_1", status: "stopped" } }]);
   await assert.rejects(
     () => stopCrawl("c_1", { apiKey: "k", fetchImpl: impl, sleepImpl: recordSleep().sleepImpl }),
     (e: unknown) => e instanceof ToolkitError && e.code === "CRAWL_FAILED" && e.crawl_id === "c_1",
   );
   assert.equal(calls.length, 1);
+});
+
+const busy = (retryAfter = "1") => ({
+  status: 503,
+  payload: { code: "crawl_busy", title: "Crawl busy", detail: "The stop could not be saved yet.", status: 503 },
+  headers: { "retry-after": retryAfter },
+});
+
+test("stop retries a 503 crawl_busy after Retry-After and returns the stopped crawl", async () => {
+  const { impl, calls } = seqFetch([busy(), { status: 200, payload: { crawl_id: "c_1", status: "stopped" } }]);
+  const { waits, sleepImpl } = recordSleep();
+  const s = await stopCrawl("c_1", { apiKey: "k", fetchImpl: impl, sleepImpl });
+  assert.equal(s.status, "stopped");
+  assert.equal(calls.length, 2);
+  assert.deepEqual(waits, [1000]);
+});
+
+test("stop gives up on crawl_busy after 3 retries with CRAWL_BUSY and retry_after", async () => {
+  const { impl, calls } = seqFetch([busy()]);
+  await assert.rejects(
+    () => stopCrawl("c_1", { apiKey: "k", fetchImpl: impl, sleepImpl: recordSleep().sleepImpl }),
+    (e: unknown) =>
+      e instanceof ToolkitError &&
+      e.code === "CRAWL_BUSY" &&
+      e.retry_after === 1 &&
+      e.crawl_id === "c_1" &&
+      /Repeating a stop is safe/.test(e.next_action ?? ""),
+  );
+  assert.equal(calls.length, 4);
+});
+
+test("a Retry-After above 30 seconds waits 30 seconds", async () => {
+  const { impl } = seqFetch([
+    { status: 429, payload: { code: "rate_limited" }, headers: { "retry-after": "3600" } },
+    { status: 200, payload: { crawls: [] } },
+  ]);
+  const { waits, sleepImpl } = recordSleep();
+  await listCrawls({ apiKey: "k", fetchImpl: impl, sleepImpl });
+  assert.deepEqual(waits, [30_000]);
+
+  const stop = seqFetch([busy("3600"), { status: 200, payload: { crawl_id: "c_1", status: "stopped" } }]);
+  const stopSleep = recordSleep();
+  await stopCrawl("c_1", { apiKey: "k", fetchImpl: stop.impl, sleepImpl: stopSleep.sleepImpl });
+  assert.deepEqual(stopSleep.waits, [30_000]);
+});
+
+test("an error whose detail ends in a period does not get a second one", async () => {
+  const { impl } = problem(404, "crawl_not_found", "Crawl not found for this account.");
+  await assert.rejects(
+    () => getCrawl("c_nope", { apiKey: "k", fetchImpl: impl }),
+    (e: unknown) =>
+      e instanceof ToolkitError &&
+      /account\. The id may be wrong/.test(e.likely_cause ?? "") &&
+      !/\.\./.test(e.likely_cause ?? ""),
+  );
 });
 
 /** A stub that serves `pages` in order, recording the cursor each call sent. */
@@ -403,6 +458,17 @@ test("listAllResults returns what a running crawl kept, ending at the first empt
   const { results, partial } = await listAllResults("c_1", { apiKey: "k", fetchImpl: impl });
   assert.deepEqual(results.map((r) => r.url), ["https://example.com/product/1"]);
   assert.equal(partial, true);
+  assert.equal(calls(), 2);
+});
+
+test("listAllResults on a stopped crawl is complete at the first empty page, even with next_cursor still set", async () => {
+  const { impl, calls } = pagedFetch([
+    { status: "stopped", results: [{ url: "https://example.com/product/1" }], next_cursor: "c1" },
+    { status: "stopped", results: [], next_cursor: "c1" },
+  ]);
+  const { results, partial } = await listAllResults("c_1", { apiKey: "k", fetchImpl: impl });
+  assert.deepEqual(results.map((r) => r.url), ["https://example.com/product/1"]);
+  assert.equal(partial, false);
   assert.equal(calls(), 2);
 });
 

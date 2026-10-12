@@ -94,10 +94,10 @@ Every Crawl error carries the API's code as `server_code` (when the API sent
 one), and `crawl_id` on any call about one crawl.
 
 The CLI retries transient failures, as the Crawl SDKs do: up to 3 retries,
-waiting the `Retry-After` seconds or 250 ms x 2^n (+/-20% jitter, at most 10 s).
-Reads retry on 429, 502, 503, 504 and network errors (a timeout counts).
-`create` retries only with `--idempotency-key`, and only on 502, 503, 504 and
-network errors, never on 429. `stop` never retries.
+waiting the `Retry-After` seconds (at most 30) or 250 ms x 2^n (+/-20% jitter,
+at most 10 s). Reads retry on 429, 502, 503, 504 and network errors (a timeout
+counts). `create` retries only with `--idempotency-key`, and only on 502, 503,
+504 and network errors, never on 429. `stop` retries only a 503 `crawl_busy`.
 The "Retry?" column is for errors that remain after these retries.
 
 | Code | Meaning | Retry? |
@@ -110,6 +110,7 @@ The "Retry?" column is for errors that remain after these retries.
 | `CRAWL_REQUEST_IN_FLIGHT` | 409: the same Idempotency-Key is still in flight | yes, once the first request ends |
 | `CRAWL_NOT_FOUND` / `CRAWL_CONTENT_NOT_FOUND` | 404: wrong id, or the page has no content | no |
 | `CRAWL_TOO_MANY_CRAWLS` | 429: the account's active-job limit | yes, after `retry_after` |
+| `CRAWL_BUSY` | 503 `crawl_busy` on `stop`: the stop was not saved yet and the crawl still runs | yes, run the stop again after `retry_after` |
 | `CRAWL_FAILED` | the crawl ended `failed`, or another error | 5xx: yes, with backoff |
 | `BACKEND_UNAVAILABLE` | the API could not be reached | yes |
 

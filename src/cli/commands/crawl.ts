@@ -46,7 +46,7 @@ export const crawl: Command = {
   help: [
     "Crawl is new. Cloud (needs a key with Crawl access):",
     "  create <url> --depth <n> [flags]  start a crawl from one URL (returns at once)",
-    "    --depth <n>                     link hops to follow from the start URL (1-100000, required)",
+    "    --depth <n>                     link hops to follow from the start URL (up to 100000, required)",
     "    --max-items <n>                 stop after keeping n URLs (API default 10)",
     "    --max-pages <n>                 stop after fetching n pages (API default 10; bounds cost);",
     "                                    the local policy max_pages_per_run caps it (default 1000)",
@@ -491,15 +491,18 @@ function printCrawl(
   return err ? 1 : 0;
 }
 
-/** A positive integer flag up to the API's 100,000 ceiling; undefined when unset. */
+/**
+ * A whole-number flag up to the API's 100,000 ceiling; undefined when unset. The lower bound is
+ * the API's to judge: 0 or less comes back as CRAWL_INVALID_REQUEST, naming the parameter.
+ */
 function limitFlag(name: string, v: unknown): number | undefined {
   if (v === undefined) return undefined;
   const n = asNumber(v);
-  if (n === undefined || !Number.isInteger(n) || n < 1 || n > MAX_LIMIT) {
+  if (n === undefined || !Number.isInteger(n) || n > MAX_LIMIT) {
     throw new ToolkitError({
       code: "INVALID_USAGE",
       message: `Invalid --${name} value '${String(v)}'.`,
-      likely_cause: `--${name} takes a whole number from 1 to ${MAX_LIMIT}.`,
+      likely_cause: `--${name} takes a whole number up to ${MAX_LIMIT}.`,
       next_action: `Pass e.g. --${name} ${name === "depth" ? 1 : 10}.`,
     });
   }
