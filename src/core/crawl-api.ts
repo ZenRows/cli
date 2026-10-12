@@ -13,6 +13,7 @@
  * `output_format` takes `html` only (absent = URLs only). Response fields we do
  * not model pass through untouched.
  */
+import { Readable } from "node:stream";
 import { ToolkitError, isKeyCapReached, keyCapReached, quotaExhausted } from "./errors.ts";
 import { readAccount } from "./agent-account.ts";
 import { registerSecret } from "./logger.ts";
@@ -148,6 +149,8 @@ interface RequestOpts extends CallOpts {
   crawlId?: string;
   /** Retry a 503 crawl_busy (stop only): the stop was not saved and the crawl still runs. */
   retryBusy?: boolean;
+  /** Consume a 2xx body as a stream instead of reading it as text. Called again on each retry. */
+  sink?: (body: AsyncIterable<Uint8Array>) => Promise<void>;
 }
 
 interface RawResponse {
@@ -199,6 +202,10 @@ async function attempt(url: string, init: RequestInit, opts: RequestOpts): Promi
   const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 60_000);
   try {
     const res = await (opts.fetchImpl ?? fetch)(url, { ...init, signal: controller.signal });
+    if (opts.sink && res.ok) {
+      await opts.sink(res.body ?? Readable.from([]));
+      return { status: res.status, headers: res.headers, text: "" };
+    }
     return { status: res.status, headers: res.headers, text: await res.text() };
   } finally {
     clearTimeout(timeout);
@@ -235,6 +242,7 @@ async function crawlFetch(method: string, path: string, opts: RequestOpts): Prom
     try {
       res = await attempt(url.toString(), init, opts);
     } catch (err) {
+      if (err instanceof ToolkitError) throw err;
       if (canRetry) {
         await sleep(backoffMs(n));
         continue;
@@ -460,17 +468,45 @@ export async function getCrawlContent(
 }
 
 /**
- * Every result in one NDJSON file (`{url, content_status?, content?}` per line).
- * `status` is the `X-Crawl-Status` header: `running` means the file is partial.
+ * Every result in one NDJSON file (`{url, content_status?, content?}` per line),
+ * streamed into `write` because page HTML makes it large. `count` is its
+ * non-blank lines. `status` is the `X-Crawl-Status` header: `running` means the
+ * file is partial.
  */
-export async function downloadCrawl(id: string, opts: CallOpts): Promise<{ status?: string; ndjson: string }> {
+export async function downloadCrawl(
+  id: string,
+  write: (ndjson: AsyncIterable<Uint8Array>) => Promise<void>,
+  opts: CallOpts,
+): Promise<{ status?: string; count: number }> {
+  let count = 0;
   const res = await crawlFetch("GET", `/crawls/${encodeURIComponent(id)}/download`, {
     ...opts,
     crawlId: id,
     accept: "application/x-ndjson, application/problem+json;q=0.8",
     timeoutMs: opts.timeoutMs ?? 300_000,
+    sink: (body) => {
+      count = 0;
+      return write(countLines(body, () => count++));
+    },
   });
-  return { status: res.headers.get("x-crawl-status") ?? undefined, ndjson: res.text };
+  return { status: res.headers.get("x-crawl-status") ?? undefined, count };
+}
+
+/** Pass `chunks` through, calling `onLine` for each line that is not blank. */
+async function* countLines(chunks: AsyncIterable<Uint8Array>, onLine: () => void): AsyncGenerator<Uint8Array> {
+  let blank = true;
+  for await (const chunk of chunks) {
+    for (const b of chunk) {
+      if (b === 0x0a) {
+        if (!blank) onLine();
+        blank = true;
+      } else if (b !== 0x20 && b !== 0x09 && b !== 0x0d) {
+        blank = false;
+      }
+    }
+    yield chunk;
+  }
+  if (!blank) onLine();
 }
 
 /**

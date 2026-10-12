@@ -159,15 +159,58 @@ test("getCrawlContent returns the HTML body and its type", async () => {
   assert.equal(out.body, "<html><body>hi</body></html>");
 });
 
-test("downloadCrawl returns the NDJSON and X-Crawl-Status", async () => {
-  const { impl, calls } = stubFetch(200, '{"url":"https://example.com/product/a"}\n{"url":"https://example.com/product/b"}\n', {
-    "content-type": "application/x-ndjson",
-    "x-crawl-status": "running",
-  });
-  const out = await downloadCrawl("c_1", { apiKey: "k", fetchImpl: impl });
+/** A `write` for downloadCrawl that keeps the streamed text of the last attempt. */
+function collect() {
+  const sink = { text: "" };
+  const write = async (chunks: AsyncIterable<Uint8Array>) => {
+    sink.text = "";
+    for await (const c of chunks) sink.text += Buffer.from(c).toString();
+  };
+  return { sink, write };
+}
+
+test("downloadCrawl streams the NDJSON, counts its lines and returns X-Crawl-Status", async () => {
+  const ndjson = '{"url":"https://example.com/product/a"}\n\n{"url":"https://example.com/product/b"}';
+  const { impl, calls } = stubFetch(200, ndjson, { "content-type": "application/x-ndjson", "x-crawl-status": "running" });
+  const { sink, write } = collect();
+  const out = await downloadCrawl("c_1", write, { apiKey: "k", fetchImpl: impl });
   assert.match(calls[0]!.url, /\/crawls\/c_1\/download$/);
   assert.equal(out.status, "running");
-  assert.equal(out.ndjson.trim().split("\n").length, 2);
+  assert.equal(out.count, 2);
+  assert.equal(sink.text, ndjson);
+});
+
+test("downloadCrawl restarts the write and the count when the body fails mid-stream", async () => {
+  let n = 0;
+  const impl = (async () => {
+    n++;
+    const body = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new TextEncoder().encode('{"url":"a"}\n'));
+        if (n === 1) c.error(new TypeError("terminated"));
+        else c.close();
+      },
+    });
+    return new Response(body, { status: 200 });
+  }) as unknown as typeof fetch;
+  const { sink, write } = collect();
+  const { sleepImpl } = recordSleep();
+  const out = await downloadCrawl("c_1", write, { apiKey: "k", fetchImpl: impl, sleepImpl });
+  assert.equal(n, 2);
+  assert.equal(out.count, 1);
+  assert.equal(sink.text, '{"url":"a"}\n');
+});
+
+test("downloadCrawl does not retry an error the write raises as a ToolkitError", async () => {
+  const { impl, calls } = stubFetch(200, '{"url":"a"}\n');
+  const write = async () => {
+    throw new ToolkitError({ code: "INVALID_USAGE", message: "m", likely_cause: "c", next_action: "n" });
+  };
+  await assert.rejects(
+    () => downloadCrawl("c_1", write, { apiKey: "k", fetchImpl: impl, sleepImpl: recordSleep().sleepImpl }),
+    (e: unknown) => e instanceof ToolkitError && e.code === "INVALID_USAGE",
+  );
+  assert.equal(calls.length, 1);
 });
 
 test("403 REQS008 maps to CRAWL_NOT_ENABLED with the API's wording", async () => {

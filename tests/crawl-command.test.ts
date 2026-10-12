@@ -1,6 +1,6 @@
 import { mock, test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { crawl } from "../src/cli/commands/crawl.ts";
 import { createWorkspace } from "../src/core/workspace.ts";
@@ -60,8 +60,10 @@ function json(body: unknown, status = 200, headers: Record<string, string> = {})
 async function captureOut(fn: () => unknown): Promise<string> {
   const orig = process.stdout.write.bind(process.stdout);
   let buf = "";
-  process.stdout.write = ((s: string | Uint8Array) => {
-    buf += typeof s === "string" ? s : Buffer.from(s).toString();
+  // log.out writes strings. Bytes are the test runner's own reports, which an awaited write lets through.
+  process.stdout.write = ((s: string | Uint8Array, ...rest: unknown[]) => {
+    if (typeof s !== "string") return (orig as (...a: unknown[]) => boolean)(s, ...rest);
+    buf += s;
     return true;
   }) as typeof process.stdout.write;
   try {
@@ -355,6 +357,33 @@ test("crawl download writes the NDJSON export to <id>.jsonl", async () => {
       assert.equal(out.crawl_id, "c_1");
       assert.equal(calls[0]!.url.pathname, "/v1/crawls/c_1/download");
       assert.ok(existsSync(join(process.cwd(), "c_1.jsonl")));
+      assert.ok(!existsSync(join(process.cwd(), "c_1.jsonl.part")));
+    },
+  );
+});
+
+test("crawl download keeps an earlier file when the export fails", async () => {
+  await withCrawlWorkspace(
+    () => json({ code: "crawl_not_found", title: "Not found", status: 404 }, 404),
+    async () => {
+      writeFileSync("c_1.jsonl", "old\n");
+      const { code, out } = await run(["download", "c_1"]);
+      assert.notEqual(code, 0);
+      assert.equal(out.ok, false);
+      assert.equal(readFileSync("c_1.jsonl", "utf8"), "old\n");
+      assert.ok(!existsSync("c_1.jsonl.part"));
+    },
+  );
+});
+
+test("crawl download --out into a missing directory is INVALID_USAGE", async () => {
+  await withCrawlWorkspace(
+    () => new Response('{"url":"https://example.com/product/1"}\n', { status: 200 }),
+    async (calls) => {
+      const { code, out } = await run(["download", "c_1", "--out", "missing/c_1.jsonl"]);
+      assert.equal(code, 1);
+      assert.equal(out.error.code, "INVALID_USAGE");
+      assert.equal(calls.length, 1);
     },
   );
 });
@@ -382,6 +411,18 @@ test("crawl content accepts a content_url and prints the page", async () => {
       assert.equal(out.content_id, "ct_9");
       assert.equal(out.content_type, "text/html");
       assert.equal(calls[0]!.url.pathname, "/v1/crawls/c_1/contents/ct_9");
+    },
+  );
+});
+
+test("crawl content with a malformed % escape is INVALID_USAGE, before any network call", async () => {
+  await withCrawlWorkspace(
+    () => new Response("<html>ok</html>", { status: 200 }),
+    async (calls) => {
+      const { code, out } = await run(["content", "c_1", "/v1/crawls/c_1/contents/ct_%zz"]);
+      assert.equal(code, 1);
+      assert.equal(out.error.code, "INVALID_USAGE");
+      assert.equal(calls.length, 0);
     },
   );
 });

@@ -31,7 +31,7 @@ import {
 } from "../../core/crawl-api.ts";
 import { asNumber, asString, parse, type Command, type RunContext } from "../command.ts";
 import { ToolkitError } from "../../core/errors.ts";
-import { printError, writeOut } from "../output.ts";
+import { printError, writeOut, writeOutStream } from "../output.ts";
 
 /** The API's default for `max_pages` (and `max_items`) when the flag is unset. */
 const DEFAULT_MAX_PAGES = 10;
@@ -295,9 +295,7 @@ async function downloadCmd(rest: string[], ctx: RunContext): Promise<number> {
   const file = asString(values.out) ?? `${id.replace(/[^A-Za-z0-9._-]+/g, "_")}.jsonl`;
   assertUsable("crawl");
   const apiKey = requireApiKey();
-  const { status, ndjson } = await downloadCrawl(id, { apiKey });
-  writeOut(file, ndjson);
-  const count = ndjson.split("\n").filter((l) => l.trim()).length;
+  const { status, count } = await downloadCrawl(id, (ndjson) => writeOutStream(file, ndjson), { apiKey });
   const partial = status === "running";
   if (json) {
     log.out(JSON.stringify({ ok: true, crawl_id: id, status: status ?? null, partial, count, file }, null, 2));
@@ -336,8 +334,7 @@ async function contentCmd(rest: string[], ctx: RunContext): Promise<number> {
   const json = ctx.json || values.json === true;
   const id = requireId(positionals[0], "content");
   const ref = positionals[1];
-  // Accept the content id or the result's whole content_url.
-  const contentId = ref ? (contentIdOf({ url: "", content_url: ref }) ?? ref) : undefined;
+  const contentId = ref ? contentIdOfRef(id, ref) : undefined;
   if (!contentId) {
     throw new ToolkitError({
       code: "INVALID_USAGE",
@@ -365,6 +362,22 @@ async function contentCmd(rest: string[], ctx: RunContext): Promise<number> {
     log.out(body);
   }
   return 0;
+}
+
+/** The content id or the result's whole content_url, as the content id. */
+function contentIdOfRef(id: string, ref: string): string {
+  try {
+    return contentIdOf({ url: "", content_url: ref }) ?? ref;
+  } catch (err) {
+    if (!(err instanceof URIError)) throw err;
+    throw new ToolkitError({
+      code: "INVALID_USAGE",
+      message: `Invalid content id '${ref}'.`,
+      likely_cause: "It has a % that does not start a valid percent-encoded character.",
+      next_action: "Pass the id or content_url exactly as a fetched result shows it.",
+      suggested_commands: [`zenrows crawl results ${id}`],
+    });
+  }
 }
 
 async function listCmd(rest: string[], ctx: RunContext): Promise<number> {
