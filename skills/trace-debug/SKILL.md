@@ -47,7 +47,7 @@ zenrows trace export <run-id>     # JSON for sharing
   `failure_detail` in `zenrows batch status <id> --json` say why.
 - `CRAWL_NOT_ENABLED` → the API answered 403 `REQS008`: Crawl is not
   enabled for this account. Do not retry; ask Zenrows support for access.
-- `CRAWL_QUOTA_EXCEEDED` / `CRAWL_KEY_CAP_REACHED` → Crawl's 402: the
+- `CRAWL_INSUFFICIENT_CREDITS` / `CRAWL_KEY_CAP_REACHED` → Crawl's 402: the
   account is out of credits, or this key reached its credit cap (`AUTH014`).
   Same advice as `POLICY_MAX_CREDITS_EXCEEDED` / `KEY_CREDIT_CAP_REACHED`.
 - `CRAWL_TOO_MANY_CRAWLS` → 429 `too_many_crawls`: the account has reached

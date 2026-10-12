@@ -372,7 +372,7 @@ function classifyProblem(
     }
     const acct = readAccount();
     const quota = quotaExhausted(request, acct?.unclaimed ? acct.claimUrl : undefined, { status, detail });
-    return new ToolkitError({ ...quota.toJSON(), code: "CRAWL_QUOTA_EXCEEDED" });
+    return new ToolkitError({ ...quota.toJSON(), code: "CRAWL_INSUFFICIENT_CREDITS" });
   }
   if (status === 409) {
     return new ToolkitError({

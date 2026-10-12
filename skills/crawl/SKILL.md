@@ -104,8 +104,8 @@ The "Retry?" column is for errors that remain after these retries.
 | --- | --- | --- |
 | `CRAWL_NOT_ENABLED` | 403 `REQS008`: Crawl is not enabled for this account | no |
 | `AUTH_INVALID` | 401: the API key was rejected | no, log in again |
-| `CRAWL_QUOTA_EXCEEDED` | 402: the account is out of credits (claim the account or add credits) | after credits renew or are added |
-| `CRAWL_KEY_CAP_REACHED` | 402 `AUTH014`: this API key reached its credit cap | after the cap resets or is raised |
+| `CRAWL_INSUFFICIENT_CREDITS` | 402: the account is out of credits (claim the account or add credits) | after credits renew or are added |
+| `CRAWL_KEY_CAP_REACHED` | 402 `AUTH014` or `api_key_cap_reached`: this API key reached its credit cap | after the cap resets or is raised |
 | `CRAWL_INVALID_REQUEST` | 400 or 422: fix the request. For `idempotency_key_reused`, send a new key or no key | no, not as is |
 | `CRAWL_REQUEST_IN_FLIGHT` | 409: the same Idempotency-Key is still in flight | yes, once the first request ends |
 | `CRAWL_NOT_FOUND` / `CRAWL_CONTENT_NOT_FOUND` | 404: wrong id, or the page has no content | no |

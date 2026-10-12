@@ -210,7 +210,7 @@ Errors carry the API's code as `server_code`, `crawl_id` on any call about one
 crawl, and `retry_after` on a 429. When the account has reached its limit of
 active jobs (3 by default), shared with its Batch jobs, a create gets
 `CRAWL_TOO_MANY_CRAWLS` and creates nothing; retry after `retry_after` seconds.
-Other codes: `CRAWL_QUOTA_EXCEEDED` and `CRAWL_KEY_CAP_REACHED` (402, with the
+Other codes: `CRAWL_INSUFFICIENT_CREDITS` and `CRAWL_KEY_CAP_REACHED` (402, with the
 same claim, top-up and key-cap advice as other commands),
 `CRAWL_INVALID_REQUEST` (400/422, do not retry as is), `CRAWL_REQUEST_IN_FLIGHT`
 (409, retry once the first request ends), `CRAWL_NOT_FOUND`,

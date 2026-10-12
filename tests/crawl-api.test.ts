@@ -259,12 +259,12 @@ test("429 too_many_crawls maps to CRAWL_TOO_MANY_CRAWLS with retry_after, and cr
   assert.equal(calls.length, 1);
 });
 
-test("402 maps to CRAWL_QUOTA_EXCEEDED, and AUTH014 to CRAWL_KEY_CAP_REACHED, with the shared advice", async () => {
+test("402 maps to CRAWL_INSUFFICIENT_CREDITS, and AUTH014 to CRAWL_KEY_CAP_REACHED, with the shared advice", async () => {
   const quota = problem(402, "AUTH004", "Usage limit reached.");
   await assert.rejects(
     () => createCrawl({ url: "https://example.com/products/", depth: 1 }, { apiKey: "k", fetchImpl: quota.impl }),
     (e: unknown) =>
-      e instanceof ToolkitError && e.code === "CRAWL_QUOTA_EXCEEDED" && e.server_code === "AUTH004" && /zenrows usage/.test(e.next_action),
+      e instanceof ToolkitError && e.code === "CRAWL_INSUFFICIENT_CREDITS" && e.server_code === "AUTH004" && /zenrows usage/.test(e.next_action),
   );
   const cap = problem(402, "AUTH014", "Key cap reached.");
   await assert.rejects(
