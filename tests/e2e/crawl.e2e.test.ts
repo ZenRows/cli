@@ -138,5 +138,4 @@ test("zenrows crawl end to end against a live API", { skip, timeout: 20 * 60_000
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
-}
-);
+});
