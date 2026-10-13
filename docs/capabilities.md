@@ -8,8 +8,8 @@ the single source of truth that prevents hallucinated execution.
 - **available** — a documented endpoint exists and the command does real work.
 - **available-but-needs-confirmation** — likely available; verify per account.
 - **experimental** — exists but not yet promoted to a stable status.
-- **beta** — open beta; usable by any key. Product-specific limits (e.g. Extract
-  domain coverage) are handled by adapters / API errors, not by blocking the CLI.
+- **beta** — usable by any key. Product-specific limits (e.g. Extract domains
+  not prepared yet) are handled by adapters / API errors, not by blocking the CLI.
 - **planned** — no documented endpoint yet; local spec / validation only.
 - **not-implemented** / **deprecated** — not usable.
 

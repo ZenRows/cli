@@ -21,9 +21,9 @@ extract({ url, proxy_country: "US" })               # geo-targeted
 ```
 
 `mode=auto` (`extract=auto`) is in **beta**: works on any domain Zenrows has
-prepared, with any key, and is currently free; billing may apply later. If the domain is not enabled (AUTH010)
-or not prepared yet (REQS007), the tool retries once with Autoparse by default
-(`fallback_autoparse`).
+prepared, with any key, and is currently free; billing may apply later. If the
+domain is not enabled (AUTH010) or not prepared yet (REQS007), the tool retries
+once with Autoparse by default (`fallback_autoparse`).
 
 Every mode uses Adaptive Stealth Mode by default: pass just the URL, even for
 protected or dynamic sites. Set `js_render` or `premium_proxy` only to force a

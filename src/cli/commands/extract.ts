@@ -24,7 +24,7 @@ export const extract: Command = {
   usage: "zenrows extract <url> [--autoparse | --css <json> | --outputs <filters> | --output md|text] [flags]",
   help: [
     "Methods:",
-    "  (default)              extract=auto — site-tailored Extract (beta); falls back to Autoparse if the domain is not enabled or prepared",
+    "  (default)              extract=auto: site-tailored Extract (beta); falls back to Autoparse if the domain is not enabled or prepared",
     "  --autoparse            general-purpose Autoparse (any domain, no Extract fallback)",
     "  --css <json>           CSS selector map, e.g. '{\"title\":\"h1\",\"price\":\".price\"}'",
     "  --outputs <list>       built-in output filters → JSON: emails, phone_numbers, headings,",
