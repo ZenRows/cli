@@ -37,6 +37,12 @@ export interface ScraperResult {
   concurrencyRemaining: number | null;
   /** The request URL with the apikey redacted — safe to log/persist. */
   redactedUrl: string;
+  /**
+   * True when an Extract request answered 422 with code `no_data_extracted`:
+   * Extract knows this kind of page but none of the fields came back filled.
+   * The request is not charged, and the same request returns the same answer.
+   */
+  noDataExtracted?: boolean;
 }
 
 export interface ScraperParams {
@@ -151,6 +157,13 @@ export async function scrape(
         "Retry with --autoparse for general-purpose extraction on any site, or get the domain prepared for Extract (POST /v1/extract/prepared-domains).",
       suggested_commands: [`zenrows extract ${params.url} --autoparse`],
     });
+  }
+  // 422 no_data_extracted on an Extract request: the page was processed and had
+  // nothing to extract. It is an answer, not a failure to reach the target, so
+  // return it for the extract adapter to report as an empty result instead of
+  // advising escalation (which would repeat a slow, deterministic request).
+  if (res.status === 422 && params.extract !== undefined && zrErrorCode(body) === "NO_DATA_EXTRACTED") {
+    return { ...result, noDataExtracted: true };
   }
   if (res.status === 401 || res.status === 403) {
     // Distinguish Zenrows auth errors from target-site 403s. Zenrows auth

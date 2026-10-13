@@ -47,6 +47,11 @@ export interface ExtractOutcome extends FetchOutcome {
    * array / non-JSON). Lets callers warn instead of reporting a silent success.
    */
   empty?: boolean;
+  /**
+   * True when Extract answered `no_data_extracted` (HTTP 422): it knows this kind
+   * of page but no field came back filled. Always reported with `empty: true`.
+   */
+  noDataExtracted?: boolean;
 }
 
 /** True when a parsed extraction result carries no usable structured data. */
@@ -117,6 +122,20 @@ async function runExtractOnce(
   };
 
   const outcome = await runFetch(fetchOpts, config, policy, apiKey);
+  if (outcome.result.noDataExtracted) {
+    if (opts.validate) {
+      throw new ToolkitError({
+        code: "EXTRACT_VALIDATION_FAILED",
+        message: "Extract found no data on this page.",
+        likely_cause:
+          "Extract knows this kind of page, but none of the fields came back filled (HTTP 422 no_data_extracted). The request was not charged.",
+        next_action:
+          "Check that the page rendered fully: try --manual --js-render with --wait-for <selector>. Protected sites may also need --premium-proxy.",
+        suggested_commands: [`zenrows extract ${opts.url} --manual --js-render --premium-proxy`],
+      });
+    }
+    return { ...outcome, method, empty: true, noDataExtracted: true };
+  }
   const { data, html, empty } = parseExtractBody(method, outcome.result.body, opts);
 
   return { ...outcome, method, data, html, empty };
