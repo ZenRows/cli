@@ -224,8 +224,9 @@ waiting the `Retry-After` seconds (at most 30) or 250 ms x 2^n (+/-20% jitter,
 at most 10 s).
 Reads retry on 429, 502, 503, 504 and network errors (a timeout counts).
 `create` retries only with `--idempotency-key`, and only on 502, 503, 504 and
-network errors, never on 429. `stop` retries only a 503 `crawl_busy`, which
-means the stop was not saved and the crawl still runs.
+network errors, never on 429. `stop` retries on 429, 502, 503 (a `crawl_busy`
+means the stop was not saved and the crawl still runs) and 504, waiting the
+`Retry-After` seconds (at most 30) or 1 s; repeating a stop is safe.
 
 ## 11. Browser Sessions
 

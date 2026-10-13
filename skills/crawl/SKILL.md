@@ -100,7 +100,8 @@ The CLI retries transient failures, as the Crawl SDKs do: up to 3 retries,
 waiting the `Retry-After` seconds (at most 30) or 250 ms x 2^n (+/-20% jitter,
 at most 10 s). Reads retry on 429, 502, 503, 504 and network errors (a timeout
 counts). `create` retries only with `--idempotency-key`, and only on 502, 503,
-504 and network errors, never on 429. `stop` retries only a 503 `crawl_busy`.
+504 and network errors, never on 429. `stop` retries on 429, 502, 503 (including
+`crawl_busy`) and 504, waiting the `Retry-After` seconds (at most 30) or 1 s.
 The "Retry?" column is for errors that remain after these retries.
 
 | Code | Meaning | Retry? |

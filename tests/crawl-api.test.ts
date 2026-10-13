@@ -408,11 +408,52 @@ test("create with an Idempotency-Key is retried on 503 with the same key", async
   assert.ok(calls.every((c) => (c.init?.headers as Record<string, string>)["Idempotency-Key"] === "k1"));
 });
 
-test("stop is not retried on a plain 503", async () => {
-  const { impl, calls } = seqFetch([unavailable, { status: 200, payload: { crawl_id: "c_1", status: "stopped" } }]);
+const stopped = { status: 200, payload: { crawl_id: "c_1", status: "stopped" } };
+
+for (const status of [429, 502, 504]) {
+  test(`stop retries a ${status} once, waiting 1 s without Retry-After, then returns the stopped crawl`, async () => {
+    const { impl, calls } = seqFetch([{ status, payload: { code: "transient", status } }, stopped]);
+    const { waits, sleepImpl } = recordSleep();
+    const s = await stopCrawl("c_1", { apiKey: "k", fetchImpl: impl, sleepImpl });
+    assert.equal(s.status, "stopped");
+    assert.equal(calls.length, 2);
+    assert.deepEqual(waits, [1000]);
+  });
+}
+
+test("stop retries a plain 503 and honors Retry-After", async () => {
+  const { impl, calls } = seqFetch([{ ...unavailable, headers: { "retry-after": "2" } }, stopped]);
+  const { waits, sleepImpl } = recordSleep();
+  const s = await stopCrawl("c_1", { apiKey: "k", fetchImpl: impl, sleepImpl });
+  assert.equal(s.status, "stopped");
+  assert.equal(calls.length, 2);
+  assert.deepEqual(waits, [2000]);
+});
+
+test("stop gives up after 3 retries and maps the last status as before", async () => {
+  const cases: Array<[number, string]> = [
+    [429, "CRAWL_TOO_MANY_CRAWLS"],
+    [502, "CRAWL_FAILED"],
+    [503, "CRAWL_FAILED"],
+    [504, "CRAWL_FAILED"],
+  ];
+  for (const [status, code] of cases) {
+    const { impl, calls } = seqFetch([{ status, payload: { code: "transient", status } }]);
+    const { waits, sleepImpl } = recordSleep();
+    await assert.rejects(
+      () => stopCrawl("c_1", { apiKey: "k", fetchImpl: impl, sleepImpl }),
+      (e: unknown) => e instanceof ToolkitError && e.code === code && e.crawl_id === "c_1",
+    );
+    assert.equal(calls.length, 4, `${status}: 1 attempt + 3 retries`);
+    assert.deepEqual(waits, [1000, 1000, 1000]);
+  }
+});
+
+test("stop is not retried on a 500", async () => {
+  const { impl, calls } = seqFetch([{ status: 500, payload: { code: "internal_error" } }, stopped]);
   await assert.rejects(
     () => stopCrawl("c_1", { apiKey: "k", fetchImpl: impl, sleepImpl: recordSleep().sleepImpl }),
-    (e: unknown) => e instanceof ToolkitError && e.code === "CRAWL_FAILED" && e.crawl_id === "c_1",
+    (e: unknown) => e instanceof ToolkitError && e.code === "CRAWL_FAILED",
   );
   assert.equal(calls.length, 1);
 });

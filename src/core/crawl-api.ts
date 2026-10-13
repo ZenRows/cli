@@ -149,8 +149,11 @@ interface RequestOpts extends CallOpts {
   accept?: string;
   /** Set on every call about one crawl, so its errors carry `crawl_id`. */
   crawlId?: string;
-  /** Retry a 503 crawl_busy (stop only): the stop was not saved and the crawl still runs. */
-  retryBusy?: boolean;
+  /**
+   * Retry a stop on `STOP_RETRY_STATUSES`, waiting Retry-After or 1 s. A stop is
+   * safe to repeat: an ended crawl answers 200 with its status.
+   */
+  retryStop?: boolean;
   /** Consume a 2xx body as a stream instead of reading it as text. Called again on each retry. */
   sink?: (body: AsyncIterable<Uint8Array>) => Promise<void>;
 }
@@ -167,11 +170,13 @@ const MAX_RETRY_AFTER_SECONDS = 30;
 const READ_RETRY_STATUSES: ReadonlySet<number> = new Set([429, 502, 503, 504]);
 // 429 on create is the active-job limit: a retry only waits for a slot that may never free.
 const CREATE_RETRY_STATUSES: ReadonlySet<number> = new Set([502, 503, 504]);
+// Any 503 on stop, crawl_busy included: crawl_busy means the stop was not saved and the crawl still runs.
+const STOP_RETRY_STATUSES: ReadonlySet<number> = new Set([429, 502, 503, 504]);
 
 /**
  * The statuses to retry, or undefined when the request must run once: a GET is
- * safe to repeat, a create only with an Idempotency-Key. Stop retries only a 503
- * crawl_busy (see `crawlFetch`).
+ * safe to repeat, a create only with an Idempotency-Key. Stop retries on its own
+ * statuses and wait rule (see `retryStop`).
  */
 function retryStatuses(method: string, headers: Record<string, string>): ReadonlySet<number> | undefined {
   if (method === "GET") return READ_RETRY_STATUSES;
@@ -186,14 +191,6 @@ function backoffMs(attempt: number): number {
 /** `Retry-After` in whole seconds, as milliseconds, at most `MAX_RETRY_AFTER_SECONDS`. */
 function retryAfterMs(value: string | null): number | undefined {
   return value && /^\d+$/.test(value.trim()) ? Math.min(Number(value), MAX_RETRY_AFTER_SECONDS) * 1000 : undefined;
-}
-
-function problemCode(body: string): string | undefined {
-  try {
-    return (JSON.parse(body) as ProblemJson).code;
-  } catch {
-    return undefined;
-  }
 }
 
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -264,7 +261,7 @@ async function crawlFetch(method: string, path: string, opts: RequestOpts): Prom
       await sleep(retryAfterMs(retryAfter) ?? backoffMs(n));
       continue;
     }
-    if (opts.retryBusy && n < MAX_RETRIES && res.status === 503 && problemCode(res.text) === "crawl_busy") {
+    if (opts.retryStop && n < MAX_RETRIES && STOP_RETRY_STATUSES.has(res.status)) {
       await sleep(retryAfterMs(retryAfter) ?? 1000);
       continue;
     }
@@ -453,7 +450,7 @@ export function listCrawls(opts: CallOpts & { cursor?: string; limit?: number })
 
 /** Stop a running crawl. Idempotent: an ended crawl answers as it ended. */
 export function stopCrawl(id: string, opts: CallOpts): Promise<CrawlStop> {
-  return crawlJson<CrawlStop>("POST", `/crawls/${encodeURIComponent(id)}/stop`, { ...opts, crawlId: id, retryBusy: true });
+  return crawlJson<CrawlStop>("POST", `/crawls/${encodeURIComponent(id)}/stop`, { ...opts, crawlId: id, retryStop: true });
 }
 
 /** The page of one kept URL (HTML for `output_format: html`). */
