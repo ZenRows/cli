@@ -34,7 +34,7 @@ import { ToolkitError } from "../../core/errors.ts";
 import { printError, writeOut, writeOutStream } from "../output.ts";
 
 /** The API's default for `max_pages` (and `max_items`) when the flag is unset. */
-const DEFAULT_MAX_PAGES = 10;
+const DEFAULT_MAX_PAGES = 100;
 /** Largest `depth` / `max_items` / `max_pages` the API takes. */
 const MAX_LIMIT = 100_000;
 
@@ -42,13 +42,14 @@ export const crawl: Command = {
   name: "crawl",
   summary: "Crawl a site from one start URL and collect the URLs behind it (new).",
   usage:
-    "zenrows crawl <create <url> --depth N|get <id>|list|results <id>|content <id> <content_id>|download <id>|stop <id>|wait <id>>",
+    "zenrows crawl <create <url> [--depth N]|get <id>|list|results <id>|content <id> <content_id>|download <id>|stop <id>|wait <id>>",
   help: [
     "Crawl is new. Cloud (needs a key with Crawl access):",
-    "  create <url> --depth <n> [flags]  start a crawl from one URL (returns at once)",
-    "    --depth <n>                     link hops to follow from the start URL (up to 100000, required)",
-    "    --max-items <n>                 stop after keeping n URLs (API default 10)",
-    "    --max-pages <n>                 stop after fetching n pages (API default 10; bounds cost);",
+    "  create <url> [flags]              start a crawl from one URL (returns at once)",
+    "    --depth <n>                     link hops to follow from the start URL (1 to 100000);",
+    "                                    leave it out for no depth limit (the caps below stop the crawl)",
+    "    --max-items <n>                 stop after keeping n URLs (API default 100)",
+    "    --max-pages <n>                 stop after fetching n pages (API default 100; bounds cost);",
     "                                    the local policy max_pages_per_run caps it (default 1000)",
     "    --include-patterns <p>          keep only URLs containing this substring (repeatable)",
     "    --exclude-patterns <p>          drop URLs containing this substring (repeatable)",
@@ -101,7 +102,7 @@ export const crawl: Command = {
             message: `Unknown crawl subcommand: ${sub ?? "(none)"}`,
             likely_cause: "Subcommand not recognized.",
             next_action:
-              "Use create <url> --depth N | get <id> | list | results <id> | content <id> <content_id> | download <id> | stop <id> | wait <id>.",
+              "Use create <url> [--depth N] | get <id> | list | results <id> | content <id> <content_id> | download <id> | stop <id> | wait <id>.",
             suggested_commands: ["zenrows crawl --help"],
           });
       }
@@ -133,21 +134,13 @@ async function createCmd(rest: string[], ctx: RunContext): Promise<number> {
       code: "INVALID_USAGE",
       message: "Provide the start URL.",
       likely_cause: "No <url> positional was given.",
-      next_action: "Usage: zenrows crawl create <url> --depth 1",
+      next_action: "Usage: zenrows crawl create <url> [--depth N]",
       suggested_commands: ["zenrows crawl create https://example.com/ --depth 1"],
     });
   }
+  const params: CreateCrawlParams = { url };
   const depth = limitFlag("depth", values.depth);
-  if (depth === undefined) {
-    throw new ToolkitError({
-      code: "INVALID_USAGE",
-      message: "--depth is required.",
-      likely_cause: "Crawl has no default depth yet; every crawl states how many link hops to follow.",
-      next_action: "Pass --depth 1 to collect the start page's links, --depth 2 to also open each of those.",
-      suggested_commands: [`zenrows crawl create ${url} --depth 1`],
-    });
-  }
-  const params: CreateCrawlParams = { url, depth };
+  if (depth !== undefined) params.depth = depth;
   const maxItems = limitFlag("max-items", values["max-items"]);
   if (maxItems !== undefined) params.max_items = maxItems;
   const maxPages = limitFlag("max-pages", values["max-pages"]);
@@ -188,7 +181,7 @@ async function createCmd(rest: string[], ctx: RunContext): Promise<number> {
 
   const runId = newRunId();
   const startedAt = new Date().toISOString();
-  log.step(`Starting crawl of ${url} (depth ${depth})…`);
+  log.step(`Starting crawl of ${url} (${depth === undefined ? "no depth limit" : `depth ${depth}`})…`);
   try {
     const created = await createCrawl(params, { apiKey, idempotencyKey });
     const follow = values.follow === true;
@@ -444,7 +437,7 @@ export function crawlFailure(c: Crawl | CrawlStop): ToolkitError | null {
     insufficient_credits: "The account ran out of credits. Check `zenrows usage`, add credits, then start a new crawl.",
     seed_unreachable: "The start URL could not be fetched (the site may be blocking it). Check it with `zenrows fetch <url>`.",
     no_items_found:
-      "Nothing matched. Loosen --include-patterns / --exclude-patterns, raise --depth, or check the start page with `zenrows fetch <url>`.",
+      "Nothing matched. Loosen --include-patterns / --exclude-patterns, raise or drop --depth, or check the start page with `zenrows fetch <url>`.",
   };
   return new ToolkitError({
     code: "CRAWL_FAILED",

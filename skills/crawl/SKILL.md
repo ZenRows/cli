@@ -7,8 +7,8 @@ requires_backend_capabilities: [crawl]
 
 # Crawl (new)
 
-Give Crawl one start URL; it follows the links on that page (and, with a
-higher depth, on the pages behind it) and returns the URLs it keeps. Use it
+Give Crawl one start URL; it follows the links on that page (and on the
+pages behind it, up to the depth you set) and returns the URLs it keeps. Use it
 when you know where the items live (a category page, a blog index, a docs
 section) but not the item URLs themselves. Once you have the URLs, read pages
 with `zenrows fetch` / `zenrows extract`, or ask Crawl for each page's HTML
@@ -27,10 +27,13 @@ zenrows crawl results <id> --json            # every kept URL
 zenrows crawl results <id> --out urls.jsonl  # same, as JSONL
 ```
 
-- `--depth N` is required: link hops from the start URL. `1` = the start
-  page's links; `2` = also the links on each of those pages.
+- `--depth N` (1 to 100000) is optional: link hops from the start URL. `1` =
+  the start page's links; `2` = also the links on each of those pages. Leave
+  it out for no depth limit: the crawl follows links until `--max-items` or
+  `--max-pages` stops it, or nothing is left to open. A crawl created without
+  a depth has no `depth` field in its output.
 - `--max-items` (kept URLs) and `--max-pages` (fetched pages) cap the crawl;
-  both default to 10. `--max-pages` bounds the cost: each page is one fetch.
+  both default to 100. `--max-pages` bounds the cost: each page is one fetch.
   The local policy `max_pages_per_run` caps `--max-pages` (default 1000);
   above it the CLI refuses with `POLICY_LIMIT_EXCEEDED` before any request.
 - `--include-patterns` / `--exclude-patterns` are substring matches on the
@@ -97,7 +100,8 @@ The CLI retries transient failures, as the Crawl SDKs do: up to 3 retries,
 waiting the `Retry-After` seconds (at most 30) or 250 ms x 2^n (+/-20% jitter,
 at most 10 s). Reads retry on 429, 502, 503, 504 and network errors (a timeout
 counts). `create` retries only with `--idempotency-key`, and only on 502, 503,
-504 and network errors, never on 429. `stop` retries only a 503 `crawl_busy`.
+504 and network errors, never on 429. `stop` retries on 429, 502, 503 (including
+`crawl_busy`) and 504, waiting the `Retry-After` seconds (at most 30) or 1 s.
 The "Retry?" column is for errors that remain after these retries.
 
 | Code | Meaning | Retry? |

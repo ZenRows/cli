@@ -228,6 +228,7 @@ await check(
 
 // ---------- check 1, offline half: what the CLI sends ----------
 const before = cap.requests.length;
+await zAsync(["crawl", "create", "https://example.com/", "--json"], capEnv);
 await zAsync(["crawl", "create", "https://example.com/", "--depth", "1", "--json"], capEnv);
 await zAsync(
   [
@@ -249,11 +250,12 @@ await zAsync(
   capEnv,
 );
 const posts = cap.requests.slice(before).filter((r) => r.method === "POST");
-const sent = { minimal: posts[0]?.body, full: posts[1]?.body };
+const sent = { bare: posts[0]?.body, minimal: posts[1]?.body, full: posts[2]?.body };
 const sentOk =
+  H.sameKeys(sent.bare, ["url"]) &&
   H.sameKeys(sent.minimal, ["url", "depth"]) &&
   H.sameKeys(sent.full, ["url", "depth", "max_items", "max_pages", "include_patterns"]);
-const sentLine = `sent (stand-in server): minimal=${JSON.stringify(sent.minimal)} full=${JSON.stringify(sent.full)}`;
+const sentLine = `sent (stand-in server): bare=${JSON.stringify(sent.bare)} minimal=${JSON.stringify(sent.minimal)} full=${JSON.stringify(sent.full)}`;
 await cap.close();
 
 // ---------- live ----------
