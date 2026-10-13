@@ -189,7 +189,7 @@ export async function scrape(
   }
   if (res.status === 402 && isZenrowsErrorEnvelope(body)) {
     // AUTH010 on extract=auto means the target domain is not enabled for
-    // Extract — distinct from credit exhaustion (AUTH004). Let the extract
+    // Extract, distinct from credit exhaustion (AUTH004). Let the extract
     // adapter fall back to autoparse.
     if (params.extract !== undefined && zrErrorCode(body) === "AUTH010") {
       throw new ToolkitError({
