@@ -2,7 +2,8 @@
  * Output helpers: render normalized errors for humans and machines, and a tiny
  * key/value printer used by `status`, `config`, `policy`.
  */
-import { statSync, writeFileSync } from "node:fs";
+import { createWriteStream, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { pipeline } from "node:stream/promises";
 import { ToolkitError, type ToolkitErrorShape } from "../core/errors.ts";
 import { ANSI, c, log } from "../core/logger.ts";
 
@@ -12,6 +13,32 @@ import { ANSI, c, log } from "../core/logger.ts";
  * parent directory doesn't exist (ENOENT). Everything else propagates.
  */
 export function writeOut(filePath: string, data: string | Buffer): void {
+  assertNotDirectory(filePath);
+  try {
+    writeFileSync(filePath, data);
+  } catch (err) {
+    throw outError(filePath, err);
+  }
+}
+
+/**
+ * `writeOut` for a body too large to hold in memory: streams into
+ * `<file>.part`, then renames it into place, so a failed stream leaves any
+ * earlier file intact.
+ */
+export async function writeOutStream(filePath: string, chunks: AsyncIterable<Uint8Array>): Promise<void> {
+  assertNotDirectory(filePath);
+  const part = `${filePath}.part`;
+  try {
+    await pipeline(chunks, createWriteStream(part));
+    renameSync(part, filePath);
+  } catch (err) {
+    rmSync(part, { force: true });
+    throw outError(filePath, err);
+  }
+}
+
+function assertNotDirectory(filePath: string): void {
   if (statSync(filePath, { throwIfNoEntry: false })?.isDirectory()) {
     throw new ToolkitError({
       code: "INVALID_USAGE",
@@ -20,19 +47,16 @@ export function writeOut(filePath: string, data: string | Buffer): void {
       next_action: "Pass a file path, e.g. --out results.jsonl.",
     });
   }
-  try {
-    writeFileSync(filePath, data);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException)?.code === "ENOENT") {
-      throw new ToolkitError({
-        code: "INVALID_USAGE",
-        message: `Cannot write --out '${filePath}': the parent directory does not exist.`,
-        likely_cause: "A directory in the output path is missing.",
-        next_action: "Create the directory first, or choose an existing one.",
-      });
-    }
-    throw err;
-  }
+}
+
+function outError(filePath: string, err: unknown): unknown {
+  if ((err as NodeJS.ErrnoException)?.code !== "ENOENT") return err;
+  return new ToolkitError({
+    code: "INVALID_USAGE",
+    message: `Cannot write --out '${filePath}': the parent directory does not exist.`,
+    likely_cause: "A directory in the output path is missing.",
+    next_action: "Create the directory first, or choose an existing one.",
+  });
 }
 
 /** Print a ToolkitError. In --json mode emits the structured shape to stdout. */
