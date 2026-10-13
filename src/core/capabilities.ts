@@ -28,8 +28,8 @@ export function getCapability(key: string): Capability | undefined {
 const USABLE: ReadonlySet<CapabilityStatus> = new Set<CapabilityStatus>([
   "available",
   "available-but-needs-confirmation",
-  // Beta: any key can call; product-specific limits (e.g. Batch 403) are
-  // handled by the adapters / API errors, not here.
+  // Beta: any key can call; product-specific limits are handled by the
+  // adapters / API errors, not here.
   "beta",
 ]);
 
