@@ -2,7 +2,7 @@
  * Extract adapter.
  *
  * Structured extraction on the same `/v1/` Fetch and Extract API via:
- *   - extract=auto         → site-tailored Extract (beta, any prepared domain)
+ *   - extract=auto         → site-tailored Extract (any prepared domain)
  *   - autoparse=true       → general-purpose Autoparse (any domain)
  *   - css_extractor=<json> → selector-based field extraction
  *   - outputs=<filters>    → built-in output filters → JSON
@@ -38,7 +38,7 @@ export interface ExtractOutcome extends FetchOutcome {
   method: ExtractMethod;
   /** Parsed JSON when the method yields structured data; otherwise undefined. */
   data?: unknown;
-  /** Raw HTML from `extract=auto` beta responses (validation aid). */
+  /** Raw HTML from `extract=auto` responses (validation aid). */
   html?: string;
   /** True when Extract fell back to Autoparse because the domain is not enabled. */
   fellBackToAutoparse?: boolean;
@@ -150,7 +150,7 @@ function parseExtractBody(
 
   let data: unknown = parsed;
   let html: string | undefined;
-  // extract=auto beta shape: { parsed, html }. Prefer `parsed` for callers.
+  // extract=auto shape: { parsed, html }. Prefer `parsed` for callers.
   if (method === "extract" && parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
     const envelope = parsed as { parsed?: unknown; html?: unknown };
     if ("parsed" in envelope) {

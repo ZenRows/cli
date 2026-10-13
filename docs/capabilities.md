@@ -8,8 +8,8 @@ the single source of truth that prevents hallucinated execution.
 - **available** — a documented endpoint exists and the command does real work.
 - **available-but-needs-confirmation** — likely available; verify per account.
 - **experimental** — exists but not yet promoted to a stable status.
-- **beta** — usable by any key. Product-specific limits (e.g. Extract domains
-  not prepared yet) are handled by adapters / API errors, not by blocking the CLI.
+- **beta**: usable by any key. Product-specific limits (e.g. Batch access)
+  are handled by adapters / API errors, not by blocking the CLI.
 - **planned** — no documented endpoint yet; local spec / validation only.
 - **not-implemented** / **deprecated** — not usable.
 
@@ -20,7 +20,7 @@ Classification is based on the public Zenrows documentation:
 | Capability | Backend evidence | Status |
 | --- | --- | --- |
 | `protected_fetch` | Fetch `GET https://api.zenrows.com/v1/` with `mode`, `js_render`, `premium_proxy`, `proxy_country`, `wait`/`wait_for`, `js_instructions`, `response_type`, `screenshot`, `original_status`, … | available |
-| `extract` | Extract `GET https://api.zenrows.com/v1/` via `extract=auto` (beta; any prepared domain, CLI falls back to `autoparse` on one not prepared yet), plus `autoparse`, `css_extractor`, `outputs`, `response_type=markdown\|plaintext` | beta |
+| `extract` | Extract `GET https://api.zenrows.com/v1/` via `extract=auto` (any prepared domain; CLI falls back to `autoparse` on one not prepared yet), plus `autoparse`, `css_extractor`, `outputs`, `response_type=markdown\|plaintext` | available |
 | `batch` | Batch `https://async.api.zenrows.com/v1` (separate host, `X-API-Key` header) — open beta. Local JSONL spec validation + credit estimation work with no key. | beta |
 | `crawl` | Crawl `https://api.zenrows.com/v1/crawls` (`X-API-Key` header; same host as Fetch/Extract). Follows the links on each page from one start URL, up to `depth` when set (optional; no depth limit when omitted), on the start URL's registrable domain (subdomains count); returns URLs, and with `output_format: "html"` each page's HTML. Subcommands: `create`, `get`, `list`, `results`, `content`, `download`, `stop`, `wait`. Without Crawl access the API returns 403 `REQS008` → `CRAWL_NOT_ENABLED`. | available |
 | `browser` | Browser Sessions REST API `https://mcp.zenrows.com/browser/sessions/*` (Bearer; same backend as `@zenrows/mcp` `browser_*`); CDP via `zenrows browser connect`. Escalation-only (prefer fetch/extract); on by default, opt out via `policy.allow_browser`; bills by bandwidth + session time (15-min max) | available |

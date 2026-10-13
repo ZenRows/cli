@@ -6,7 +6,7 @@ import { ToolkitError } from "../src/core/errors.ts";
 test("capability matrix loads with the honest classifications", () => {
   const caps = loadCapabilities();
   assert.equal(caps.protected_fetch?.status, "available");
-  assert.equal(caps.extract?.status, "beta");
+  assert.equal(caps.extract?.status, "available");
   assert.equal(caps.browser?.status, "available"); // GA product (formerly Scraping Browser)
   assert.equal(caps.mcp?.status, "available");
   // Batch is a real product in open beta.

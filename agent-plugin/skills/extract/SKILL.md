@@ -20,8 +20,8 @@ extract({ url, mode: "css", css_extractor: '{"title":"h1","price":".price"}' })
 extract({ url, proxy_country: "US" })               # geo-targeted
 ```
 
-`mode=auto` (`extract=auto`) is in **beta**: works on any domain Zenrows has
-prepared, with any key, and is currently free; billing may apply later. If the
+`mode=auto` (`extract=auto`) works on any domain Zenrows has prepared, with any
+key, and is currently free; billing may apply later. If the
 domain is not enabled (AUTH010) or not prepared yet (REQS007), the tool retries
 once with Autoparse by default (`fallback_autoparse`).
 
