@@ -362,13 +362,23 @@ function classifyProblem(
       suggested_commands: ["zenrows crawl list"],
     });
   }
-  if (status === 429) {
+  if (status === 429 && serverCode === "too_many_crawls") {
     return new ToolkitError({
       code: "CRAWL_TOO_MANY_CRAWLS",
       message: "The account has reached its limit of active jobs.",
       likely_cause: `${cause} The account has reached its limit of active jobs (3 by default), shared with its Batch jobs.`,
       next_action: `Nothing was created. ${retryAfter !== undefined ? `Retry after ${retryAfter} seconds` : "Retry later"}, or stop one of your crawls (\`zenrows crawl stop <id>\`) or Batch jobs first.`,
       suggested_commands: ["zenrows crawl list"],
+    });
+  }
+  if (status === 429) {
+    // The Crawl API sends 429 only on create, as too_many_crawls. Any other 429
+    // comes from something in front of it and says nothing about active jobs.
+    return new ToolkitError({
+      code: "CRAWL_RATE_LIMITED",
+      message: "The Crawl API is rate limiting requests.",
+      likely_cause: cause,
+      next_action: retryAfter !== undefined ? `Retry after ${retryAfter} seconds.` : "Retry later.",
     });
   }
   if (status === 402) {

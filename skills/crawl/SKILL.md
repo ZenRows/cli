@@ -89,7 +89,9 @@ under `crawl`. `get` adds `results` and `next_cursor`. `download` prints
 When the account has reached its limit of active jobs (3 by default), shared
 with its Batch jobs, a create gets 429 `too_many_crawls` →
 `CRAWL_TOO_MANY_CRAWLS`; nothing was created. Retry after `retry_after`
-seconds (about 30), or stop one of your crawls or Batch jobs first.
+seconds (about 30), or stop one of your crawls or Batch jobs first. Any other
+429 is `CRAWL_RATE_LIMITED`: requests are being throttled; retry after
+`retry_after` seconds.
 
 ## Errors
 
@@ -113,7 +115,8 @@ The "Retry?" column is for errors that remain after these retries.
 | `CRAWL_INVALID_REQUEST` | 400 or 422: fix the request. For `idempotency_key_reused`, send a new key or no key | no, not as is |
 | `CRAWL_REQUEST_IN_FLIGHT` | 409: the same Idempotency-Key is still in flight | yes, once the first request ends |
 | `CRAWL_NOT_FOUND` / `CRAWL_CONTENT_NOT_FOUND` | 404: wrong id, or the page has no content | no |
-| `CRAWL_TOO_MANY_CRAWLS` | 429: the account's active-job limit | yes, after `retry_after` |
+| `CRAWL_TOO_MANY_CRAWLS` | 429 `too_many_crawls` on `create`: the account's active-job limit | yes, after `retry_after` |
+| `CRAWL_RATE_LIMITED` | any other 429: requests are being throttled | yes, after `retry_after` |
 | `CRAWL_BUSY` | 503 `crawl_busy` on `stop`: the stop was not saved yet and the crawl still runs | yes, run the stop again after `retry_after` |
 | `CRAWL_FAILED` | the crawl ended `failed`, or another error | 5xx: yes, with backoff |
 | `BACKEND_UNAVAILABLE` | the API could not be reached | yes |

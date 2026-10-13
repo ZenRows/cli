@@ -154,6 +154,36 @@ test("crawl create leaves the lower bound to the API: --depth 0 comes back as CR
   );
 });
 
+test("crawl create on 429 too_many_crawls returns CRAWL_TOO_MANY_CRAWLS; crawl stop on another 429 returns CRAWL_RATE_LIMITED", async () => {
+  await withCrawlWorkspace(
+    () =>
+      json(
+        { type: "about:blank", title: "Too many crawls", status: 429, code: "too_many_crawls", detail: "The account has 3 active jobs." },
+        429,
+        { "retry-after": "30" },
+      ),
+    async (calls) => {
+      const { code, out } = await run(["create", "https://example.com/products/"]);
+      assert.equal(code, 1);
+      assert.equal(out.error.code, "CRAWL_TOO_MANY_CRAWLS");
+      assert.equal(out.error.retry_after, 30);
+      assert.match(out.error.next_action, /Nothing was created/);
+      assert.equal(calls.length, 1);
+    },
+  );
+  await withCrawlWorkspace(
+    () => json({ title: "Too Many Requests", status: 429 }, 429, { "retry-after": "0" }),
+    async (calls) => {
+      const { code, out } = await run(["stop", "c_1"]);
+      assert.equal(code, 1);
+      assert.equal(out.error.code, "CRAWL_RATE_LIMITED");
+      assert.equal(out.error.retry_after, 0);
+      assert.doesNotMatch(`${out.error.message} ${out.error.likely_cause} ${out.error.next_action}`, /Nothing was created/);
+      assert.equal(calls.length, 4, "stop still retries a 429 three times");
+    },
+  );
+});
+
 test("crawl create sends only the flags the caller set as the create body", async () => {
   await withCrawlWorkspace(
     () => json(crawlBody, 202, { location: "/v1/crawls/c_1" }),

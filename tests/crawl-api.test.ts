@@ -432,7 +432,7 @@ test("stop retries a plain 503 and honors Retry-After", async () => {
 
 test("stop gives up after 3 retries and maps the last status as before", async () => {
   const cases: Array<[number, string]> = [
-    [429, "CRAWL_TOO_MANY_CRAWLS"],
+    [429, "CRAWL_RATE_LIMITED"],
     [502, "CRAWL_FAILED"],
     [503, "CRAWL_FAILED"],
     [504, "CRAWL_FAILED"],
@@ -446,6 +446,24 @@ test("stop gives up after 3 retries and maps the last status as before", async (
     );
     assert.equal(calls.length, 4, `${status}: 1 attempt + 3 retries`);
     assert.deepEqual(waits, [1000, 1000, 1000]);
+  }
+});
+
+test("a 429 without too_many_crawls on stop maps to CRAWL_RATE_LIMITED after the retries, not to the active-job limit", async () => {
+  for (const payload of [{ code: "rate_limited", status: 429 }, { title: "Too Many Requests", status: 429 }]) {
+    const { impl, calls } = seqFetch([{ status: 429, payload, headers: { "retry-after": "7" } }]);
+    await assert.rejects(
+      () => stopCrawl("c_1", { apiKey: "k", fetchImpl: impl, sleepImpl: recordSleep().sleepImpl }),
+      (e: unknown) =>
+        e instanceof ToolkitError &&
+        e.code === "CRAWL_RATE_LIMITED" &&
+        e.message === "The Crawl API is rate limiting requests." &&
+        e.retry_after === 7 &&
+        e.crawl_id === "c_1" &&
+        /Retry after 7 seconds/.test(e.next_action) &&
+        !/Nothing was created|active jobs/.test(`${e.message} ${e.likely_cause} ${e.next_action}`),
+    );
+    assert.equal(calls.length, 4, "1 attempt + 3 retries");
   }
 });
 
