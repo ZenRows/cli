@@ -1,10 +1,10 @@
 /**
- * `zenrows batch` — Batch API (status: beta).
+ * `zenrows batch` — Batch API (status: available).
  *
  * Local (no key, always works): `estimate`/`create --dry-run`-style spec
- * validation + credit estimate. Cloud (needs a key + Batch beta access):
- * `create`, `status`, `results`, `cancel`, `wait`, `retry-failed`. Without beta
- * access the API returns 403 → BATCH_ACCESS_DENIED.
+ * validation + credit estimate. Cloud (needs a key):
+ * `create`, `status`, `results`, `cancel`, `wait`, `retry-failed`. A 403 maps to
+ * BATCH_ACCESS_DENIED.
  */
 import { statSync } from "node:fs";
 import { join } from "node:path";

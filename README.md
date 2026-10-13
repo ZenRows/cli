@@ -38,7 +38,7 @@ that endpoint with extraction parameters, not a separate product.
 | --- | --- | --- |
 | `zenrows fetch` | Fetch — retrieve a protected page | **available** — `GET https://api.zenrows.com/v1/` |
 | `zenrows extract` | Extract — `extract=auto` (domain-gated open beta; falls back to Autoparse) / CSS / Markdown | **beta** — same `/v1/` |
-| `zenrows batch` | Batch — fan out over many URLs | **available** — `https://async.api.zenrows.com/v1`; local validate/estimate need no key |
+| `zenrows batch` | Batch — fan out over many URLs | **available**: `https://async.api.zenrows.com/v1`; local validate/estimate need no key |
 | `zenrows crawl` | Crawl (new) — collect the URLs behind one start page, optionally with each page's HTML | **available** — `https://api.zenrows.com/v1/crawls` |
 | `zenrows browser` | Browser Sessions REST API (same backend as MCP `browser_*`) | **available** — escalation-only; bills by bandwidth + time |
 | `zenrows mcp` | MCP server config (remote + local) | **available** |
