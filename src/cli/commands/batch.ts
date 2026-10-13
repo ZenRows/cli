@@ -23,12 +23,12 @@ import { printError, writeOut } from "../output.ts";
 
 export const batch: Command = {
   name: "batch",
-  summary: "Run JSONL batch jobs on Zenrows Batch (beta).",
+  summary: "Run JSONL batch jobs on Zenrows Batch.",
   usage: "zenrows batch <estimate|create <file.jsonl>|status <id>|results <id>|cancel <id>|wait <id>|retry-failed <id>>",
   help: [
     "Local (no key):",
     "  estimate <file.jsonl> [--manual] validate the spec + estimate credits (upper bound)",
-    "Cloud (needs a key + Batch beta access):",
+    "Cloud (needs a key):",
     "  create <file.jsonl> [flags]      validate, then submit the job",
     "    (default)                      Adaptive Stealth Mode (mode=auto) on every task that",
     "                                   doesn't force js_render / premium_proxy itself",

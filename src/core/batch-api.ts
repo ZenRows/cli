@@ -170,9 +170,9 @@ function problemToError(status: number, body: string, method: string, path: stri
     return new ToolkitError({
       code: "BATCH_ACCESS_DENIED",
       message: "The Batch API rejected this request (access denied).",
-      likely_cause: `${cause}. The Batch API is in beta and this account does not have beta access.`,
+      likely_cause: `${cause}. Batch is not enabled for this account or API key.`,
       next_action:
-        "Request Batch API beta access from Zenrows. Meanwhile validate/estimate specs locally and fan out with `zenrows fetch` per URL.",
+        "Check that your Zenrows API key is active, and contact Zenrows support if the 403 persists. Meanwhile validate/estimate specs locally and fan out with `zenrows fetch` per URL.",
       suggested_commands: ["zenrows batch estimate jobs.jsonl"],
     });
   }

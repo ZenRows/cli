@@ -16,10 +16,10 @@ results carry `html` and `parsed` keys.
 zenrows batch estimate jobs.example.jsonl    # validate the spec + estimate credits
 ```
 
-## Cloud (needs a key + Batch beta access)
+## Cloud (needs a key)
 
-Batch is in **beta**. With beta access the
-cloud subcommands run for real; without it the API returns `BATCH_ACCESS_DENIED`.
+The cloud subcommands run with any active API key and spend the same credits
+as Fetch.
 
 ```bash
 zenrows batch create jobs.example.jsonl --wait          # submit + wait for the run to finish
@@ -33,5 +33,5 @@ Tasks use Adaptive Stealth Mode (`mode=auto`) by default. Job-level scrape
 options come from flags (`--js-render`, `--premium-proxy`, `--proxy-country`,
 `--output`, or `--manual` to turn Adaptive Stealth Mode off); per-line keys
 override them for that URL.
-Without beta access yet, validate/estimate locally or fan out with
-`zenrows fetch` per URL on a small sample first.
+Validate/estimate locally, or try `zenrows fetch` per URL on a small sample
+first.
