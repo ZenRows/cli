@@ -147,7 +147,8 @@ export async function scrape(
       code: "EXTRACT_DOMAIN_NOT_ENABLED",
       message: "Extract has not been prepared for this domain yet.",
       likely_cause: zrErrorDetail(body) ?? "This domain is not prepared for Extract.",
-      next_action: "Retry with --autoparse for general-purpose extraction on any site.",
+      next_action:
+        "Retry with --autoparse for general-purpose extraction on any site, or get the domain prepared for Extract (POST /v1/extract/prepared-domains).",
       suggested_commands: [`zenrows extract ${params.url} --autoparse`],
     });
   }
@@ -187,16 +188,16 @@ export async function scrape(
     }
   }
   if (res.status === 402 && isZenrowsErrorEnvelope(body)) {
-    // AUTH010 on extract=auto means the target domain is not in the Extract
-    // beta — distinct from credit exhaustion (AUTH004). Let the extract
+    // AUTH010 on extract=auto means the target domain is not enabled for
+    // Extract — distinct from credit exhaustion (AUTH004). Let the extract
     // adapter fall back to autoparse.
     if (params.extract !== undefined && zrErrorCode(body) === "AUTH010") {
       throw new ToolkitError({
         code: "EXTRACT_DOMAIN_NOT_ENABLED",
         message: "Extract is not enabled for this domain yet.",
-        likely_cause: zrErrorDetail(body) ?? "This domain is not part of the Extract open beta.",
+        likely_cause: zrErrorDetail(body) ?? "This domain is not enabled for Extract.",
         next_action:
-          "Retry with --autoparse for general-purpose extraction on any site, or contact Zenrows support to enable this domain for Extract.",
+          "Retry with --autoparse for general-purpose extraction on any site, or get the domain prepared for Extract (POST /v1/extract/prepared-domains).",
         suggested_commands: [`zenrows extract ${params.url} --autoparse`],
       });
     }

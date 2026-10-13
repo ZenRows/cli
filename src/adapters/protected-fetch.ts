@@ -34,7 +34,7 @@ export interface FetchOptions {
   cssExtractor?: string;
   autoparse?: boolean;
   /**
-   * Site-tailored Extract (`extract=auto`). Open beta, domain-gated.
+   * Site-tailored Extract (`extract=auto`). Beta; works on any prepared domain.
    * Takes precedence over autoparse / css_extractor / outputs / response_type.
    */
   extract?: boolean;

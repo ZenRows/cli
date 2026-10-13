@@ -2,7 +2,7 @@
  * Extract adapter.
  *
  * Structured extraction on the same `/v1/` Fetch and Extract API via:
- *   - extract=auto         → site-tailored Extract (open beta, domain-gated)
+ *   - extract=auto         → site-tailored Extract (beta, any prepared domain)
  *   - autoparse=true       → general-purpose Autoparse (any domain)
  *   - css_extractor=<json> → selector-based field extraction
  *   - outputs=<filters>    → built-in output filters → JSON
