@@ -1,5 +1,5 @@
 /**
- * `zenrows batch` — Batch API (status: available).
+ * `zenrows batch`: Batch API (status: available).
  *
  * Local (no key, always works): `estimate`/`create --dry-run`-style spec
  * validation + credit estimate. Cloud (needs a key):
