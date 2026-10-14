@@ -71,12 +71,17 @@ Run `zenrows status` for the live capability matrix. As of this toolkit:
 
 | Primitive | Command | Status |
 | --- | --- | --- |
-| Protected Fetch | `zenrows fetch` | available (`GET /v1/`) |
-| Extract (extract=auto / Autoparse/CSS/Markdown) | `zenrows extract` | available (same `/v1/`; extract=auto falls back to autoparse) |
-| Batch | `zenrows batch` | available: runs cloud jobs (create/status/results); cheapest path at scale. Estimate specs locally with no key |
-| Crawl | `zenrows crawl` | new — collect the URLs behind one start page, optionally with each page's HTML |
-| Browser | `zenrows browser` | available (Browser Sessions REST API / MCP) |
-| MCP | `zenrows mcp` | available (remote + local server) |
+| Protected Fetch | `zenrows fetch` | **available** — `GET https://api.zenrows.com/v1/` |
+| Extract (`extract=auto`, Autoparse, CSS, Markdown) | `zenrows extract` | **available** — `GET https://api.zenrows.com/v1/?extract=auto` |
+| Batch | `zenrows batch` | **available** — `POST https://async.api.zenrows.com/v1/jobs` |
+| Crawl (new) | `zenrows crawl` | **available** — `POST https://api.zenrows.com/v1/crawls` |
+| Browser | `zenrows browser` | **available** — `POST https://mcp.zenrows.com/browser/sessions` |
+| MCP | `zenrows mcp` | **available** — `https://mcp.zenrows.com/mcp` |
+
+- Extract: `extract=auto` falls back to Autoparse on a domain not prepared yet.
+- Batch: the cheapest path at scale (create, status, results). Estimate specs locally with no key.
+- Crawl: collects the URLs behind one start page, optionally with each page's HTML.
+- Browser: escalation-only, for pages Fetch can't handle; same backend as the MCP `browser_*` tools.
 
 Protected Fetch and Extract are the same API (`GET /v1/`) used two ways.
 The command consults the capability matrix before any cloud call — it never
