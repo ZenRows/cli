@@ -13,11 +13,11 @@
     "extract": {
       "key": "extract",
       "label": "Extract (extract=auto / Autoparse / CSS / Markdown)",
-      "status": "beta",
+      "status": "available",
       "command": "zenrows extract",
       "backend": "Extract — GET https://api.zenrows.com/v1/ (extract=auto, autoparse, css_extractor, outputs, response_type)",
       "requiresAuth": true,
-      "notes": "Open beta. Default is extract=auto (domain-gated); CLI falls back to autoparse on AUTH010. Autoparse / CSS / outputs / markdown work on any domain."
+      "notes": "Default is extract=auto, which works on any prepared domain with any key; CLI falls back to autoparse on REQS007 (domain not prepared yet) or AUTH010. Autoparse / CSS / outputs / markdown work on any domain."
     },
     "batch": {
       "key": "batch",

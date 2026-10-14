@@ -329,3 +329,81 @@ test("runExtract --validate fails on an empty result", async () => {
     );
   });
 });
+
+// --- 422 no_data_extracted: an answer, not a failure ------------------------
+const NO_DATA = JSON.stringify({
+  code: "no_data_extracted",
+  detail: "Extract found no data on this page.",
+  status: 422,
+  title: "No data extracted",
+});
+
+test("runExtract reports 422 no_data_extracted as an empty result, in one request, without fallback", async () => {
+  const calls: string[] = [];
+  await withFetchHandler((url) => {
+    calls.push(url);
+    return new Response(NO_DATA, { status: 422, headers: { "content-type": "application/problem+json" } });
+  }, async () => {
+    const outcome = await runExtract({ url: "https://x.com" }, cfg, defaultPolicy(), "testkey");
+    assert.equal(outcome.method, "extract");
+    assert.equal(outcome.empty, true);
+    assert.equal(outcome.noDataExtracted, true);
+    assert.equal(outcome.fellBackToAutoparse, undefined);
+    assert.equal(outcome.data, undefined);
+    assert.equal(calls.length, 1);
+    assert.match(calls[0]!, /extract=auto/);
+  });
+});
+
+test("runExtract under --validate turns 422 no_data_extracted into EXTRACT_VALIDATION_FAILED", async () => {
+  await withFetch(NO_DATA, async () => {
+    await assert.rejects(
+      () => runExtract({ url: "https://x.com", validate: true }, cfg, defaultPolicy(), "testkey"),
+      (e: unknown) =>
+        e instanceof ToolkitError && e.code === "EXTRACT_VALIDATION_FAILED" && /no data/i.test(e.message),
+    );
+  }, { status: 422 });
+});
+
+test("runExtract keeps treating other 422s as a failed fetch", async () => {
+  const RESP001 = JSON.stringify({ code: "RESP001", detail: "Could not get content.", status: 422 });
+  await withFetch(RESP001, async () => {
+    await assert.rejects(
+      () => runExtract({ url: "https://x.com" }, cfg, defaultPolicy(), "testkey"),
+      (e: unknown) => e instanceof ToolkitError && e.code === "FETCH_FAILED",
+    );
+  }, { status: 422 });
+});
+
+test("a 422 no_data_extracted outside an Extract request is still a failed fetch", async () => {
+  await withFetch(NO_DATA, async () => {
+    await assert.rejects(
+      () => runExtract({ url: "https://x.com", method: "autoparse" }, cfg, defaultPolicy(), "testkey"),
+      (e: unknown) => e instanceof ToolkitError && e.code === "FETCH_FAILED",
+    );
+  }, { status: 422 });
+});
+
+// --- 422 blocked_document: a block page, not an extraction miss --------------
+test("runExtract turns 422 blocked_document into EXTRACT_FAILED with a stronger-fetch hint, without fallback", async () => {
+  const BLOCKED = JSON.stringify({
+    code: "blocked_document",
+    detail: "The page fetched for this request had no real content.",
+    status: 422,
+  });
+  const calls: string[] = [];
+  await withFetchHandler((url) => {
+    calls.push(url);
+    return new Response(BLOCKED, { status: 422, headers: { "content-type": "application/problem+json" } });
+  }, async () => {
+    await assert.rejects(
+      () => runExtract({ url: "https://x.com" }, cfg, defaultPolicy(), "testkey"),
+      (e: unknown) =>
+        e instanceof ToolkitError &&
+        e.code === "EXTRACT_FAILED" &&
+        /blocked_document/.test(e.message) &&
+        /--js-render --premium-proxy/.test(e.next_action ?? ""),
+    );
+    assert.equal(calls.length, 1);
+  });
+});

@@ -26,7 +26,7 @@
       "name": "extract",
       "type": "skill",
       "description": "Turn protected pages into structured data with Autoparse / CSS / Markdown.",
-      "status": "beta",
+      "status": "available",
       "requires_backend_capabilities": ["extract"],
       "requires_auth": true,
       "version": "0.1.0",

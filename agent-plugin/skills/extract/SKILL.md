@@ -20,10 +20,10 @@ extract({ url, mode: "css", css_extractor: '{"title":"h1","price":".price"}' })
 extract({ url, proxy_country: "US" })               # geo-targeted
 ```
 
-`mode=auto` (`extract=auto`) is **open beta**: richest on enabled domains,
-currently free; billing may apply later. If the domain is not enabled (AUTH010)
-or not prepared yet (REQS007), the tool retries once with Autoparse by default
-(`fallback_autoparse`).
+`mode=auto` (`extract=auto`) works on any domain Zenrows has prepared, with any
+key, and is currently free; billing may apply later. If the
+domain is not enabled (AUTH010) or not prepared yet (REQS007), the tool retries
+once with Autoparse by default (`fallback_autoparse`).
 
 Every mode uses Adaptive Stealth Mode by default: pass just the URL, even for
 protected or dynamic sites. Set `js_render` or `premium_proxy` only to force a
@@ -45,7 +45,7 @@ scrape({ url, outputs: "emails,links" })            # or "*" for all built-ins
 
 ## When to use which
 
-- **`mode=auto`**: site-tailored fields on beta-enabled domains.
+- **`mode=auto`**: site-tailored fields on any prepared domain.
 - **`mode=autoparse`**: any website; also the automatic AUTH010 / REQS007 fallback.
 - **`mode=css`**: known fields/selectors; deterministic.
 - **Markdown via `scrape`**: feed clean content to an LLM yourself.

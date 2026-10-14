@@ -50,7 +50,7 @@ test("assetRunnable reflects backend capability status", () => {
   const batchSkill = loadRegistry("skill").find((s) => s.name === "batch-jobs")!;
   assert.equal(assetRunnable(batchSkill), true); // needs batch (open beta = usable)
   const extractSkill = loadRegistry("skill").find((s) => s.name === "extract")!;
-  assert.equal(assetRunnable(extractSkill), true); // needs extract (open beta = usable)
+  assert.equal(assetRunnable(extractSkill), true); // needs extract (available)
   const crawlSkill = loadRegistry("skill").find((s) => s.name === "crawl")!;
   assert.equal(assetRunnable(crawlSkill), true); // needs crawl (available)
 });

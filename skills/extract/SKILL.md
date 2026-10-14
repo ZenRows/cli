@@ -12,7 +12,7 @@ access + extraction**, not generic LLM parsing.
 
 ## Methods
 ```
-zenrows extract <url>                              # extract=auto (default); falls back to Autoparse if domain not enabled
+zenrows extract <url>                              # extract=auto (default); falls back to Autoparse if the domain is not prepared yet
 zenrows extract <url> --autoparse                  # general-purpose Autoparse (any domain)
 zenrows extract <url> --css '{"title":"h1","price":".price"}'   # selector map
 zenrows extract <url> --outputs emails,links       # built-in output filters → JSON
@@ -21,8 +21,8 @@ zenrows extract <url> --validate                   # fail if not valid JSON
 ```
 
 ## When to use which
-- **Extract** (`extract=auto`, default): richest fields on domains enabled for the open beta.
-- **Autoparse**: any website; also the automatic fallback when Extract is not enabled for the domain.
+- **Extract** (`extract=auto`, default): richest fields; works on any domain Zenrows has prepared.
+- **Autoparse**: any website; also the automatic fallback when the domain is not prepared for Extract yet.
 - **CSS**: you know the exact fields/selectors and want determinism.
 - **Markdown/plaintext**: feed clean content to an LLM yourself.
 

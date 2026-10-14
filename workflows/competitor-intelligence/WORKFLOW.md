@@ -20,7 +20,7 @@ simple per-URL loop).
    ```
    zenrows fetch https://competitor.example/products
    ```
-2. **Validate extraction** on one page (extract is beta; extract=auto falls back to autoparse).
+2. **Validate extraction** on one page (extract=auto falls back to autoparse on a domain not prepared yet).
    ```
    zenrows extract https://competitor.example/p/123 --validate
    ```

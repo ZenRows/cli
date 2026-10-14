@@ -66,7 +66,7 @@ If the user needs login, clicks, forms, sessions, or persistent state:
 | Primitive | MCP tools | Notes |
 | --- | --- | --- |
 | Protected Fetch | `scrape` | Default markdown; HTML / plaintext / PDF / screenshot options |
-| Extract | `extract` | Structured JSON (`extract=auto`, autoparse, css_extractor). `extract=auto` open beta (currently free; billing may apply later) |
+| Extract | `extract` | Structured JSON (`extract=auto`, autoparse, css_extractor). `extract=auto` is currently free; billing may apply later |
 | Batch | `batch_create`, `batch_status`, `batch_results`, `batch_cancel` | Same credits as Fetch; a 403 maps to `BATCH_ACCESS_DENIED` |
 | Browser | `browser_*` (start with `browser_navigate`) | Escalation-only; same backend as Browser Sessions |
 

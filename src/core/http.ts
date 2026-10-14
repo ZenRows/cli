@@ -37,6 +37,12 @@ export interface ScraperResult {
   concurrencyRemaining: number | null;
   /** The request URL with the apikey redacted — safe to log/persist. */
   redactedUrl: string;
+  /**
+   * True when an Extract request answered 422 with code `no_data_extracted`:
+   * Extract knows this kind of page but none of the fields came back filled.
+   * The request is not charged, and the same request returns the same answer.
+   */
+  noDataExtracted?: boolean;
 }
 
 export interface ScraperParams {
@@ -147,8 +153,29 @@ export async function scrape(
       code: "EXTRACT_DOMAIN_NOT_ENABLED",
       message: "Extract has not been prepared for this domain yet.",
       likely_cause: zrErrorDetail(body) ?? "This domain is not prepared for Extract.",
-      next_action: "Retry with --autoparse for general-purpose extraction on any site.",
+      next_action:
+        "Retry with --autoparse for general-purpose extraction on any site, or get the domain prepared for Extract (POST /v1/extract/prepared-domains).",
       suggested_commands: [`zenrows extract ${params.url} --autoparse`],
+    });
+  }
+  // 422 no_data_extracted on an Extract request: the page was processed and had
+  // nothing to extract. It is an answer, not a failure to reach the target, so
+  // return it for the extract adapter to report as an empty result instead of
+  // advising escalation (which would repeat a slow, deterministic request).
+  if (res.status === 422 && params.extract !== undefined && zrErrorCode(body) === "NO_DATA_EXTRACTED") {
+    return { ...result, noDataExtracted: true };
+  }
+  // 422 blocked_document on an Extract request: the fetched page was a bot wall,
+  // an error page or an empty shell, so Extract had nothing real to read. Not
+  // charged. The fix is a stronger fetch of the same URL, not another extractor.
+  if (res.status === 422 && params.extract !== undefined && zrErrorCode(body) === "BLOCKED_DOCUMENT") {
+    throw new ToolkitError({
+      code: "EXTRACT_FAILED",
+      message: "Extract could not read this page: the site answered with a block or error page (HTTP 422 blocked_document, not charged).",
+      likely_cause: zrErrorDetail(body) ?? "The fetched page was a bot challenge, an error page or a page that had not finished loading.",
+      next_action:
+        "Retry with a stronger fetch: --manual --js-render --premium-proxy. Check the URL if the site may be returning an error page.",
+      suggested_commands: [`zenrows extract ${params.url} --manual --js-render --premium-proxy`],
     });
   }
   if (res.status === 401 || res.status === 403) {
@@ -187,16 +214,16 @@ export async function scrape(
     }
   }
   if (res.status === 402 && isZenrowsErrorEnvelope(body)) {
-    // AUTH010 on extract=auto means the target domain is not in the Extract
-    // beta — distinct from credit exhaustion (AUTH004). Let the extract
+    // AUTH010 on extract=auto means the target domain is not enabled for
+    // Extract, distinct from credit exhaustion (AUTH004). Let the extract
     // adapter fall back to autoparse.
     if (params.extract !== undefined && zrErrorCode(body) === "AUTH010") {
       throw new ToolkitError({
         code: "EXTRACT_DOMAIN_NOT_ENABLED",
         message: "Extract is not enabled for this domain yet.",
-        likely_cause: zrErrorDetail(body) ?? "This domain is not part of the Extract open beta.",
+        likely_cause: zrErrorDetail(body) ?? "This domain is not enabled for Extract.",
         next_action:
-          "Retry with --autoparse for general-purpose extraction on any site, or contact Zenrows support to enable this domain for Extract.",
+          "Retry with --autoparse for general-purpose extraction on any site, or get the domain prepared for Extract (POST /v1/extract/prepared-domains).",
         suggested_commands: [`zenrows extract ${params.url} --autoparse`],
       });
     }

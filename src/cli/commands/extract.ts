@@ -1,7 +1,7 @@
 /**
  * `zenrows extract <url> [flags]` → Extract (structured extraction on `/v1/`).
  *
- * Default: `extract=auto` (site-tailored Extract, open beta). If the domain is
+ * Default: `extract=auto` (site-tailored Extract). If the domain is
  * not enabled or prepared (AUTH010 / REQS007), falls back once to Autoparse. Opt into Autoparse
  * directly with `--autoparse`. Other methods: `--css`, `--outputs`, `--output`.
  */
@@ -24,7 +24,7 @@ export const extract: Command = {
   usage: "zenrows extract <url> [--autoparse | --css <json> | --outputs <filters> | --output md|text] [flags]",
   help: [
     "Methods:",
-    "  (default)              extract=auto — site-tailored Extract (open beta); falls back to Autoparse if the domain is not enabled or prepared",
+    "  (default)              extract=auto: site-tailored Extract; falls back to Autoparse if the domain is not enabled or prepared",
     "  --autoparse            general-purpose Autoparse (any domain, no Extract fallback)",
     "  --css <json>           CSS selector map, e.g. '{\"title\":\"h1\",\"price\":\".price\"}'",
     "  --outputs <list>       built-in output filters → JSON: emails, phone_numbers, headings,",
@@ -165,7 +165,11 @@ export const extract: Command = {
         `Extracted via ${via} · ${outcome.result.body.length} bytes · ${formatRequestCost(outcome.result.costUsd, outcome.result.costCredits)} · run ${runId}`,
       );
       if (runDir) log.dim(`  artifact: ${runDir}`);
-      if (outcome.empty) {
+      if (outcome.noDataExtracted) {
+        log.warn(
+          "Extract found no data on this page (HTTP 422 no_data_extracted, not charged). Check that the page rendered fully: try --manual --js-render with --wait-for <selector>. Protected sites may also need --premium-proxy.",
+        );
+      } else if (outcome.empty) {
         log.warn(
           "No structured data extracted — the page may render via JavaScript, or this layout isn't auto-extractable. Try --manual --js-render, or --css with explicit selectors.",
         );
@@ -180,6 +184,7 @@ export const extract: Command = {
               method: outcome.method,
               fellBackToAutoparse: outcome.fellBackToAutoparse ?? false,
               empty: outcome.empty ?? false,
+              noDataExtracted: outcome.noDataExtracted ?? false,
               httpStatus: outcome.result.status,
               data: outcome.data ?? null,
               bytes: outcome.result.body.length,
