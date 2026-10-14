@@ -21,12 +21,12 @@
     },
     "batch": {
       "key": "batch",
-      "label": "Batch (beta)",
-      "status": "beta",
+      "label": "Batch",
+      "status": "available",
       "command": "zenrows batch",
       "backend": "Batch — https://async.api.zenrows.com/v1 (X-API-Key header; separate host from the Fetch/Extract /v1/)",
       "requiresAuth": true,
-      "notes": "Open beta. Cloud subcommands (create/status/results/cancel/wait/retry-failed) call the Batch API; `zenrows batch estimate` works locally with no API key."
+      "notes": "Cloud subcommands (create/status/results/cancel/wait/retry-failed) call the Batch API with your API key; `zenrows batch estimate` works locally with no API key."
     },
     "crawl": {
       "key": "crawl",

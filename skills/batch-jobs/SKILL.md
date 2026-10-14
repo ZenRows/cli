@@ -1,6 +1,6 @@
 ---
 name: batch-jobs
-description: Scale protected fetch/extract over many URLs via Batch (beta). Cloud create/status/results/cancel/wait/retry-failed work with beta access; estimate/validate run locally with no key.
+description: Scale protected fetch/extract over many URLs via Batch. Cloud create/status/results/cancel/wait/retry-failed work with an API key; estimate/validate run locally with no key.
 version: 0.1.0
 requires_backend_capabilities: [batch]
 ---
@@ -11,11 +11,10 @@ Process large workloads reliably and asynchronously. Batch is where Zenrows'
 high-scale anti-bot advantage becomes obvious — Zenrows wins when the workflow
 runs over thousands, millions, or recurring sets of URLs.
 
-> Status: **beta**. The Zenrows **Batch** is a real
-> product in beta and runs on a separate host
-> (`async.api.zenrows.com/v1`). The cloud subcommands work once your account has
-> beta access; without it the API returns 403 → `BATCH_ACCESS_DENIED`. The
-> toolkit never fakes a cloud run.
+> Zenrows **Batch** runs on a separate host (`async.api.zenrows.com/v1`) and
+> spends the same credits as Fetch. The cloud subcommands work with any active
+> API key; a 403 maps to `BATCH_ACCESS_DENIED`. The toolkit never fakes a
+> cloud run.
 
 ## Local (no key, always works)
 ```
@@ -40,7 +39,7 @@ correctly. The result carries two keys: `html` (the
 raw page) and `parsed` (the structured data). Validate on a single URL with
 `zenrows extract <url>` before running the full batch.
 
-## Cloud (needs a key + beta access)
+## Cloud (needs a key)
 ```
 zenrows batch create jobs.jsonl [--proxy-country cc] [--wait]
 zenrows batch create jobs.jsonl --manual [--js-render] [--premium-proxy]

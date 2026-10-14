@@ -1,9 +1,8 @@
 /**
  * Batch Jobs adapter.
  *
- * Status: `beta` — the Zenrows Batch API is in beta.
- * With beta access the cloud subcommands run for real (see `core/batch-api.ts`).
- * Without access the API returns 403 → BATCH_ACCESS_DENIED. This adapter owns
+ * Status: `available`. The cloud subcommands call the Batch API with an API key
+ * (see `core/batch-api.ts`); a 403 maps to BATCH_ACCESS_DENIED. This adapter owns
  * the local, no-network pieces: validating a JSONL job spec, estimating credit
  * cost, and mapping the validated spec to the Batch API request body.
  */
