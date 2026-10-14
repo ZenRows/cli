@@ -6,7 +6,7 @@ import { defaultConfig, loadConfig, saveConfig, DEFAULT_API_BASE, CLI_VERSION } 
 import { createWorkspace } from "../src/core/workspace.ts";
 import { tempRoot } from "./helpers.ts";
 
-test("CLI_VERSION stays in sync with package.json (kept aligned by npm `version` → scripts/sync-version.mjs)", () => {
+test("CLI_VERSION stays in sync with package.json (release-please updates both)", () => {
   const pkg = JSON.parse(readFileSync(join(process.cwd(), "package.json"), "utf8"));
   assert.equal(CLI_VERSION, pkg.version);
 });

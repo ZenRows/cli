@@ -51,8 +51,7 @@
     "test:e2e": "npm run build && node --test dist/tests/e2e/*.test.js",
     "typecheck": "tsc --noEmit",
     "build": "rm -rf dist && tsc && chmod +x dist/bin/zenrows.js",
-    "prepack": "npm run build",
-    "version": "node scripts/sync-version.mjs && git add src/core/config.ts"
+    "prepack": "npm run build"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

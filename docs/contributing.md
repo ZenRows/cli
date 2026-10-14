@@ -26,7 +26,7 @@ npm install            # dev deps only (typescript, @types/node)
 npm run dev -- --help  # run the CLI from source
 npm test               # node --test
 npm run typecheck      # tsc --noEmit
-npm run build          # tsc → dist/ (for publishing)
+npm run build          # tsc → dist/
 ```
 
 ## Adding a primitive
@@ -69,6 +69,37 @@ To target a local or staging deployment, set `ZENROWS_CRAWL_API_BASE` to its
 default, shared with its Batch jobs), the test waits `retry_after` seconds and
 retries the create for up to 5 minutes, so run concurrent e2e
 runs on one account one at a time.
+
+## Releases
+
+Merge PRs with Conventional Commit titles, for example `fix(crawl): ...` or
+`feat(extract): ...`. `fix`, `feat` and `perf` need a scope.
+
+After each merge to `main`, release-please opens or updates the PR
+`chore: release X.Y.Z`. It sets the version in `package.json`,
+`package-lock.json` and `CLI_VERSION` in `src/core/config.ts`. Do not change
+these by hand.
+
+To release, merge that PR. The workflow runs the checks, creates the tag
+`vX.Y.Z` and the GitHub release, and publishes `@zenrows/cli` to npm.
+
+To publish an existing tag again, run the Release workflow by hand from
+`main` with that tag.
+
+### If the checks fail after the release PR is merged
+
+The release PR runs no CI, so its checks first run after the merge. If they
+fail, `main` already has the new version, but there is no tag, and the
+merged release PR keeps the `autorelease: pending` label, which blocks the
+next release PR. To recover:
+
+1. Fix the problem in a normal PR and merge it.
+2. Create the release on that fix commit, with the version from
+   `.release-please-manifest.json`:
+   `gh release create vX.Y.Z --target <fix commit> --title vX.Y.Z --generate-notes --notes-start-tag <previous tag>`
+3. On the merged release PR, replace the label `autorelease: pending` with
+   `autorelease: tagged`.
+4. Run the Release workflow by hand from `main` with the tag `vX.Y.Z`.
 
 ## Rules
 
