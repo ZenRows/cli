@@ -383,3 +383,27 @@ test("a 422 no_data_extracted outside an Extract request is still a failed fetch
     );
   }, { status: 422 });
 });
+
+// --- 422 blocked_document: a block page, not an extraction miss --------------
+test("runExtract turns 422 blocked_document into EXTRACT_FAILED with a stronger-fetch hint, without fallback", async () => {
+  const BLOCKED = JSON.stringify({
+    code: "blocked_document",
+    detail: "The page fetched for this request had no real content.",
+    status: 422,
+  });
+  const calls: string[] = [];
+  await withFetchHandler((url) => {
+    calls.push(url);
+    return new Response(BLOCKED, { status: 422, headers: { "content-type": "application/problem+json" } });
+  }, async () => {
+    await assert.rejects(
+      () => runExtract({ url: "https://x.com" }, cfg, defaultPolicy(), "testkey"),
+      (e: unknown) =>
+        e instanceof ToolkitError &&
+        e.code === "EXTRACT_FAILED" &&
+        /blocked_document/.test(e.message) &&
+        /--js-render --premium-proxy/.test(e.next_action ?? ""),
+    );
+    assert.equal(calls.length, 1);
+  });
+});

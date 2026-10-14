@@ -165,6 +165,19 @@ export async function scrape(
   if (res.status === 422 && params.extract !== undefined && zrErrorCode(body) === "NO_DATA_EXTRACTED") {
     return { ...result, noDataExtracted: true };
   }
+  // 422 blocked_document on an Extract request: the fetched page was a bot wall,
+  // an error page or an empty shell, so Extract had nothing real to read. Not
+  // charged. The fix is a stronger fetch of the same URL, not another extractor.
+  if (res.status === 422 && params.extract !== undefined && zrErrorCode(body) === "BLOCKED_DOCUMENT") {
+    throw new ToolkitError({
+      code: "EXTRACT_FAILED",
+      message: "Extract could not read this page: the site answered with a block or error page (HTTP 422 blocked_document, not charged).",
+      likely_cause: zrErrorDetail(body) ?? "The fetched page was a bot challenge, an error page or a page that had not finished loading.",
+      next_action:
+        "Retry with a stronger fetch: --manual --js-render --premium-proxy. Check the URL if the site may be returning an error page.",
+      suggested_commands: [`zenrows extract ${params.url} --manual --js-render --premium-proxy`],
+    });
+  }
   if (res.status === 401 || res.status === 403) {
     // Distinguish Zenrows auth errors from target-site 403s. Zenrows auth
     // failures surface AUTH00x codes in the body.
