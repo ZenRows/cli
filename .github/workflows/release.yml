@@ -252,7 +252,7 @@ jobs:
 
       - name: Publish to npm
         if: steps.npm.outputs.published != 'true'
-        run: npm publish "package/zenrows-cli-$VERSION.tgz" --access public --ignore-scripts
+        run: npm publish "./package/zenrows-cli-$VERSION.tgz" --access public --ignore-scripts
 
       - name: Verify on npm
         run: |
