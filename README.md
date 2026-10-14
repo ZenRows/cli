@@ -37,12 +37,12 @@ that endpoint with extraction parameters, not a separate product.
 | Command | What it does | Status (this build) |
 | --- | --- | --- |
 | `zenrows fetch` | Fetch — retrieve a protected page | **available** — `GET https://api.zenrows.com/v1/` |
-| `zenrows extract` | Extract: `extract=auto` (any prepared domain; falls back to Autoparse on one not prepared yet), CSS, or Markdown | available, same `/v1/` |
+| `zenrows extract` | Extract: `extract=auto` (any prepared domain; falls back to Autoparse on one not prepared yet), CSS, or Markdown | **available**: same `/v1/` |
 | `zenrows batch` | Batch: fan out over many URLs | **available**: `https://async.api.zenrows.com/v1`; local validate/estimate need no key |
 | `zenrows crawl` | Crawl (new) — collect the URLs behind one start page, optionally with each page's HTML | **available** — `https://api.zenrows.com/v1/crawls` |
 | `zenrows browser` | Browser Sessions REST API (same backend as MCP `browser_*`) | **available** — escalation-only; bills by bandwidth + time |
 | `zenrows mcp` | MCP server config (remote + local) | **available** |
-| Zenrows CLI | this repo | available |
+| Zenrows CLI | this repo | **available** |
 
 The CLI maintains a **capability matrix** (`registry/capabilities.json`). Every
 command checks status before any cloud call, so the toolkit never fakes behavior
