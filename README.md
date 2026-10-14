@@ -36,13 +36,13 @@ that endpoint with extraction parameters, not a separate product.
 
 | Command | What it does | Status (this build) |
 | --- | --- | --- |
-| `zenrows fetch` | Fetch — retrieve a protected page | **available** — `GET https://api.zenrows.com/v1/` |
-| `zenrows extract` | Extract — turn a page into structured data: `extract=auto` on any prepared domain (falls back to Autoparse on one not prepared yet), CSS selectors, or Markdown | **available** — `GET https://api.zenrows.com/v1/?extract=auto` |
-| `zenrows batch` | Batch — run Fetch and Extract over many URLs in one job; specs validate and estimate locally with no key | **available** — `POST https://async.api.zenrows.com/v1/jobs` |
-| `zenrows crawl` | Crawl (new) — collect the URLs behind one start page, optionally with each page's HTML | **available** — `POST https://api.zenrows.com/v1/crawls` |
-| `zenrows browser` | Browser Sessions — a real cloud browser over REST (same backend as MCP `browser_*`); escalation-only, billed by bandwidth + time | **available** — `POST https://mcp.zenrows.com/browser/sessions` |
-| `zenrows mcp` | MCP — set up the Zenrows MCP server in your client, remote or local | **available** — `https://mcp.zenrows.com/mcp` |
-| `zenrows` | CLI — this repo: the commands above, plus skills and templates | **available** — `npm install -g @zenrows/cli` |
+| `zenrows fetch` | Fetch: retrieve a protected page | **available**: `GET https://api.zenrows.com/v1/` |
+| `zenrows extract` | Extract: turn a page into structured data with `extract=auto` on any prepared domain (falls back to Autoparse on one not prepared yet), CSS selectors, or Markdown | **available**: `GET https://api.zenrows.com/v1/?extract=auto` |
+| `zenrows batch` | Batch: run Fetch and Extract over many URLs in one job; specs validate and estimate locally with no key | **available**: `POST https://async.api.zenrows.com/v1/jobs` |
+| `zenrows crawl` | Crawl (new): collect the URLs behind one start page, optionally with each page's HTML | **available**: `POST https://api.zenrows.com/v1/crawls` |
+| `zenrows browser` | Browser Sessions: a real cloud browser over REST (same backend as MCP `browser_*`); escalation-only, billed by bandwidth + time | **available**: `POST https://mcp.zenrows.com/browser/sessions` |
+| `zenrows mcp` | MCP: set up the Zenrows MCP server in your client, remote or local | **available**: `https://mcp.zenrows.com/mcp` |
+| `zenrows` | CLI: this repo, the commands above, plus skills and templates | **available**: `npm install -g @zenrows/cli` |
 
 The CLI maintains a **capability matrix** (`registry/capabilities.json`). Every
 command checks status before any cloud call, so the toolkit never fakes behavior

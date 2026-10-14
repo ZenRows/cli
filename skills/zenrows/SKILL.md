@@ -71,12 +71,12 @@ Run `zenrows status` for the live capability matrix. As of this toolkit:
 
 | Primitive | Command | Status |
 | --- | --- | --- |
-| Protected Fetch | `zenrows fetch` | **available** — `GET https://api.zenrows.com/v1/` |
-| Extract (`extract=auto`, Autoparse, CSS, Markdown) | `zenrows extract` | **available** — `GET https://api.zenrows.com/v1/?extract=auto` |
-| Batch | `zenrows batch` | **available** — `POST https://async.api.zenrows.com/v1/jobs` |
-| Crawl (new) | `zenrows crawl` | **available** — `POST https://api.zenrows.com/v1/crawls` |
-| Browser | `zenrows browser` | **available** — `POST https://mcp.zenrows.com/browser/sessions` |
-| MCP | `zenrows mcp` | **available** — `https://mcp.zenrows.com/mcp` |
+| Protected Fetch | `zenrows fetch` | **available**: `GET https://api.zenrows.com/v1/` |
+| Extract (`extract=auto`, Autoparse, CSS, Markdown) | `zenrows extract` | **available**: `GET https://api.zenrows.com/v1/?extract=auto` |
+| Batch | `zenrows batch` | **available**: `POST https://async.api.zenrows.com/v1/jobs` |
+| Crawl (new) | `zenrows crawl` | **available**: `POST https://api.zenrows.com/v1/crawls` |
+| Browser | `zenrows browser` | **available**: `POST https://mcp.zenrows.com/browser/sessions` |
+| MCP | `zenrows mcp` | **available**: `https://mcp.zenrows.com/mcp` |
 
 - Extract: `extract=auto` falls back to Autoparse on a domain not prepared yet.
 - Batch: the cheapest path at scale (create, status, results). Estimate specs locally with no key.
