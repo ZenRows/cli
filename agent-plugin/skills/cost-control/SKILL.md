@@ -32,7 +32,6 @@ Always call `browser_close`. Prefer `scrape` / `extract` when they can do the jo
 
 Batch is usually better at **scale** (many URLs) than fan-out of per-URL tool
 calls. Validate one URL with `scrape`/`extract` first, then `batch_create`.
-Batch access may be beta-gated (`BATCH_ACCESS_DENIED`).
 
 ## Tactics
 

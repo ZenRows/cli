@@ -9,8 +9,7 @@ test("capability matrix loads with the honest classifications", () => {
   assert.equal(caps.extract?.status, "beta");
   assert.equal(caps.browser?.status, "available"); // GA product (formerly Scraping Browser)
   assert.equal(caps.mcp?.status, "available");
-  // Batch is a real product in open beta.
-  assert.equal(caps.batch?.status, "beta");
+  assert.equal(caps.batch?.status, "available");
   assert.equal(caps.crawl?.status, "available");
 });
 

@@ -38,7 +38,7 @@ that endpoint with extraction parameters, not a separate product.
 | --- | --- | --- |
 | `zenrows fetch` | Fetch — retrieve a protected page | **available** — `GET https://api.zenrows.com/v1/` |
 | `zenrows extract` | Extract — `extract=auto` (domain-gated open beta; falls back to Autoparse) / CSS / Markdown | **beta** — same `/v1/` |
-| `zenrows batch` | Batch — fan out over many URLs | beta — cloud works with beta access; local validate/estimate always |
+| `zenrows batch` | Batch: fan out over many URLs | **available**: `https://async.api.zenrows.com/v1`; local validate/estimate need no key |
 | `zenrows crawl` | Crawl (new) — collect the URLs behind one start page, optionally with each page's HTML | **available** — `https://api.zenrows.com/v1/crawls` |
 | `zenrows browser` | Browser Sessions REST API (same backend as MCP `browser_*`) | **available** — escalation-only; bills by bandwidth + time |
 | `zenrows mcp` | MCP server config (remote + local) | **available** |
@@ -123,12 +123,11 @@ zenrows extract <url> --outputs emails,links                            # built-
 zenrows extract <url> --output markdown
 ```
 
-## 9. Batch (beta)
+## 9. Batch
 
 Zenrows **Batch** (`https://async.api.zenrows.com/v1`) fans a
-protected fetch/extract out over many URLs. It is a real product in
-**beta**: the cloud subcommands work once your API key has
-beta access; without it the API returns `BATCH_ACCESS_DENIED`. Local spec
+protected fetch/extract out over many URLs. The cloud subcommands work
+with any active API key and spend the same credits as Fetch. Local spec
 validation + credit estimation always work (no key needed).
 
 ```bash
@@ -141,8 +140,7 @@ zenrows batch cancel <job-id>                        # stop an in-flight run
 
 `jobs.jsonl` is one JSON object per line, each with a `url` (plus optional
 per-line overrides like `js_render`, `premium_proxy`, `proxy_country`,
-`extract`). Request beta access from Zenrows to run in the cloud; until then,
-validate/estimate locally or fan out with `zenrows fetch` per URL.
+`extract`). Validate and estimate locally first, then submit with `create`.
 
 **Extract in Batch.** Set `"extract": "auto"` on a line to run that URL through
 Extract — structured data instead of raw HTML:

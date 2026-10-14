@@ -42,7 +42,7 @@ If the user has many URLs (bulk):
   → Use Batch.                      (validate one page with scrape/extract first,
                                      then batch_create → batch_status → batch_results)
                                      Prefer Batch over fan-out of scrape/extract
-                                     per URL for bulk work (may be beta-gated).
+                                     per URL for bulk work.
                                      Cancel with batch_cancel when needed.
 
 If the user needs login, clicks, forms, sessions, or persistent state:
@@ -67,7 +67,7 @@ If the user needs login, clicks, forms, sessions, or persistent state:
 | --- | --- | --- |
 | Protected Fetch | `scrape` | Default markdown; HTML / plaintext / PDF / screenshot options |
 | Extract | `extract` | Structured JSON (`extract=auto`, autoparse, css_extractor). `extract=auto` open beta (currently free; billing may apply later) |
-| Batch | `batch_create`, `batch_status`, `batch_results`, `batch_cancel` | Beta; may return `BATCH_ACCESS_DENIED` without access |
+| Batch | `batch_create`, `batch_status`, `batch_results`, `batch_cancel` | Same credits as Fetch; a 403 maps to `BATCH_ACCESS_DENIED` |
 | Browser | `browser_*` (start with `browser_navigate`) | Escalation-only; same backend as Browser Sessions |
 
 ## Cost notes

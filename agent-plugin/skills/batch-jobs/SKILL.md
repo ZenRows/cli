@@ -1,6 +1,6 @@
 ---
 name: batch-jobs
-description: Scale protected fetch/extract over many URLs via Zenrows MCP batch_* tools (beta).
+description: Scale protected fetch/extract over many URLs via Zenrows MCP batch_* tools.
 version: 0.1.0
 ---
 
@@ -9,8 +9,8 @@ version: 0.1.0
 Process large workloads asynchronously. Batch is where Zenrows' high-scale
 anti-bot advantage becomes obvious — thousands to millions of URLs.
 
-> Status: **beta**. Cloud Batch lives on `async.api.zenrows.com/v1`. Without
-> beta access the API returns `BATCH_ACCESS_DENIED`. Do not fake a successful
+> Cloud Batch lives on `async.api.zenrows.com/v1`. A 403 maps to
+> `BATCH_ACCESS_DENIED`. Do not fake a successful
 > run. This is **not** `browser_batch` (that batches browser actions in one
 > session).
 
