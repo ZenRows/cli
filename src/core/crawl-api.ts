@@ -10,7 +10,7 @@
  * Crawl SDKs do (see `retryStatuses`). `fetchImpl` / `sleepImpl` are injectable
  * for tests.
  *
- * `output_format` takes `html` only (absent = URLs only). Response fields we do
+ * `output_format` takes `html` or `markdown` (absent = URLs only). Response fields we do
  * not model pass through untouched.
  */
 import { Readable } from "node:stream";
@@ -66,6 +66,8 @@ export interface Crawl {
   include_patterns?: string[];
   exclude_patterns?: string[];
   output_format?: string;
+  /** The strategies the crawl finds URLs with; `["links"]` when the create left it out. */
+  discovery?: string[];
   duplicates_removed?: number;
   finished_at?: string;
   [k: string]: unknown;
@@ -114,7 +116,7 @@ export interface CreateCrawlParams {
   include_patterns?: string[];
   exclude_patterns?: string[];
   /** `html` returns each kept URL's page; absent = URLs only. */
-  output_format?: "html";
+  output_format?: CrawlOutputFormat;
 }
 
 /** RFC 9457 problem body. */
@@ -128,6 +130,10 @@ interface ProblemJson {
 
 /** The API's "Crawl is not enabled for this account" code (403). */
 export const CRAWL_NOT_ENABLED_CODE = "REQS008";
+
+/** The formats a crawl can store each kept URL's page in. */
+export type CrawlOutputFormat = "html" | "markdown";
+
 
 /** A crawl stops progressing once its status is anything but `running`. */
 export function isTerminal(status: string | undefined): boolean {
@@ -463,7 +469,7 @@ export function stopCrawl(id: string, opts: CallOpts): Promise<CrawlStop> {
   return crawlJson<CrawlStop>("POST", `/crawls/${encodeURIComponent(id)}/stop`, { ...opts, crawlId: id, retryStop: true });
 }
 
-/** The page of one kept URL (HTML for `output_format: html`). */
+/** The page of one kept URL, in the crawl's `output_format`. */
 export async function getCrawlContent(
   id: string,
   contentId: string,

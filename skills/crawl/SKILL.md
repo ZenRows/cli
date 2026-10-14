@@ -11,8 +11,8 @@ Give Crawl one start URL; it follows the links on that page (and on the
 pages behind it, up to the depth you set) and returns the URLs it keeps. Use it
 when you know where the items live (a category page, a blog index, a docs
 section) but not the item URLs themselves. Once you have the URLs, read pages
-with `zenrows fetch` / `zenrows extract`, or ask Crawl for each page's HTML
-with `--output-format html`.
+with `zenrows fetch` / `zenrows extract`, or ask Crawl for each page itself
+with `--output-format html` or `--output-format markdown`.
 
 Crawl stays on the start URL's registrable domain; subdomains count. An account without Crawl access gets
 403 `REQS008` → `CRAWL_NOT_ENABLED` ("Crawl is not enabled for this account");
@@ -50,16 +50,18 @@ zenrows crawl results <id> --out urls.jsonl  # same, as JSONL
   `partial: true`. Read again once the crawl ends. `--limit` sets the page size
   of each request.
 
-## Page HTML
+## Page content
 
 ```
 zenrows crawl create <url> --depth 1 --output-format html --max-pages 20 --follow
+zenrows crawl create <url> --depth 1 --output-format markdown --max-pages 20 --follow
 zenrows crawl results <id> --json        # fetched results carry content_url
-zenrows crawl content <id> <content_id>  # one page's HTML (or pass the content_url)
-zenrows crawl download <id> --out pages.jsonl  # every URL + HTML, NDJSON
+zenrows crawl content <id> <content_id>  # one page (or pass the content_url)
+zenrows crawl download <id> --out pages.jsonl  # every URL + page, NDJSON
 ```
 
-`--output-format html` uses up the page budget: each kept page is one more
+`--output-format html` stores each page as fetched; `--output-format markdown`
+stores it converted to Markdown. Either uses up the page budget: each kept page is one more
 fetch, and `--max-pages` counts it. Raise `--max-pages` to keep the same number
 of URLs. A result's `content_status` is `pending`, `fetched` or `failed`; only
 `fetched` results have content (else `CRAWL_CONTENT_NOT_FOUND`). `download`

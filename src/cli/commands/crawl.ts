@@ -53,8 +53,9 @@ export const crawl: Command = {
     "                                    the local policy max_pages_per_run caps it (default 1000)",
     "    --include-patterns <p>          keep only URLs containing this substring (repeatable)",
     "    --exclude-patterns <p>          drop URLs containing this substring (repeatable)",
-    "    --output-format html            also fetch each kept URL's page HTML (read with content/download);",
-    "                                    each kept page is one more fetch counted by --max-pages",
+    "    --output-format <html|markdown> also fetch each kept URL's page, as HTML or Markdown",
+    "                                    (read with content/download); each kept page is one more",
+    "                                    fetch counted by --max-pages",
     "    --follow                        wait until the crawl ends (Ctrl-C stops the wait, not the crawl)",
     "    --timeout <s>                   with --follow: stop waiting after s seconds (default 600)",
     "    --idempotency-key <key>         so a retried create starts no second crawl",
@@ -151,12 +152,13 @@ async function createCmd(rest: string[], ctx: RunContext): Promise<number> {
   if (exclude.length) params.exclude_patterns = exclude;
   const outputFormat = asString(values["output-format"]);
   if (outputFormat !== undefined) {
-    if (outputFormat !== "html") {
+    if (outputFormat !== "html" && outputFormat !== "markdown") {
       throw new ToolkitError({
         code: "INVALID_USAGE",
         message: `Invalid --output-format value '${outputFormat}'.`,
-        likely_cause: "--output-format takes html only. Without it, a crawl returns URLs only.",
-        next_action: "Pass --output-format html, or leave it out.",
+        likely_cause:
+          "--output-format takes html or markdown. Without it, a crawl returns URLs only.",
+        next_action: "Pass --output-format html or --output-format markdown, or leave it out.",
       });
     }
     params.output_format = outputFormat;

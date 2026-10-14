@@ -840,6 +840,34 @@ await liveCheck(
   },
 );
 
+await liveCheck(
+  "22",
+  "Markdown output",
+  'crawl create --output-format markdown is accepted and the crawl echoes it',
+  async () => {
+    const r = create(["--output-format", "markdown", "--max-items", "1", "--max-pages", "1"]);
+    if (r.code !== 0 || !r.json?.crawl_id) {
+      return { status: FAIL, actual: H.trim(show(r), 400) };
+    }
+    z(["crawl", "stop", r.json.crawl_id, "--json"]);
+    const got = r.json.output_format ?? r.json.crawl?.output_format;
+    return { status: passIf(got === "markdown"), actual: `${r.json.crawl_id}: output_format ${got}` };
+  },
+);
+await liveCheck(
+  "23",
+  "Rejected output format",
+  "crawl create --output-format pdf is refused locally, before any network call",
+  async () => {
+    const r = create(["--output-format", "pdf"]);
+    const code = r.json?.error?.code;
+    return {
+      status: passIf(r.code === 1 && code === "INVALID_USAGE"),
+      actual: `exit ${r.code}, code ${code}`,
+    };
+  },
+);
+
 H.naming({
   operations: {
     create: "crawl create",
