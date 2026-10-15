@@ -28,6 +28,6 @@ URL; cost multipliers are basic 1x / JS 5x / proxy 10x / both 25x.
 
 Once the spec is clean, submit it:
 ```
-zenrows batch create jobs.jsonl --wait
+zenrows batch create jobs.jsonl --follow
 ```
 See [[batch-jobs]] for the full cloud flow.

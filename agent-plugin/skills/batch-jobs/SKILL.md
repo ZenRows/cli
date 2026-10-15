@@ -21,9 +21,8 @@ anti-bot advantage becomes obvious — thousands to millions of URLs.
 | `batch_create` | Submit a job (list of URL tasks + optional scrape/extract params) |
 | `batch_status` | Poll run status + progress stats |
 | `batch_results` | Page results (cursor pagination; filter successful/failed/all) |
+| `batch_wait` | Block until the run reaches a terminal status |
 | `batch_cancel` | Stop an in-flight run |
-
-Optional if exposed by the server: `batch_wait` to block until terminal status.
 
 ## Workflow
 
@@ -32,12 +31,13 @@ Optional if exposed by the server: `batch_wait` to block until terminal status.
    `external_id` and `metadata`, and per-task scrape overrides like
    `js_render`, `premium_proxy`, `proxy_country`, `mode`, `autoparse` or
    `extract`. Put those overrides under the task's `zenrows_params`
-   (`{"url": "...", "zenrows_params": {"extract": "auto"}}`): that works on
-   every server version, while older versions silently ignore the same keys
-   set flat on the task. `extract: "auto"` returns structured data instead of
+   (`{"url": "...", "zenrows_params": {"extract": "auto"}}`): the MCP server
+   reads them there, and some versions silently ignore the same keys set flat
+   on the task. `extract: "auto"` returns structured data instead of
    raw HTML, at the same credit cost as a regular task; the result carries
    `html` and `parsed` keys.
-3. Poll `batch_status` until terminal (`completed` / `stopped` / …).
+3. Call `batch_wait`, or poll `batch_status`, until terminal (`completed`,
+   `failed`, `stopped` or `deleted`). A `failed` run carries `failure_reason`.
 4. Collect with `batch_results`.
 5. `batch_cancel` if the user aborts or the run should stop early.
 

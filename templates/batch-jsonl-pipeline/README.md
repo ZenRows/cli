@@ -22,10 +22,11 @@ The cloud subcommands run with any active API key and spend the same credits
 as Fetch.
 
 ```bash
-zenrows batch create jobs.example.jsonl --wait          # submit + wait for the run to finish
+zenrows batch create jobs.example.jsonl --follow        # submit + wait for the run to finish
 zenrows batch status <job-id>                           # run status + progress stats
 zenrows batch results <job-id> --out results.jsonl      # collect results (paginated)
 zenrows batch retry-failed <job-id>                     # rerun only the failed tasks
+zenrows batch retry-failed <job-id> --include-pending   # also run tasks that did not finish
 zenrows batch cancel <job-id>                           # stop an in-flight run
 ```
 

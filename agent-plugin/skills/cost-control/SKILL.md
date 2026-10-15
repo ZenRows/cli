@@ -18,9 +18,10 @@ These multipliers apply when you enable the flags (on `scrape` or `extract`):
 - Premium proxies (`premium_proxy`): **10×**
 - Both: **25×**
 
-`extract` `mode=auto` is currently free; billing may apply
-later. Do not promise permanent free extract pricing. Autoparse / CSS still
-follow the multipliers above when stealth flags are set.
+Extract adds no charge of its own: an `extract` request costs what the
+underlying fetch costs, multipliers included. Do not promise that Extract
+pricing will never change. Autoparse / CSS follow the same multipliers when
+stealth flags are set.
 
 ## Browser sessions (`browser_*`)
 

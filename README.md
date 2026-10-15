@@ -132,11 +132,34 @@ validation + credit estimation always work (no key needed).
 
 ```bash
 zenrows batch estimate jobs.jsonl                    # validate the spec + estimate credits (local)
-zenrows batch create jobs.jsonl --wait               # submit a job and wait for it to finish
+zenrows batch create jobs.jsonl --follow             # submit a job and wait for it to finish
 zenrows batch status <job-id>                        # run status + progress stats
+zenrows batch wait <job-id> --timeout 600000         # wait up to 600000 ms (or --timeout 600s)
 zenrows batch results <job-id> --out results.jsonl   # collect results (paginated)
 zenrows batch cancel <job-id>                        # stop an in-flight run
+zenrows batch retry-failed <job-id> --include-pending  # rerun failed and unfinished tasks
 ```
+
+`--wait` is an alias of `--follow`. `create` and `retry-failed` send an
+`Idempotency-Key` and reuse it for their own automatic retries, so a dropped
+connection never starts a second job or run. Running a command again sends a
+new key unless you pass one: a repeated `create` creates another job, and a
+repeated `retry-failed`, once the previous run has ended, may start another
+run of the tasks that still match, re-scraping and billing them again. With
+the same `--idempotency-key <key>`, the same file and flags, within 24 hours
+of the first request, a repeat cannot create a duplicate (after 24 hours the
+key is forgotten). Its answer is not guaranteed to be the original: the API
+may replay it, answer 409 (no recorded answer yet, or a rerun whose run is
+still in progress), or refuse it before looking at the key, for example with
+a 402 when the account is out of credits. Unless the repeat returns the job,
+check your jobs before doing anything else. When a submit or rerun ends without a usable answer, the
+error carries the key and prints the exact command to repeat with it.
+
+Before submitting, `create` checks the run against the local policy:
+`max_pages_per_run` (default 1000 URLs) and `max_credits_per_run` (default
+10000 estimated credits, where each Adaptive Stealth Mode task counts as 25).
+Raise them for large jobs with `zenrows policy set max_pages_per_run <n>` and
+`zenrows policy set max_credits_per_run <n>`.
 
 `jobs.jsonl` is one JSON object per line, each with a `url` (plus optional
 per-line overrides like `js_render`, `premium_proxy`, `proxy_country`,
@@ -150,8 +173,8 @@ Extract — structured data instead of raw HTML:
 {"url": "https://example.com/reviews", "extract": "auto", "external_id": "r1"}
 ```
 
-An Extract task costs the same as a regular one (1 credit at base tier), so
-`batch estimate` prices it correctly. Results for an Extract task carry two
+Extract adds no charge of its own: an Extract task costs what the same task
+costs without it (1 credit at base tier), so `batch estimate` prices it correctly. Results for an Extract task carry two
 keys: `html` (the raw page) and `parsed` (the structured data) — validate a
 sample with `zenrows extract <url>` before running the full batch.
 

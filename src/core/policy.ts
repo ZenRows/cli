@@ -111,8 +111,8 @@ export function assertWithinLimits(
       code: "POLICY_LIMIT_EXCEEDED",
       message: `This ${context} submits ${requested.pages} page(s), over the policy cap of ${policy.max_pages_per_run}.`,
       likely_cause: "policy.max_pages_per_run bounds how many URLs a single run may submit.",
-      next_action: `Split the job into runs of ≤${policy.max_pages_per_run} page(s), or raise max_pages_per_run in policy.json.`,
-      suggested_commands: ["zenrows policy show"],
+      next_action: `Split the job into runs of at most ${policy.max_pages_per_run} page(s), or raise the cap: \`zenrows policy set max_pages_per_run ${requested.pages}\`. The default is ${defaultPolicy().max_pages_per_run}.`,
+      suggested_commands: [`zenrows policy set max_pages_per_run ${requested.pages}`, "zenrows policy show"],
     });
   }
   if (requested.credits !== undefined && requested.credits > policy.max_credits_per_run) {
@@ -120,8 +120,8 @@ export function assertWithinLimits(
       code: "POLICY_LIMIT_EXCEEDED",
       message: `This ${context} is estimated at ${requested.credits} credit(s), over the policy cap of ${policy.max_credits_per_run}.`,
       likely_cause: "policy.max_credits_per_run bounds the estimated credit cost of a single run.",
-      next_action: "Reduce the job size or per-task cost (e.g. drop premium_proxy/js_render), or raise max_credits_per_run in policy.json.",
-      suggested_commands: ["zenrows policy show"],
+      next_action: `Reduce the job size or per-task cost (e.g. drop premium_proxy/js_render), or raise the cap: \`zenrows policy set max_credits_per_run ${requested.credits}\`. The default is ${defaultPolicy().max_credits_per_run}; the estimate is an upper bound (an Adaptive Stealth Mode task counts as 25).`,
+      suggested_commands: [`zenrows policy set max_credits_per_run ${requested.credits}`, "zenrows policy show"],
     });
   }
 }

@@ -124,7 +124,11 @@ test("problem+json 429 quota_exceeded maps to BATCH_QUOTA_EXCEEDED", async () =>
   );
   await assert.rejects(
     () => createJob({ type: "regular", status: "closed", tasks: [] }, { apiKey: "k", fetchImpl: impl }),
-    (e: unknown) => e instanceof ToolkitError && e.code === "BATCH_QUOTA_EXCEEDED",
+    (e: unknown) =>
+      e instanceof ToolkitError &&
+      e.code === "BATCH_QUOTA_EXCEEDED" &&
+      e.server_code === "quota_exceeded" &&
+      e.reason === "too_many_active_jobs",
   );
 });
 
@@ -136,7 +140,12 @@ test("problem+json 402 (no credit available) maps to POLICY_MAX_CREDITS_EXCEEDED
   );
   await assert.rejects(
     () => createJob({ type: "regular", status: "closed", tasks: [] }, { apiKey: "k", fetchImpl: impl }),
-    (e: unknown) => e instanceof ToolkitError && e.code === "POLICY_MAX_CREDITS_EXCEEDED",
+    (e: unknown) =>
+      e instanceof ToolkitError &&
+      e.code === "POLICY_MAX_CREDITS_EXCEEDED" &&
+      e.server_code === "payment_required" &&
+      e.reason === "insufficient_credits" &&
+      /out of Zenrows credits/.test(e.next_action),
   );
 });
 
@@ -148,7 +157,12 @@ test("problem+json 402 api_key_cap_reached maps to KEY_CREDIT_CAP_REACHED", asyn
   );
   await assert.rejects(
     () => createJob({ type: "regular", status: "closed", tasks: [] }, { apiKey: "k", fetchImpl: impl }),
-    (e: unknown) => e instanceof ToolkitError && e.code === "KEY_CREDIT_CAP_REACHED" && /daily cap of 200/.test(e.likely_cause),
+    (e: unknown) =>
+      e instanceof ToolkitError &&
+      e.code === "KEY_CREDIT_CAP_REACHED" &&
+      e.server_code === "api_key_cap_reached" &&
+      e.reason === "api_key_cap_reached" &&
+      /daily cap of 200/.test(e.likely_cause),
   );
 });
 

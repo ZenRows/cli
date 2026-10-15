@@ -61,10 +61,21 @@ export interface ToolkitErrorShape {
   suggested_commands?: string[];
   /** The API's own `code`, when the error came from an API answer that had one. */
   server_code?: string;
+  /**
+   * A finer, stable reason within `code`, e.g. `insufficient_credits` or
+   * `too_many_scheduled_jobs`. Added alongside `code`, which keeps its value.
+   */
+  reason?: string;
   /** The crawl the error is about, once it exists. */
   crawl_id?: string;
   /** Seconds to wait before a retry (the `Retry-After` header). */
   retry_after?: number;
+  /**
+   * The Idempotency-Key a write was sent with, when its outcome is unknown. Repeat
+   * the identical request with this key to get the original answer instead of a
+   * second job or run.
+   */
+  idempotency_key?: string;
 }
 
 export class ToolkitError extends Error {
@@ -73,8 +84,10 @@ export class ToolkitError extends Error {
   readonly next_action: string;
   readonly suggested_commands: string[];
   readonly server_code?: string;
+  readonly reason?: string;
   readonly crawl_id?: string;
   readonly retry_after?: number;
+  readonly idempotency_key?: string;
 
   constructor(shape: ToolkitErrorShape) {
     super(shape.message);
@@ -84,8 +97,10 @@ export class ToolkitError extends Error {
     this.next_action = shape.next_action;
     this.suggested_commands = shape.suggested_commands ?? [];
     this.server_code = shape.server_code;
+    this.reason = shape.reason;
     this.crawl_id = shape.crawl_id;
     this.retry_after = shape.retry_after;
+    this.idempotency_key = shape.idempotency_key;
   }
 
   toJSON(): ToolkitErrorShape {
@@ -96,8 +111,10 @@ export class ToolkitError extends Error {
       next_action: this.next_action,
       suggested_commands: this.suggested_commands,
       ...(this.server_code ? { server_code: this.server_code } : {}),
+      ...(this.reason ? { reason: this.reason } : {}),
       ...(this.crawl_id ? { crawl_id: this.crawl_id } : {}),
       ...(this.retry_after !== undefined ? { retry_after: this.retry_after } : {}),
+      ...(this.idempotency_key ? { idempotency_key: this.idempotency_key } : {}),
     };
   }
 }

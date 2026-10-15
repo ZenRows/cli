@@ -21,7 +21,8 @@ extract({ url, proxy_country: "US" })               # geo-targeted
 ```
 
 `mode=auto` (`extract=auto`) works on any domain Zenrows has prepared, with any
-key, and is currently free; billing may apply later. If the
+key. Extract adds no charge of its own: a request costs what the underlying
+fetch costs, multipliers included. If the
 domain is not enabled (AUTH010) or not prepared yet (REQS007), the tool retries
 once with Autoparse by default (`fallback_autoparse`).
 

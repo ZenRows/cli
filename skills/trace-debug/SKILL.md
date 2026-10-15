@@ -34,7 +34,7 @@ zenrows trace export <run-id>     # JSON for sharing
   connectivity and `zenrows config show`.
 - `AUTH_INVALID` → re-check the key, `zenrows login --api-key …`.
 - `KEY_CREDIT_CAP_REACHED` → this API key hit one of its own credit caps (HTTP
-  402, gateway code `AUTH014`, Batch `api_key_cap_reached`). The account still
+  402, code `AUTH014`). The account still
   has credits and its other keys keep working. Do not retry and do not escalate:
   `zenrows usage` shows the cap and when it resets. Wait for the reset, or have
   the account owner raise or remove the cap at
@@ -43,8 +43,23 @@ zenrows trace export <run-id>     # JSON for sharing
   local policy credit limit was hit). Do not retry-loop; `zenrows usage` shows
   when credits renew. Top up or upgrade, or claim the account if it is an
   auto-created Free plan.
-- `BATCH_FAILED` → the batch run ended `failed`; `failure_reason` and
-  `failure_detail` in `zenrows batch status <id> --json` say why.
+- Batch's 402 keeps the codes above: `POLICY_MAX_CREDITS_EXCEEDED` (out of
+  credits, `reason: insufficient_credits`) or `KEY_CREDIT_CAP_REACHED`
+  (`reason: api_key_cap_reached`). A run that stopped for lack of credits ends
+  `failed` with `BATCH_FAILED` and `reason: insufficient_credits`. Afterwards
+  run the tasks that did not finish with
+  `zenrows batch retry-failed <id> --include-pending`.
+- `BATCH_QUOTA_EXCEEDED` → Batch's 429 (`reason: too_many_active_jobs` or
+  `too_many_scheduled_jobs`): the account reached an active-job (3)
+  or scheduled-job (5) limit, shared with Crawl. A closed job frees its slot
+  when its run ends (wait, or stop it), an open job when it is deleted, or
+  closed and its run has ended, and a scheduled job only when it is deleted.
+- `BATCH_FAILED` → any other Batch error (400, 409, 5xx), a run that ended
+  `failed`, or a `wait` that timed out (`reason: wait_timeout`) or found the
+  run paused (`reason: run_paused`); `server_code` holds the API's own code, and `failure_reason` /
+  `failure_detail` in `zenrows batch status <id> --json` say why a run failed.
+  A Batch 401, 403 and 404 keep their own codes: `AUTH_INVALID`,
+  `BATCH_ACCESS_DENIED` and `BATCH_NOT_FOUND`.
 - `CRAWL_NOT_ENABLED` → the API answered 403 `REQS008`: Crawl is not
   enabled for this account. Do not retry; ask Zenrows support for access.
 - `CRAWL_INSUFFICIENT_CREDITS` / `CRAWL_KEY_CAP_REACHED` → Crawl's 402: the

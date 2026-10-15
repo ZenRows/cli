@@ -191,6 +191,8 @@ test("batch status on a run the key cap stopped exits 1, ok:false, with reason, 
     assert.equal(j.failure_reason, "api_key_cap_reached");
     assert.match(j.failure_detail, /weekly credit cap/);
     assert.equal(j.error.code, "KEY_CREDIT_CAP_REACHED");
+    assert.equal(j.error.server_code, "api_key_cap_reached");
+    assert.equal(j.error.reason, "api_key_cap_reached");
     assert.match(j.error.next_action, /settings\/api-keys/);
     // The status call itself succeeded, so the cause must not cite an HTTP 402.
     assert.doesNotMatch(j.error.likely_cause, /HTTP 402/);

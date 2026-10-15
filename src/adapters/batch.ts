@@ -16,8 +16,8 @@ export interface BatchJob {
   url: string;
   /** Optional stable id echoed back on each result row. */
   external_id?: string;
-  /** Opaque per-task metadata carried through to results. */
-  metadata?: unknown;
+  /** Per-task string-to-string metadata carried through to results. */
+  metadata?: Record<string, string>;
   /** Optional nested per-task scrape params (merged with the flat keys below). */
   zenrows_params?: Record<string, unknown>;
   /** Optional per-job overrides mirroring fetch options. */
@@ -65,6 +65,11 @@ export function validateJsonl(file: string): BatchValidation {
         result.errors.push({ line: idx + 1, reason: `invalid url: ${obj.url}` });
         return;
       }
+      const metaError = metadataError(obj.metadata);
+      if (metaError) {
+        result.errors.push({ line: idx + 1, reason: metaError });
+        return;
+      }
       result.validJobs++;
       result.jobs.push(obj);
     } catch {
@@ -75,10 +80,105 @@ export function validateJsonl(file: string): BatchValidation {
 }
 
 /**
- * Rough local credit estimate using documented multipliers
- * (basic 1x, js 5x, proxies 10x, both 25x). Counts in abstract "credits".
+ * The API accepts `metadata` only as an object whose values are strings; any
+ * other shape fails the whole submit. Returns the reason, or null when valid.
  */
-export function estimateCredits(jobs: BatchJob[]): { credits: number; perJob: number[] } {
+function metadataError(metadata: unknown): string | null {
+  if (metadata === undefined || metadata === null) return null;
+  if (typeof metadata !== "object" || Array.isArray(metadata)) {
+    return "`metadata` must be an object of string values";
+  }
+  for (const [k, v] of Object.entries(metadata as Record<string, unknown>)) {
+    if (typeof v !== "string") return `\`metadata.${k}\` must be a string`;
+  }
+  return null;
+}
+
+/**
+ * Scrape params the API reads as booleans. It accepts JSON `true`/`false` or the
+ * strings "true"/"false" in any case (it lowercases them), and rejects anything
+ * else, `1` and "yes" included, with a 400.
+ */
+const BOOLEAN_PARAMS = new Set(["js_render", "premium_proxy", "original_status", "json_response", "autoparse"]);
+
+/**
+ * Canonical spelling of a boolean param: JSON `true` and "true" in any case
+ * become "true", JSON `false` and "false" in any case become "false". Any other
+ * value is returned unchanged (see `assertBooleanParams`, which rejects it).
+ */
+function canonicalBool(v: unknown): unknown {
+  if (v === true) return "true";
+  if (v === false) return "false";
+  if (typeof v === "string") {
+    const s = v.trim().toLowerCase();
+    if (s === "true" || s === "false") return s;
+  }
+  return v;
+}
+
+/** Throw before submitting if a boolean param holds a value the API rejects. */
+function assertBooleanParams(params: Record<string, string>, where: string): void {
+  for (const k of BOOLEAN_PARAMS) {
+    const v = params[k];
+    if (v !== undefined && v !== "true" && v !== "false") {
+      throw new ToolkitError({
+        code: "INVALID_USAGE",
+        message: `${k} must be true or false (got ${JSON.stringify(v)}) in ${where}.`,
+        likely_cause: `The Batch API accepts only true or false for ${k}; other values, 1 and "yes" included, fail the whole job.`,
+        next_action: `Set ${k} to true or false on that line, then retry.`,
+      });
+    }
+  }
+}
+
+/** A task's own params: its nested `zenrows_params`, then its flat keys (later wins). */
+function taskParamsOf(job: BatchJob): Record<string, unknown> {
+  const flat: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(job)) {
+    if (!TASK_RESERVED.has(k)) flat[k] = v;
+  }
+  return { ...(job.zenrows_params ?? {}), ...flat };
+}
+
+/**
+ * The params a task actually runs with: the job-level params and the task's own,
+ * each canonicalized exactly as they are submitted (`normalizeParams`), merged
+ * the way the API merges them (the task wins on a shared key). A task key set
+ * to null is not submitted, so the job's value applies.
+ */
+export function effectiveParams(job: BatchJob, jobParams: Record<string, unknown> = {}): Record<string, string> {
+  return { ...normalizeParams(jobParams), ...normalizeParams(taskParamsOf(job)) };
+}
+
+/**
+ * Local credit estimate, an upper bound, from the documented rate card: basic
+ * 1, js_render 5, premium_proxy 10, both 25. `mode=auto` costs 1 to 25
+ * depending on what each page needs, so it counts as 25. Each task is priced on
+ * the params it is submitted with (`effectiveParams`), so job-level flags count.
+ */
+export function estimateCredits(
+  jobs: BatchJob[],
+  jobParams: Record<string, unknown> = {},
+): { credits: number; perJob: number[] } {
+  const perJob = jobs.map((j) => {
+    const p = effectiveParams(j, jobParams);
+    if (p.mode === "auto") return 25;
+    const js = p.js_render === "true";
+    const proxy = p.premium_proxy === "true";
+    if (js && proxy) return 25;
+    if (proxy) return 10;
+    if (js) return 5;
+    return 1;
+  });
+  return { credits: perJob.reduce((a, b) => a + b, 0), perJob };
+}
+
+/**
+ * The estimate earlier versions used, kept only for the policy credit cap so a
+ * run that passed the cap before still passes: flat per-line flags only, with
+ * JavaScript truthiness. Use `estimateCredits` for the real estimate.
+ */
+export function legacyEstimateCredits(jobs: BatchJob[]): { credits: number; perJob: number[] } {
   const perJob = jobs.map((j) => {
     const js = j.js_render || j.mode === "auto";
     const proxy = j.premium_proxy || j.mode === "auto";
@@ -116,7 +216,7 @@ export interface JobBody {
   tasks: Array<{
     url: string;
     external_id?: string;
-    metadata?: unknown;
+    metadata?: Record<string, string>;
     zenrows_params?: Record<string, string>;
   }>;
 }
@@ -137,15 +237,14 @@ export function toJobBody(jobs: BatchJob[], jobParams: Record<string, unknown> =
   // No separate job-level check: a job-level proxy_country is valid for each task
   // in Adaptive Stealth Mode, and the per-task check below sees job ⊕ task params.
   const tasks = jobs.map((job, idx) => {
-    const { url, external_id, metadata, zenrows_params } = job;
-    const flat: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(job)) {
-      if (!TASK_RESERVED.has(k)) flat[k] = v;
-    }
-    const taskParams: Record<string, unknown> = { ...(zenrows_params ?? {}), ...flat };
-    // Validate on the effective (job ⊕ task) params so a job-level premium_proxy
-    // covers a per-task proxy_country, matching how the API merges them.
-    assertProxyCountryPremium({ ...jobParams, ...taskParams }, `line ${idx + 1} (${url})`);
+    const { url, external_id, metadata } = job;
+    const taskParams = taskParamsOf(job);
+    // Validate on the effective (job + task) params as submitted, so a job-level
+    // premium_proxy covers a per-task proxy_country, and a task key set to null
+    // (not submitted) leaves the job's value in force, matching the API's merge.
+    const effective = effectiveParams(job, jobParams);
+    assertBooleanParams(effective, `line ${idx + 1} (${url})`);
+    assertProxyCountryPremium(effective, `line ${idx + 1} (${url})`);
 
     const task: JobBody["tasks"][number] = { url };
     if (external_id !== undefined) task.external_id = String(external_id);
@@ -164,12 +263,14 @@ export function toJobBody(jobs: BatchJob[], jobParams: Record<string, unknown> =
 /**
  * Coerce a flat options object into the string-valued map the Batch API expects
  * (its docs pass `zenrows_params` values as strings, e.g. `"true"`, `"us"`).
- * Booleans/numbers are stringified; objects are JSON-encoded; nullish is dropped.
+ * Boolean params are canonicalized to "true"/"false" (see `canonicalBool`);
+ * other booleans/numbers are stringified; objects are JSON-encoded; nullish is dropped.
  */
 function normalizeParams(obj: Record<string, unknown>): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(obj)) {
-    if (v === undefined || v === null) continue;
+  for (const [k, raw] of Object.entries(obj)) {
+    if (raw === undefined || raw === null) continue;
+    const v = BOOLEAN_PARAMS.has(k) ? canonicalBool(raw) : raw;
     if (typeof v === "string") out[k] = v;
     else if (typeof v === "boolean" || typeof v === "number") out[k] = String(v);
     else out[k] = JSON.stringify(v);
@@ -182,7 +283,7 @@ function isAutoMode(v: unknown): boolean {
   return v === "auto" || v === true;
 }
 function isTruthyFlag(v: unknown): boolean {
-  return v === true || v === "true";
+  return canonicalBool(v) === "true";
 }
 
 /** Throw if proxy_country is set without premium_proxy and outside auto mode. */
