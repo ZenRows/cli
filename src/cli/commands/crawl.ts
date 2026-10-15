@@ -56,6 +56,8 @@ export const crawl: Command = {
     "    --output-format <html|markdown> also fetch each kept URL's page, as HTML or Markdown",
     "                                    (read with content/download); each kept page is one more",
     "                                    fetch counted by --max-pages",
+    "    --discovery links               how the crawl finds the URLs it follows; links (the",
+    "                                    default) follows the links in each page's HTML",
     "    --follow                        wait until the crawl ends (Ctrl-C stops the wait, not the crawl)",
     "    --timeout <s>                   with --follow: stop waiting after s seconds (default 600)",
     "    --idempotency-key <key>         so a retried create starts no second crawl",
@@ -122,6 +124,7 @@ async function createCmd(rest: string[], ctx: RunContext): Promise<number> {
     "include-patterns": { type: "string", multiple: true },
     "exclude-patterns": { type: "string", multiple: true },
     "output-format": { type: "string" },
+    discovery: { type: "string", multiple: true },
     follow: { type: "boolean" },
     timeout: { type: "string" },
     "idempotency-key": { type: "string" },
@@ -162,6 +165,19 @@ async function createCmd(rest: string[], ctx: RunContext): Promise<number> {
       });
     }
     params.output_format = outputFormat;
+  }
+  const discovery = patterns(values.discovery);
+  if (discovery.length) {
+    const other = discovery.find((d) => d !== "links");
+    if (other !== undefined) {
+      throw new ToolkitError({
+        code: "INVALID_USAGE",
+        message: `Invalid --discovery value '${other}'.`,
+        likely_cause: "--discovery takes links. Without it, the crawl follows the links in each page's HTML.",
+        next_action: "Pass --discovery links, or leave it out.",
+      });
+    }
+    params.discovery = ["links"];
   }
   const timeoutMs = timeoutFlag(values.timeout);
   const idempotencyKey = asString(values["idempotency-key"]);

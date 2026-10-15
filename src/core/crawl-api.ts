@@ -117,6 +117,8 @@ export interface CreateCrawlParams {
   exclude_patterns?: string[];
   /** `html` returns each kept URL's page; absent = URLs only. */
   output_format?: CrawlOutputFormat;
+  /** How the crawl finds the URLs it follows on each page it walks. */
+  discovery?: CrawlDiscoveryStrategy[];
 }
 
 /** RFC 9457 problem body. */
@@ -133,6 +135,8 @@ export const CRAWL_NOT_ENABLED_CODE = "REQS008";
 
 /** The formats a crawl can store each kept URL's page in. */
 export type CrawlOutputFormat = "html" | "markdown";
+/** How a crawl finds the URLs it follows on each page it walks. */
+export type CrawlDiscoveryStrategy = "links";
 
 
 /** A crawl stops progressing once its status is anything but `running`. */
@@ -443,6 +447,7 @@ export function createCrawl(params: CreateCrawlParams, opts: CallOpts & { idempo
   if (params.include_patterns?.length) body.include_patterns = params.include_patterns;
   if (params.exclude_patterns?.length) body.exclude_patterns = params.exclude_patterns;
   if (params.output_format !== undefined) body.output_format = params.output_format;
+  if (params.discovery?.length) body.discovery = params.discovery;
   return crawlJson<Crawl>("POST", "/crawls", {
     ...opts,
     body,

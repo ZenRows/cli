@@ -86,7 +86,7 @@ test("crawl create rejects flags it does not declare, before any network call", 
   await withCrawlWorkspace(
     () => json(crawlBody, 202),
     async (calls) => {
-      for (const flag of ["--pagination", "--discovery", "--json-output", "--wait", "--html", "--include", "--exclude"]) {
+      for (const flag of ["--pagination", "--json-output", "--wait", "--html", "--include", "--exclude"]) {
         const { code, out } = await run(["create", "https://example.com/products/", "--depth", "1", flag, "x"]);
         assert.equal(code, 1, flag);
         assert.equal(out.error.code, "UNKNOWN_FLAG", flag);
@@ -590,4 +590,21 @@ test("unknown crawl subcommand is INVALID_USAGE", async () => {
   const { code, out } = await run(["discover"]);
   assert.equal(code, 1);
   assert.equal(out.error.code, "INVALID_USAGE");
+});
+
+test("crawl create sends --discovery links, and refuses any other strategy before any network call", async () => {
+  await withCrawlWorkspace(
+    () => json(crawlBody, 202),
+    async (calls) => {
+      for (const value of ["pagination", "json"]) {
+        const { code, out } = await run(["create", "https://example.com/products/", "--discovery", value]);
+        assert.equal(code, 1, value);
+        assert.equal(out.error.code, "INVALID_USAGE", value);
+      }
+      assert.equal(calls.length, 0);
+      const { code } = await run(["create", "https://example.com/products/", "--discovery", "links"]);
+      assert.equal(code, 0);
+      assert.deepEqual(JSON.parse(String(calls[0]!.init?.body)).discovery, ["links"]);
+    },
+  );
 });

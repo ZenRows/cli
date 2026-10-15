@@ -28,7 +28,15 @@ mkdirSync(APP, { recursive: true });
 mkdirSync(HOME, { recursive: true });
 
 // Without a key, "invalid" keeps the CLI from creating an account.
-const baseEnv = { ...process.env, HOME, NO_COLOR: "1", ZENROWS_API_KEY: HAS_KEY ? KEY : "invalid" };
+// The CLI reads its own variable, not CRAWL_API_BASE: without it every call
+// would reach production whatever the run targets.
+const baseEnv = {
+  ...process.env,
+  HOME,
+  NO_COLOR: "1",
+  ZENROWS_API_KEY: HAS_KEY ? KEY : "invalid",
+  ZENROWS_CRAWL_API_BASE: H.API_BASE,
+};
 const parse = (s) => {
   try {
     return JSON.parse(s);
@@ -868,6 +876,21 @@ await liveCheck(
   },
 );
 
+await liveCheck(
+  "24",
+  "Discovery",
+  "crawl create --discovery links is echoed back, and --discovery pagination is refused before any network call",
+  async () => {
+    const r = create(["--discovery", "links", "--max-items", "1", "--max-pages", "1"]);
+    if (r.code !== 0 || !r.json?.crawl_id) return { status: FAIL, actual: H.trim(show(r), 400) };
+    z(["crawl", "stop", r.json.crawl_id, "--json"]);
+    const got = r.json.crawl?.discovery ?? r.json.discovery;
+    const refused = create(["--discovery", "pagination"]);
+    const ok = JSON.stringify(got) === JSON.stringify(["links"]) && refused.code === 1 && refused.json?.error?.code === "INVALID_USAGE";
+    return { status: passIf(ok), actual: `discovery ${JSON.stringify(got)}; pagination exit ${refused.code} ${refused.json?.error?.code}` };
+  },
+);
+
 H.naming({
   operations: {
     create: "crawl create",
@@ -887,6 +910,7 @@ H.naming({
     include_patterns: "--include-patterns",
     exclude_patterns: "--exclude-patterns",
     output_format: "--output-format",
+    discovery: "--discovery",
     idempotency_key: "--idempotency-key",
     cursor: "--cursor",
     limit: "--limit",
