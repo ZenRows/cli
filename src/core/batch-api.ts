@@ -252,9 +252,9 @@ export function getJob(id: string, opts: CallOpts): Promise<Job> {
   return batchRequest<Job>("GET", `/jobs/${encodeURIComponent(id)}`, { apiKey: opts.apiKey, fetchImpl: opts.fetchImpl, timeoutMs: opts.timeoutMs });
 }
 
-/** Abort an in-flight run. */
-export function stopJob(id: string, opts: CallOpts): Promise<Job> {
-  return batchRequest<Job>("POST", `/jobs/${encodeURIComponent(id)}/stop`, { apiKey: opts.apiKey, fetchImpl: opts.fetchImpl, timeoutMs: opts.timeoutMs });
+/** Abort an in-flight run. The API answers with the refreshed run, not the job. */
+export function stopJob(id: string, opts: CallOpts): Promise<JobRun> {
+  return batchRequest<JobRun>("POST", `/jobs/${encodeURIComponent(id)}/stop`, { apiKey: opts.apiKey, fetchImpl: opts.fetchImpl, timeoutMs: opts.timeoutMs });
 }
 
 /**

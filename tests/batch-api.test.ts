@@ -90,13 +90,16 @@ test("listResults paginates across >=2 cursor pages until next_cursor is null", 
   assert.deepEqual(seenCursors, [null, "c1", "c2"]);
 });
 
-test("stopJob posts /jobs/{id}/stop", async () => {
+test("stopJob posts /jobs/{id}/stop and returns the run", async () => {
   const { impl, calls } = jsonFetch(200, {
+    run_id: "run_1",
     job_id: "job_1",
-    latest_run: { status: "stopped", stats: { total: 5, completed: 3, successful: 3, failed: 0 } },
+    status: "stopped",
+    stats: { total: 5, completed: 3, successful: 3, failed: 0 },
   });
-  const job = await stopJob("job_1", { apiKey: "k", fetchImpl: impl });
-  assert.equal(job.latest_run.status, "stopped");
+  const run = await stopJob("job_1", { apiKey: "k", fetchImpl: impl });
+  assert.equal(run.status, "stopped");
+  assert.equal(run.stats.completed, 3);
   assert.equal(calls[0]!.init?.method, "POST");
   assert.match(calls[0]!.url, /\/jobs\/job_1\/stop$/);
 });

@@ -293,8 +293,8 @@ async function cancelCmd(rest: string[], ctx: RunContext): Promise<number> {
   const id = requireId(positionals[0]);
   assertUsable("batch");
   const apiKey = requireApiKey();
-  const job = await stopJob(id, { apiKey });
-  return printJob(job, ctx.json, `Stopped job ${id}`);
+  const run = await stopJob(id, { apiKey });
+  return printJob({ job_id: id, latest_run: run }, ctx.json, `Stopped job ${id}`);
 }
 
 async function waitCmd(rest: string[], ctx: RunContext): Promise<number> {

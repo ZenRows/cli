@@ -28,11 +28,15 @@ Optional if exposed by the server: `batch_wait` to block until terminal status.
 ## Workflow
 
 1. Validate the workflow on **one** URL with `scrape` or `extract`.
-2. `batch_create` with the full task list (each task: `url` + optional
-   overrides like `js_render`, `premium_proxy`, `proxy_country`, `mode`,
-   `autoparse`, `extract`, `external_id`, `metadata`). `extract: "auto"`
-   returns structured data instead of raw HTML, at the same credit cost as a
-   regular task; the result carries `html` and `parsed` keys.
+2. `batch_create` with the full task list. Each task is `url` plus optional
+   `external_id` and `metadata`, and per-task scrape overrides like
+   `js_render`, `premium_proxy`, `proxy_country`, `mode`, `autoparse` or
+   `extract`. Put those overrides under the task's `zenrows_params`
+   (`{"url": "...", "zenrows_params": {"extract": "auto"}}`): that works on
+   every server version, while older versions silently ignore the same keys
+   set flat on the task. `extract: "auto"` returns structured data instead of
+   raw HTML, at the same credit cost as a regular task; the result carries
+   `html` and `parsed` keys.
 3. Poll `batch_status` until terminal (`completed` / `stopped` / …).
 4. Collect with `batch_results`.
 5. `batch_cancel` if the user aborts or the run should stop early.

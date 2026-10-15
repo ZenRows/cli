@@ -244,6 +244,22 @@ test("batch status on completed and stopped runs exits 0 with ok:true", async ()
   }
 });
 
+test("batch cancel reads the run that /stop returns", async () => {
+  const run = { run_id: "r1", job_id: "j_stop", status: "stopped", stats: { total: 5, completed: 3, successful: 3, failed: 0 } };
+  await withJobResponse(run, async () => {
+    let code = -1;
+    const out = await captureOut(async () => {
+      code = await batch.run(["cancel", "j_stop"], ctx);
+    });
+    assert.equal(code, 0);
+    const j = JSON.parse(out) as Record<string, any>;
+    assert.equal(j.ok, true);
+    assert.equal(j.jobId, "j_stop");
+    assert.equal(j.status, "stopped");
+    assert.deepEqual(j.stats, run.stats);
+  });
+});
+
 test("batch create --wait whose run the cap stops exits 1 with ok:false", async () => {
   await withJobResponse(capFailedJob, async () => {
     const file = writeSpec(["https://ok.example/a"]);
