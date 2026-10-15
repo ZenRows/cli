@@ -82,7 +82,10 @@ A crawl ends `completed` (nothing left, or a cap hit: `stop_reason`
 it. `stopped` with no `stop_reason` and `error.code` `insufficient_credits` or
 `api_key_cap_reached` means the account ran out of credits or the API key hit a
 credit cap; the pages fetched before that stay readable. `failed`, and a
-`stopped` crawl with an `error`, exit non-zero (`CRAWL_FAILED`).
+`stopped` crawl with an `error`, exit non-zero: `CRAWL_INSUFFICIENT_CREDITS` or
+`CRAWL_KEY_CAP_REACHED` when credits ended it (the same codes a refused
+`create` gets, also when an older deployment reports it `failed`), else
+`CRAWL_FAILED`. `server_code` carries the API's `error.code`.
 `stop` on a crawl that already ended prints the status it ended with.
 
 With `--json`, `create`, `get`, `wait` and `stop` print
@@ -116,15 +119,15 @@ The "Retry?" column is for errors that remain after these retries.
 | --- | --- | --- |
 | `CRAWL_NOT_ENABLED` | 403 `REQS008`: Crawl is not enabled for this account | no |
 | `AUTH_INVALID` | 401: the API key was rejected | no, log in again |
-| `CRAWL_INSUFFICIENT_CREDITS` | 402: the account is out of credits (claim the account or add credits) | after credits renew or are added |
-| `CRAWL_KEY_CAP_REACHED` | 402 `AUTH014` or `api_key_cap_reached`: this API key reached its credit cap | after the cap resets or is raised |
+| `CRAWL_INSUFFICIENT_CREDITS` | 402 on `create`, or a crawl that ended on `insufficient_credits`: the account is out of credits (claim the account or add credits) | after credits renew or are added |
+| `CRAWL_KEY_CAP_REACHED` | 402 `AUTH014` or `api_key_cap_reached` on `create`, or a crawl that ended on `api_key_cap_reached`: this API key reached its credit cap | after the cap resets or is raised |
 | `CRAWL_INVALID_REQUEST` | 400 or 422: fix the request. For `idempotency_key_reused`, send a new key or no key | no, not as is |
 | `CRAWL_REQUEST_IN_FLIGHT` | 409: the same Idempotency-Key is still in flight | yes, once the first request ends |
 | `CRAWL_NOT_FOUND` / `CRAWL_CONTENT_NOT_FOUND` | 404: wrong id, or the page has no content | no |
 | `CRAWL_TOO_MANY_CRAWLS` | 429 `too_many_crawls` on `create`: the account's active-job limit | yes, after `retry_after` |
 | `CRAWL_RATE_LIMITED` | any other 429: requests are being throttled | yes, after `retry_after` |
 | `CRAWL_BUSY` | 503 `crawl_busy` on `stop`: the stop was not saved yet and the crawl still runs | yes, run the stop again after `retry_after` |
-| `CRAWL_FAILED` | the crawl ended `failed`, or `stopped` on credits (`server_code` `insufficient_credits` / `api_key_cap_reached`), or another error | 5xx: yes, with backoff; credits: after they are added or the cap resets |
+| `CRAWL_FAILED` | the crawl ended `failed`, or `stopped` with an error other than credits, or another error | 5xx: yes, with backoff |
 | `BACKEND_UNAVAILABLE` | the API could not be reached | yes |
 
 Rules: start small (`--depth 1`, low caps) and check the results before a

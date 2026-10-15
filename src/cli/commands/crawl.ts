@@ -30,7 +30,8 @@ import {
   type CreateCrawlParams,
 } from "../../core/crawl-api.ts";
 import { asNumber, asString, parse, type Command, type RunContext } from "../command.ts";
-import { ToolkitError } from "../../core/errors.ts";
+import { ToolkitError, isKeyCapReached, keyCapReached, quotaExhausted } from "../../core/errors.ts";
+import { readAccount } from "../../core/agent-account.ts";
 import { printError, writeOut, writeOutStream } from "../output.ts";
 
 /** The API's default for `max_pages` (and `max_items`) when the flag is unset. */
@@ -432,18 +433,30 @@ async function waitUntilEnd(id: string, opts: { apiKey: string; timeoutMs?: numb
 /**
  * The error for a crawl that ended `failed`, or `stopped` with an `error` (the
  * account ran out of credits or the API key hit a credit cap), or null for any
- * other state. The crawl's own `error.code` picks the next action.
+ * other state. A crawl the credits ended gets the code and advice a create
+ * refused with 402 gets (`CRAWL_INSUFFICIENT_CREDITS`, `CRAWL_KEY_CAP_REACHED`),
+ * whether the API reports it `stopped` or, as older deployments do, `failed`.
+ * Any other `error.code` picks the next action of a `CRAWL_FAILED`.
  */
 export function crawlFailure(c: Crawl | CrawlStop): ToolkitError | null {
   const creditStop = c.status === "stopped" && !!c.error;
   if (c.status !== "failed" && !creditStop) return null;
   const code = c.error?.code;
+  const ids = { server_code: code, crawl_id: c.crawl_id };
+  const where = `crawl ${c.crawl_id}`;
+  const detail = c.error?.detail || undefined;
+  const getCmd = `zenrows crawl get ${c.crawl_id}`;
+  if (code && isKeyCapReached(code)) {
+    const cap = keyCapReached(where, { status: null, detail }).toJSON();
+    return new ToolkitError({ ...cap, ...ids, code: "CRAWL_KEY_CAP_REACHED", suggested_commands: [...(cap.suggested_commands ?? []), getCmd] });
+  }
+  if (code === "insufficient_credits") {
+    const acct = readAccount();
+    const quota = quotaExhausted(where, acct?.unclaimed ? acct.claimUrl : undefined, { status: null, detail }).toJSON();
+    return new ToolkitError({ ...quota, ...ids, code: "CRAWL_INSUFFICIENT_CREDITS", suggested_commands: [...(quota.suggested_commands ?? []), getCmd] });
+  }
   const why = [code, c.error?.detail].filter(Boolean).join(": ");
   const next: Record<string, string> = {
-    insufficient_credits:
-      "The account ran out of credits. The pages fetched so far stay readable. Check `zenrows usage`, add credits, then start a new crawl.",
-    api_key_cap_reached:
-      "This API key reached one of its credit caps. The pages fetched so far stay readable. Raise or remove the cap, or wait for it to reset, then start a new crawl.",
     seed_unreachable: "The start URL could not be fetched (the site may be blocking it). Check it with `zenrows fetch <url>`.",
     no_items_found:
       "Nothing matched. Loosen --include-patterns / --exclude-patterns, raise or drop --depth, or check the start page with `zenrows fetch <url>`.",
@@ -453,9 +466,8 @@ export function crawlFailure(c: Crawl | CrawlStop): ToolkitError | null {
     message: creditStop ? `Crawl ${c.crawl_id} stopped before it finished.` : `Crawl ${c.crawl_id} failed.`,
     likely_cause: why || "The crawl ended in status failed without a reason.",
     next_action: (code && next[code]) || "Read the error, fix the cause, then start a new crawl.",
-    suggested_commands: [`zenrows crawl get ${c.crawl_id}`],
-    server_code: code,
-    crawl_id: c.crawl_id,
+    suggested_commands: [getCmd],
+    ...ids,
   });
 }
 

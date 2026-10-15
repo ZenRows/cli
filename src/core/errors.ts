@@ -109,12 +109,14 @@ export class ToolkitError extends Error {
  * (so `claimUrl` is surfaced); for a real logged-in account there is nothing to
  * claim — the step is to add credits / upgrade in the dashboard. `status`/`detail`
  * let the caller record the actual upstream response (402 usage-limit, 429
- * quota, …) instead of a hardcoded status.
+ * quota, …) instead of a hardcoded status. `status: null` is for a crawl the
+ * credits stopped: its status call succeeded, so there is no HTTP error to cite,
+ * only `url` (the crawl).
  */
 export function quotaExhausted(
   url: string,
   claimUrl?: string,
-  opts: { status?: number; detail?: string } = {},
+  opts: { status?: number | null; detail?: string } = {},
 ): ToolkitError {
   // Say that the allowance comes back. Without it this reads as a permanent paywall,
   // which is how the API's own AUTH004 text reads ("Purchase a new subscription to
@@ -126,10 +128,11 @@ export function quotaExhausted(
     ? `You are on the Zenrows Free plan. Claim your account to keep your usage and add credits: ${claimUrl}. ${renewLine}`
     : `You are out of Zenrows credits. ${renewLine} To carry on now, add a credit pack (${BILLING_TOPUP_URL} opens the purchase directly) or upgrade your plan: ${PLANS_URL}`;
   const detail = opts.detail ? `${opts.detail.replace(/\.\s*$/, "")}. ` : "";
+  const where = opts.status === null ? `Stopped ${url}` : `HTTP ${opts.status ?? 429} for ${url}`;
   return new ToolkitError({
     code: "POLICY_MAX_CREDITS_EXCEEDED",
     message: "Zenrows request quota exhausted.",
-    likely_cause: `${detail}HTTP ${opts.status ?? 429} for ${url}`,
+    likely_cause: `${detail}${where}`,
     next_action: claimLine,
     suggested_commands: ["zenrows usage"],
   });
