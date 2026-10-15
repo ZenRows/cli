@@ -1,9 +1,10 @@
 /**
  * `zenrows extract <url> [flags]` → Extract (structured extraction on `/v1/`).
  *
- * Default: `extract=auto` (site-tailored Extract). If Extract has not prepared
- * the domain yet (REQS007 / AUTH010), the error names the prepare step; nothing
- * is retried. `--autoparse` runs the deprecated Autoparse explicitly. Other
+ * Default: `extract=auto` (site-tailored Extract). On a REQS007 / AUTH010 the
+ * error names the next step for its reason (prepare the domain, or try another
+ * page); nothing is retried. `--autoparse` runs the deprecated Autoparse
+ * explicitly. Other
  * methods: `--css`, `--outputs`, `--output`. `zenrows extract prepare` prepares a
  * domain (see extract-prepare.ts).
  */
@@ -30,7 +31,7 @@ export const extract: Command = {
   help: [
     "Methods:",
     "  (default)              extract=auto: site-tailored Extract on any prepared domain",
-    "                         (REQS007 = not prepared yet: run zenrows extract prepare, below)",
+    "                         (EXTRACT_DOMAIN_NOT_ENABLED = not prepared yet: run zenrows extract prepare, below)",
     "  --autoparse            deprecated general-purpose Autoparse (any domain)",
     "  --css <json>           CSS selector map, e.g. '{\"title\":\"h1\",\"price\":\".price\"}'",
     "  --outputs <list>       built-in output filters → JSON: emails, phone_numbers, headings,",

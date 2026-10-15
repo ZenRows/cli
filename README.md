@@ -123,9 +123,14 @@ zenrows extract <url> --outputs emails,links                            # built-
 zenrows extract <url> --output markdown
 ```
 
-On a domain Extract hasn't prepared yet, `zenrows extract` fails with REQS007
-and prints the command to prepare it. Preparing takes a few minutes and costs
-no credits; each new domain uses one slot of the monthly allowance.
+On a domain Extract hasn't prepared yet, `zenrows extract` fails with
+`EXTRACT_DOMAIN_NOT_ENABLED` (API code REQS007) and prints the command to
+prepare it. Preparing takes a few minutes and costs no credits; each new domain
+uses one slot of the monthly allowance. `EXTRACT_PAGE_NOT_RECOGNISED` (also
+REQS007) is different: the domain is prepared, but this page is not one Extract
+extracts. Try a product, article or listing page instead, retry it once in a
+few minutes if it should work, or use `--css`; preparing again does not change
+it.
 
 ```bash
 zenrows extract prepare example.com --url https://example.com/p/1 --url https://example.com/list --wait

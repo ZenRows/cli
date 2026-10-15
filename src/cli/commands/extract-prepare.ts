@@ -34,16 +34,21 @@ export const PREPARE_USAGE =
   "       zenrows extract prepare status <domain>";
 
 export const PREPARE_HELP = [
-  "Prepare a domain so `zenrows extract <url>` (extract=auto) works on it. Use it after",
-  "an extract fails with REQS007 (Extract hasn't prepared the domain yet).",
+  "Prepare a domain so `zenrows extract <url>` (extract=auto) works on it. Use it when an",
+  "extract fails with EXTRACT_DOMAIN_NOT_ENABLED (REQS007: the domain is not prepared yet).",
+  "Not for EXTRACT_PAGE_NOT_RECOGNISED: that domain is already prepared, and preparing it",
+  "again does not change that answer.",
   "",
-  `  --url <page-url>       1 to ${MAX_EXAMPLE_URLS} real pages you want to extract, one per kind of page (repeat --url)`,
-  "  --wait                 poll until the domain is ready or failed (a few minutes); off by default",
+  `  --url <page-url>       1 to ${MAX_EXAMPLE_URLS} real pages you want to extract, one per page kind (repeat --url)`,
+  "  --wait                 poll every 30 seconds until the domain is ready or failed; off by default",
   `  --timeout <seconds>    give up waiting after this long (default ${DEFAULT_WAIT_TIMEOUT_MS / 1000})`,
   "  status <domain>        show progress and the account's monthly allowance",
   "  --json                 structured result",
   "",
-  "Costs no credits. Each new domain uses one slot of the account's monthly allowance.",
+  "Preparing takes a few minutes and costs no credits. Each new domain uses one slot of the",
+  "account's monthly allowance; a domain that is already prepared answers ready at once and",
+  "uses none. The domain is the host (shop.example.com and example.com are separate); a",
+  "leading www. is dropped.",
 ].join("\n");
 
 /** Injectable for tests: network, sleep and clock. */
@@ -132,7 +137,7 @@ function validateUrls(raw: unknown, domain: string): string[] {
       code: "INVALID_USAGE",
       message: `Pass 1 to ${MAX_EXAMPLE_URLS} example page URLs with --url (got ${urls.length}).`,
       likely_cause: "Preparation learns the domain from real pages you want to extract.",
-      next_action: "Add one --url per kind of page, e.g. a product page and a listing page.",
+      next_action: "Add one --url per page kind, e.g. a product page and a listing page.",
       suggested_commands: [`zenrows extract prepare ${domain} --url https://${domain}/<page>`],
     });
   }

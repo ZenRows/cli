@@ -6,6 +6,7 @@ import { isEmptyData, runExtract } from "../src/adapters/extract.ts";
 import { defaultConfig } from "../src/core/config.ts";
 import { defaultPolicy } from "../src/core/policy.ts";
 import { ToolkitError } from "../src/core/errors.ts";
+import { refusalReason } from "../src/core/http.ts";
 
 const cfg = defaultConfig();
 
@@ -203,34 +204,91 @@ test("runExtract reports REQS007 with the prepare step and does not retry", asyn
   });
 });
 
-test("runExtract on REQS007 for a page a prepared domain does not recognise points to --css, not prepare", async () => {
-  // The gateway's body for a prepared domain whose page it did not recognise.
-  const body = JSON.stringify({
-    code: "REQS007",
-    title: "Extract did not recognise this page on x.com (REQS007)",
-    detail: "Extract serves x.com, but did not recognise this page as one it can extract.",
-    status: 403,
-  });
+/** A REQS007 the way the gateway sends it: with `reason`, or (an older gateway) without. */
+function reqs007(kind: "domain" | "page" | "allowlist", withReason: boolean): string {
+  const bodies = {
+    domain: {
+      title: "Extract is not prepared for the requested domain (x.com) (REQS007)",
+      detail: "Extract has not been prepared for x.com yet.",
+      reason: "domain_not_prepared",
+    },
+    page: {
+      title: "Extract did not recognise this page on x.com (REQS007)",
+      detail: "Extract serves x.com, but did not recognise this page as one it can extract.",
+      reason: "page_not_recognised",
+    },
+    allowlist: {
+      title: "Extract is not enabled for the requested domain (x.com) (REQS007)",
+      detail: "Extract is not enabled for the requested domain (x.com) yet.",
+      reason: "domain_not_enabled",
+    },
+  } as const;
+  const { reason, ...rest } = bodies[kind];
+  return JSON.stringify({ code: "REQS007", status: 403, ...rest, ...(withReason ? { reason } : {}) });
+}
+
+async function reqs007Error(body: string, url = "https://x.com/search?q=a"): Promise<ToolkitError> {
   let calls = 0;
+  let caught: unknown;
   await withFetchHandler(() => {
     calls += 1;
     return new Response(body, { status: 403, headers: { "content-type": "application/json" } });
   }, async () => {
-    await assert.rejects(
-      () => runExtract({ url: "https://x.com/search?q=a" }, cfg, defaultPolicy(), "testkey"),
-      (e: unknown) => {
-        assert.ok(e instanceof ToolkitError);
-        assert.equal(e.code, "EXTRACT_PAGE_NOT_RECOGNISED");
-        assert.match(e.message, /Preparing the domain again does not help/);
-        const shape = JSON.stringify(e.toJSON());
-        assert.doesNotMatch(shape, /extract prepare/, "no prepare command: it would answer ready and loop");
-        assert.doesNotMatch(shape, /autoparse/);
-        assert.match(shape, /--css/);
-        return true;
-      },
+    caught = await runExtract({ url }, cfg, defaultPolicy(), "testkey").then(
+      () => undefined,
+      (e: unknown) => e,
     );
-    assert.equal(calls, 1);
   });
+  assert.equal(calls, 1, "a REQS007 is never retried");
+  assert.ok(caught instanceof ToolkitError);
+  return caught;
+}
+
+for (const withReason of [true, false]) {
+  const via = withReason ? "the reason field" : "the title (gateway without the reason field)";
+
+  test(`REQS007 page_not_recognised, read from ${via}: the gateway's advice in order, no prepare command`, async () => {
+    const e = await reqs007Error(reqs007("page", withReason));
+    assert.equal(e.code, "EXTRACT_PAGE_NOT_RECOGNISED");
+    let last = -1;
+    for (const step of [
+      /product, article or listing page/,
+      /retry it once in a few minutes; do not retry in a loop/,
+      /--css with explicit selectors/,
+      /Preparing the domain again does not change this/,
+    ]) {
+      const at = e.message.search(step);
+      assert.ok(at > last, `${step} missing or out of order in: ${e.message}`);
+      last = at;
+    }
+    const shape = JSON.stringify(e.toJSON());
+    assert.doesNotMatch(shape, /extract prepare/, "no prepare command: it would answer ready and loop");
+    assert.doesNotMatch(shape, /autoparse|contact Zenrows support/);
+  });
+
+  test(`REQS007 domain_not_enabled, read from ${via}: no prepare command, --css`, async () => {
+    const e = await reqs007Error(reqs007("allowlist", withReason));
+    assert.equal(e.code, "EXTRACT_DOMAIN_NOT_ALLOWED");
+    assert.match(e.message, /preparing it does not change this/);
+    const shape = JSON.stringify(e.toJSON());
+    assert.doesNotMatch(shape, /extract prepare|autoparse/);
+    assert.match(shape, /--css/);
+  });
+
+  test(`REQS007 domain_not_prepared, read from ${via}: the prepare command`, async () => {
+    const e = await reqs007Error(reqs007("domain", withReason), "https://www.x.com/p/1");
+    assert.equal(e.code, "EXTRACT_DOMAIN_NOT_ENABLED");
+    assert.equal(e.toJSON().suggested_commands?.[0], "zenrows extract prepare x.com --url https://www.x.com/p/1 --wait");
+  });
+}
+
+test("refusalReason trusts the field over the sentence, and ignores a reason it does not know", () => {
+  assert.equal(
+    refusalReason(JSON.stringify({ title: "Extract did not recognise this page on x.com", reason: "domain_not_prepared" })),
+    "domain_not_prepared",
+  );
+  assert.equal(refusalReason(JSON.stringify({ reason: "something_new", detail: "Extract serves x.com, but" })), "page_not_recognised");
+  assert.equal(refusalReason("not json"), "domain_not_prepared");
 });
 
 test("runExtract reports legacy AUTH010 like REQS007 and does not retry", async () => {

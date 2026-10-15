@@ -212,7 +212,8 @@ test("prepare status keeps the record when the allowance call fails", async () =
   assert.equal(code, 0);
   assert.equal(out.status, "ready");
   assert.equal(out.allowance, undefined);
-  assert.match(out.next, /Run the extract again/);
+  assert.match(out.next, /example\.com is ready: run the extract again/);
+  assert.match(out.next, /EXTRACT_PAGE_NOT_RECOGNISED/);
 });
 
 test("prepare status on 404 says to prepare the domain first", async () => {
@@ -239,14 +240,14 @@ test("failureNextStep: the step comes from failure.code, the slot sentence from 
   assert.doesNotMatch(failureNextStep("x.com", { code: "unpreparable" }), /slot/);
 });
 
-test("prepare answering ready at once says the domain was already prepared, not to run the extract again", async () => {
+test("prepare answering ready at once says the domain is already prepared and what a page refusal then means", async () => {
   const { calls, fetchImpl } = stub({ [`POST ${BASE}`]: () => res({ ...RECORD, status: "ready", state: "ready" }, 202) });
   const { code, out } = await run(["example.com", "--url", "https://example.com/search", "--wait"], fetchImpl);
   assert.equal(code, 0);
   assert.equal(out.already_prepared, true);
-  assert.match(out.next, /already prepared/);
-  assert.match(out.next, /use --css/);
-  assert.doesNotMatch(out.next, /Run the extract again/);
+  assert.match(out.next, /already prepared, so nothing new was submitted: run the extract \(`zenrows extract https:\/\/example\.com\/search`\)\./);
+  assert.match(out.next, /Preparing the domain again does not change this/);
+  assert.doesNotMatch(out.next, /not covered|contact Zenrows support|autoparse/);
   assert.equal(calls.length, 1, "--wait does not poll a domain that is already ready");
 });
 

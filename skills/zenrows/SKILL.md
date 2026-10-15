@@ -79,8 +79,9 @@ Run `zenrows status` for the live capability matrix. As of this toolkit:
 | MCP | `zenrows mcp` | **available**: `https://mcp.zenrows.com/mcp` |
 
 - Extract: `extract=auto` works on any prepared domain. On one not prepared yet
-  (REQS007), run `zenrows extract prepare <domain> --url <page> --wait`, then
-  extract again; see [[extract]].
+  (`EXTRACT_DOMAIN_NOT_ENABLED`), run `zenrows extract prepare <domain> --url
+  <page> --wait`, then extract again. `EXTRACT_PAGE_NOT_RECOGNISED` means the
+  domain is prepared but not this page: do not prepare again; see [[extract]].
 - Batch: the cheapest path at scale (create, status, results). Estimate specs locally with no key.
 - Crawl: collects the URLs behind one start page, optionally with each page's HTML.
 - Browser: escalation-only, for pages Fetch can't handle; same backend as the MCP `browser_*` tools.

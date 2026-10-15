@@ -307,13 +307,19 @@ export function failureNextStep(domain: string, failure: PreparedDomain["failure
 }
 
 /**
- * What an already-prepared domain means for an extract that answered REQS007:
- * that kind of page is not covered, and preparing again does not change it (the
- * API returns the existing ready record). Said instead of "run the extract
- * again", which would loop.
+ * What to do when a page on a prepared domain answers REQS007 with reason
+ * page_not_recognised, in the gateway's own order. On a prepared domain Extract
+ * learns a new kind of page on its first request, so that answer means this page
+ * is not one Extract extracts (a home, search, login or category page) or a
+ * transient failure kept it from trying, never that the domain needs preparing
+ * again: resubmitting returns the existing ready record, so pointing there would
+ * loop.
  */
-export const PAGE_KIND_NOT_COVERED =
-  "If the extract still fails with REQS007 on this domain, that kind of page is not covered and preparing again does not change it: use --css, or contact Zenrows support with the URL.";
+export const PAGE_NOT_RECOGNISED_STEPS =
+  "Try a product, article or listing page on the same site instead. If this page should work, retry it once in a few minutes; do not retry in a loop. Otherwise use --css with explicit selectors. Preparing the domain again does not change this.";
+
+/** Said once a domain is ready, so a user who then meets EXTRACT_PAGE_NOT_RECOGNISED does not resubmit. */
+const IF_PAGE_NOT_RECOGNISED = `If the extract then fails with EXTRACT_PAGE_NOT_RECOGNISED, Extract did not recognise that page. ${PAGE_NOT_RECOGNISED_STEPS}`;
 
 /**
  * The next step for a status record. `alreadyReady` is set when a submit answered
@@ -321,9 +327,10 @@ export const PAGE_KIND_NOT_COVERED =
  */
 export function statusNextStep(record: PreparedDomain, opts: { exampleUrl?: string; alreadyReady?: boolean } = {}): string {
   if (record.status === "ready") {
-    if (opts.alreadyReady) return `${record.domain} was already prepared, so nothing new was submitted. ${PAGE_KIND_NOT_COVERED}`;
-    return `Ready. Run the extract again${opts.exampleUrl ? `: zenrows extract ${opts.exampleUrl}` : ""}. ${PAGE_KIND_NOT_COVERED}`;
+    const extract = opts.exampleUrl ? ` (\`zenrows extract ${opts.exampleUrl}\`)` : "";
+    if (opts.alreadyReady) return `${record.domain} is already prepared, so nothing new was submitted: run the extract${extract}. ${IF_PAGE_NOT_RECOGNISED}`;
+    return `${record.domain} is ready: run the extract again${extract}. ${IF_PAGE_NOT_RECOGNISED}`;
   }
   if (record.status === "failed") return failureNextStep(record.domain, record.failure);
-  return `Preparing (a few minutes). Check with: zenrows extract prepare status ${record.domain}`;
+  return `Preparing; it takes a few minutes. Check about every 30 seconds with: zenrows extract prepare status ${record.domain}`;
 }

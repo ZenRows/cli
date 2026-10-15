@@ -31,37 +31,43 @@ protected or dynamic sites. Set `js_render` or `premium_proxy` only to force a
 fixed configuration; that turns Adaptive Stealth Mode off. Check `empty` in the
 result: true means no field came back with a value.
 
-## Domain not prepared yet (REQS007): prepare it, then extract again
+## REQS007: prepare the domain, then extract again
 
-`mode=auto` works on any prepared domain, and you can prepare one yourself. On
-a domain Extract hasn't prepared yet, `extract` returns a tool error (`REQS007`;
-legacy `AUTH010`) whose `next_tool` holds the `prepare_domain` arguments. It does
-not retry with Autoparse unless you set `fallback_autoparse: true`. The flow:
+`mode=auto` works on any prepared domain, and you can prepare one yourself.
+When Extract refuses a page, `extract` returns a tool error with code
+`REQS007` (legacy `AUTH010`) and a `reason`. It never retries with Autoparse
+unless you set `fallback_autoparse: true`.
+
+| `reason` | Meaning | Next step |
+| --- | --- | --- |
+| `domain_not_prepared` | The domain is not prepared yet. | `prepare_domain` (the error's `next_tool` holds its arguments), then poll, then `extract` again. |
+| `page_not_recognised` | The domain is prepared, but Extract did not recognise this page as one it can extract (a home, search, login or category page, or a transient failure). | Try a product, article or listing page on the same site instead. If this page should work, retry it once in a few minutes; do not retry in a loop. Otherwise use `mode=css`. Do not call `prepare_domain`: preparing again does not change this. |
+| `domain_not_enabled` | Extract is not enabled for the site. | Use `mode=css`, or contact Zenrows support to have the site enabled. Preparing does not change this. |
+
+Preparing a domain:
 
 ```
-extract({ url })                                          # 1. error REQS007
+extract({ url })                                          # 1. REQS007, reason domain_not_prepared
 prepare_domain({ domain: "example.com",
   example_urls: ["https://example.com/p/1", "https://example.com/list"] })
                                                           # 2. returns at once, status "preparing"
-prepared_domain_status({ domain: "example.com" })         # 3. every ~30 s until status "ready"
+prepared_domain_status({ domain: "example.com" })         # 3. about every 30 seconds until "ready"
 extract({ url })                                          # 4. extract again
 ```
 
-- `example_urls`: 1 to 5 real pages you want to extract, one per kind of page.
+- `example_urls`: 1 to 5 real pages you want to extract, one per page kind
+  (for example a product page and a listing page).
+- The domain is the host: `shop.example.com` and `example.com` are prepared
+  separately, and a leading `www.` is dropped.
 - Preparing takes a few minutes and costs no credits. Each new domain uses one
   slot of the account's monthly allowance; `prepared_domain_status` returns it
   (`used` / `limit` / `remaining`) and a `next` field with what to do now.
 - `out_of_allowance`: no slots left this month; use `mode=css`.
-  `overloaded` / `disabled`: retry in a few minutes, do not loop.
+  `overloaded` / `disabled`: retry in a few minutes; do not loop.
   A `failed` status carries `failure.code` and `failure.slot_consumed`; follow `next`.
-- The domain is the host: `shop.example.com` and `example.com` are prepared
-  separately; a leading `www.` is dropped.
-- **Do not loop.** If `prepare_domain` answers `ready` at once
-  (`already_prepared: true`), the domain was prepared before; an `extract` that
-  still returns REQS007 means that kind of page is not covered, and preparing
-  again changes nothing. The same goes for REQS007 with
-  `reason: "page_not_recognised"`. Use `mode=css`, or contact Zenrows support
-  with the URL.
+- A domain that is already prepared answers `ready` at once
+  (`already_prepared: true`) and uses no slot: call `extract`. If it then
+  returns `page_not_recognised`, follow that row of the table, not `prepare_domain`.
 
 ## Fallback: `scrape` extraction params
 

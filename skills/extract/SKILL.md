@@ -28,39 +28,45 @@ zenrows extract <url> --validate                   # fail if not valid JSON
 - **CSS**: you know the exact fields/selectors and want determinism.
 - **Markdown/plaintext**: feed clean content to an LLM yourself.
 
-## Domain not prepared yet (REQS007): prepare it, then extract again
+## REQS007: prepare the domain, then extract again
 
 `extract=auto` works on any prepared domain, and you can prepare one yourself.
-On a domain Extract hasn't prepared yet, `zenrows extract` fails with
-`EXTRACT_DOMAIN_NOT_ENABLED` (API code `403 REQS007`; legacy `402 AUTH010`) and
-prints the command to run. It does not retry with Autoparse. The flow:
+When Extract refuses a page with `403 REQS007`, `zenrows extract` says which
+of three cases it is and prints the next step. It never retries with Autoparse.
+
+| Error code | Meaning | Next step |
+| --- | --- | --- |
+| `EXTRACT_DOMAIN_NOT_ENABLED` | The domain is not prepared yet (also the legacy `402 AUTH010`). | Prepare it (below), then extract again. |
+| `EXTRACT_PAGE_NOT_RECOGNISED` | The domain is prepared, but Extract did not recognise this page as one it can extract (a home, search, login or category page, or a transient failure). | Try a product, article or listing page on the same site instead. If this page should work, retry it once in a few minutes; do not retry in a loop. Otherwise use `--css`. Preparing the domain again does not change this. |
+| `EXTRACT_DOMAIN_NOT_ALLOWED` | Extract is not enabled for the site. | Use `--css`, or contact Zenrows support to have the site enabled. Preparing does not change this. |
+
+Preparing a domain:
 
 ```
-zenrows extract https://example.com/p/1             # 1. fails: Extract hasn't prepared example.com yet
+zenrows extract https://example.com/p/1             # 1. fails: EXTRACT_DOMAIN_NOT_ENABLED
 zenrows extract prepare example.com \
   --url https://example.com/p/1 --url https://example.com/list --wait
                                                     # 2. prepare it and wait until ready (a few minutes)
 zenrows extract https://example.com/p/1             # 3. extract again
 ```
 
-- `--url`: 1 to 5 real pages you want to extract, one per kind of page.
-- Without `--wait` the command returns at once; then poll with
-  `zenrows extract prepare status example.com` (about every 30 seconds) until
-  it says `ready`.
+- `--url`: 1 to 5 real pages you want to extract, one per page kind (for
+  example a product page and a listing page).
+- Without `--wait` the command returns at once; then check about every 30
+  seconds with `zenrows extract prepare status example.com` until it says
+  `ready`. `--wait` polls at the same pace.
 - The domain is the host: `shop.example.com` and `example.com` are prepared
-  separately; a leading `www.` is dropped.
-- Preparing costs no credits. Each new domain uses one slot of the account's
-  monthly allowance; `prepare status` shows `used` / `limit` / `remaining`.
+  separately, and a leading `www.` is dropped.
+- Preparing takes a few minutes and costs no credits. Each new domain uses one
+  slot of the account's monthly allowance; `prepare status` shows `used` /
+  `limit` / `remaining`.
 - `EXTRACT_PREPARE_OUT_OF_ALLOWANCE`: no slots left this month; use `--css`.
-  `EXTRACT_PREPARE_UNAVAILABLE`: retry in a few minutes, do not loop.
+  `EXTRACT_PREPARE_UNAVAILABLE`: retry in a few minutes; do not loop.
   A `failed` status prints the next step for its failure code and says whether
   the attempt used an allowance slot.
-- **Do not loop.** If `prepare` answers `ready` at once (`already_prepared`),
-  the domain was prepared before; an extract that still fails with REQS007
-  means that kind of page is not covered, and preparing again changes nothing.
-  The same goes for `EXTRACT_PAGE_NOT_RECOGNISED` (REQS007 on a prepared domain:
-  Extract did not recognise this page). Use `--css`, or contact Zenrows support
-  with the URL.
+- A domain that is already prepared answers `ready` at once
+  (`already_prepared`) and uses no slot: run the extract. If it then fails with
+  `EXTRACT_PAGE_NOT_RECOGNISED`, follow that row of the table, not `prepare`.
 
 ## Rules
 - Validate on a single page before scaling across many URLs.

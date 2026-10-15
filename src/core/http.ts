@@ -11,7 +11,7 @@ import { ENV_KEY, resolveApiKey } from "./auth.ts";
 import { registerSecret } from "./logger.ts";
 import { CLI_USER_AGENT } from "./config.ts";
 import { agentClientHeader } from "./agent-client.ts";
-import { normalizeDomain, prepareCommand } from "./prepared-domains-api.ts";
+import { normalizeDomain, PAGE_NOT_RECOGNISED_STEPS, prepareCommand } from "./prepared-domains-api.ts";
 
 export interface ScraperResult {
   status: number;
@@ -301,41 +301,64 @@ export async function scrape(
   return result;
 }
 
+/** Why a REQS007 refused, as the gateway's `reason` field names it. */
+export type RefusalReason = "domain_not_prepared" | "page_not_recognised" | "domain_not_enabled";
+
+const REFUSAL_REASONS: readonly string[] = ["domain_not_prepared", "page_not_recognised", "domain_not_enabled"];
+
 /**
- * REQS007 has two causes, which the problem body tells apart: the domain is not
- * prepared ("Extract is not prepared for the requested domain (...)"), or it is
- * prepared and Extract did not recognise this page ("Extract did not recognise
- * this page on ...", detail "Extract serves ..."). Only the first is fixed by
- * preparing the domain; preparing a prepared domain returns its existing ready
- * record, so pointing there would loop.
+ * Which REQS007 this is. Only domain_not_prepared is fixed by preparing the
+ * domain: on page_not_recognised the domain is already prepared, and
+ * resubmitting it returns the existing ready record, so pointing there would
+ * loop.
+ *
+ * The gateway says it in the problem's `reason` field, read first. The sentence
+ * match below is only the fallback for a gateway deployed before that field
+ * existed, and reads the titles that gateway sends; remove it once every gateway
+ * sends `reason`.
  */
-export function isPageNotRecognised(body: string): boolean {
+export function refusalReason(body: string): RefusalReason {
+  let j: { reason?: unknown; title?: unknown; detail?: unknown };
   try {
-    const j = JSON.parse(body) as { title?: unknown; detail?: unknown };
-    const title = typeof j.title === "string" ? j.title : "";
-    const detail = typeof j.detail === "string" ? j.detail : "";
-    return /did not recogni[sz]e this page/i.test(title) || /^Extract serves /.test(detail);
+    j = JSON.parse(body) as typeof j;
   } catch {
-    return false;
+    return "domain_not_prepared";
   }
+  if (typeof j.reason === "string" && REFUSAL_REASONS.includes(j.reason)) return j.reason as RefusalReason;
+  const title = typeof j.title === "string" ? j.title : "";
+  const detail = typeof j.detail === "string" ? j.detail : "";
+  if (/did not recogni[sz]e this page/i.test(title) || /^Extract serves /.test(detail)) return "page_not_recognised";
+  if (/^Extract is not enabled/i.test(title)) return "domain_not_enabled";
+  return "domain_not_prepared";
 }
 
 /**
- * REQS007 (or the legacy AUTH010) on extract=auto. On a domain not prepared yet
- * the message names the exact command to prepare it, because agents copy it; on
- * a page a prepared domain does not recognise it names --css instead. Neither
- * offers Autoparse.
+ * REQS007 (or the legacy AUTH010) on extract=auto. Each reason names its own
+ * next step, because agents copy it: the exact prepare command for a domain not
+ * prepared yet, the gateway's advice in the gateway's order for a page it did not
+ * recognise. None offers Autoparse.
  */
 export function extractDomainNotPrepared(url: string, body: string): ToolkitError {
   const domain = normalizeDomain(url);
   const detail = zrErrorDetail(body);
   const css = `zenrows extract ${url} --css '{"title":"h1"}'`;
-  if (isPageNotRecognised(body)) {
+  const reason = refusalReason(body);
+  if (reason === "page_not_recognised") {
     return new ToolkitError({
       code: "EXTRACT_PAGE_NOT_RECOGNISED",
-      message: `Extract serves ${domain} but did not recognise this page. Preparing the domain again does not help; use --css, or contact Zenrows support with the URL.`,
+      message: `Extract serves ${domain} but did not recognise this page as one it can extract (it may be a home, search, login or category page). ${PAGE_NOT_RECOGNISED_STEPS} The request was not charged.`,
       likely_cause: detail ?? `Extract serves ${domain} but did not recognise this page.`,
-      next_action: "Extract this page with --css and explicit selectors, or contact Zenrows support with the URL.",
+      next_action: PAGE_NOT_RECOGNISED_STEPS,
+      suggested_commands: [css],
+      server_code: "REQS007",
+    });
+  }
+  if (reason === "domain_not_enabled") {
+    return new ToolkitError({
+      code: "EXTRACT_DOMAIN_NOT_ALLOWED",
+      message: `Extract is not enabled for ${domain}, and preparing it does not change this.`,
+      likely_cause: detail ?? `Extract is not enabled for ${domain}.`,
+      next_action: "Extract this page with --css and explicit selectors, or contact Zenrows support to have the site enabled.",
       suggested_commands: [css],
       server_code: "REQS007",
     });
@@ -345,8 +368,9 @@ export function extractDomainNotPrepared(url: string, body: string): ToolkitErro
     code: "EXTRACT_DOMAIN_NOT_ENABLED",
     message: `Extract hasn't prepared ${domain} yet. Prepare it with \`${prepare}\` (a few example URLs, a few minutes, no credits), then retry; meanwhile use --css.`,
     likely_cause: detail ?? `Extract has not prepared ${domain} yet.`,
-    next_action: `Run \`${prepare} --wait\` (add up to 5 --url pages, one per kind of page you want), then retry \`zenrows extract ${url}\`. Without --wait, check progress with \`zenrows extract prepare status ${domain}\`. Meanwhile extract with --css and explicit selectors.`,
+    next_action: `Run \`${prepare} --wait\` (up to 5 --url pages, one per page kind you want), then retry \`zenrows extract ${url}\`. Without --wait, check progress about every 30 seconds with \`zenrows extract prepare status ${domain}\`. Meanwhile extract with --css and explicit selectors.`,
     suggested_commands: [`${prepare} --wait`, `zenrows extract prepare status ${domain}`, css],
+    server_code: "REQS007",
   });
 }
 
