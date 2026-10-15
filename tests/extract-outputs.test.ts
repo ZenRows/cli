@@ -186,7 +186,7 @@ test("runExtract reports REQS007 with the prepare step and does not retry", asyn
       () => runExtract({ url: "https://www.x.com/item/1" }, cfg, defaultPolicy(), "testkey"),
       (e: unknown) => {
         assert.ok(e instanceof ToolkitError);
-        assert.equal(e.code, "EXTRACT_DOMAIN_NOT_ENABLED");
+        assert.equal(e.code, "EXTRACT_DOMAIN_NOT_PREPARED");
         assert.equal(
           e.message,
           "Extract hasn't prepared x.com yet. Prepare it with `zenrows extract prepare x.com --url https://www.x.com/item/1` (a few example URLs, a few minutes, no credits), then retry; meanwhile use --css.",
@@ -268,7 +268,7 @@ for (const withReason of [true, false]) {
 
   test(`REQS007 domain_not_enabled, read from ${via}: no prepare command, --css`, async () => {
     const e = await reqs007Error(reqs007("allowlist", withReason));
-    assert.equal(e.code, "EXTRACT_DOMAIN_NOT_ALLOWED");
+    assert.equal(e.code, "EXTRACT_DOMAIN_NOT_ENABLED");
     assert.match(e.message, /preparing it does not change this/);
     const shape = JSON.stringify(e.toJSON());
     assert.doesNotMatch(shape, /extract prepare|autoparse/);
@@ -277,7 +277,7 @@ for (const withReason of [true, false]) {
 
   test(`REQS007 domain_not_prepared, read from ${via}: the prepare command`, async () => {
     const e = await reqs007Error(reqs007("domain", withReason), "https://www.x.com/p/1");
-    assert.equal(e.code, "EXTRACT_DOMAIN_NOT_ENABLED");
+    assert.equal(e.code, "EXTRACT_DOMAIN_NOT_PREPARED");
     assert.equal(e.toJSON().suggested_commands?.[0], "zenrows extract prepare x.com --url https://www.x.com/p/1 --wait");
   });
 }
@@ -301,7 +301,7 @@ test("runExtract reports legacy AUTH010 like REQS007 and does not retry", async 
       () => runExtract({ url: "https://x.com" }, cfg, defaultPolicy(), "testkey"),
       (e: unknown) =>
         e instanceof ToolkitError &&
-        e.code === "EXTRACT_DOMAIN_NOT_ENABLED" &&
+        e.code === "EXTRACT_DOMAIN_NOT_PREPARED" &&
         e.message.startsWith("Extract hasn't prepared x.com yet. Prepare it with `zenrows extract prepare x.com --url https://x.com`"),
     );
     assert.equal(calls.length, 1, "AUTH010 must not be retried with autoparse");

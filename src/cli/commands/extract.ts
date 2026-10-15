@@ -31,7 +31,7 @@ export const extract: Command = {
   help: [
     "Methods:",
     "  (default)              extract=auto: site-tailored Extract on any prepared domain",
-    "                         (EXTRACT_DOMAIN_NOT_ENABLED = not prepared yet: run zenrows extract prepare, below)",
+    "                         (EXTRACT_DOMAIN_NOT_PREPARED = not prepared yet: run zenrows extract prepare, below)",
     "  --autoparse            deprecated general-purpose Autoparse (any domain)",
     "  --css <json>           CSS selector map, e.g. '{\"title\":\"h1\",\"price\":\".price\"}'",
     "  --outputs <list>       built-in output filters → JSON: emails, phone_numbers, headings,",

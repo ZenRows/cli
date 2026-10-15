@@ -355,7 +355,7 @@ export function extractDomainNotPrepared(url: string, body: string): ToolkitErro
   }
   if (reason === "domain_not_enabled") {
     return new ToolkitError({
-      code: "EXTRACT_DOMAIN_NOT_ALLOWED",
+      code: "EXTRACT_DOMAIN_NOT_ENABLED",
       message: `Extract is not enabled for ${domain}, and preparing it does not change this.`,
       likely_cause: detail ?? `Extract is not enabled for ${domain}.`,
       next_action: "Extract this page with --css and explicit selectors, or contact Zenrows support to have the site enabled.",
@@ -365,7 +365,7 @@ export function extractDomainNotPrepared(url: string, body: string): ToolkitErro
   }
   const prepare = prepareCommand(url);
   return new ToolkitError({
-    code: "EXTRACT_DOMAIN_NOT_ENABLED",
+    code: "EXTRACT_DOMAIN_NOT_PREPARED",
     message: `Extract hasn't prepared ${domain} yet. Prepare it with \`${prepare}\` (a few example URLs, a few minutes, no credits), then retry; meanwhile use --css.`,
     likely_cause: detail ?? `Extract has not prepared ${domain} yet.`,
     next_action: `Run \`${prepare} --wait\` (up to 5 --url pages, one per page kind you want), then retry \`zenrows extract ${url}\`. Without --wait, check progress about every 30 seconds with \`zenrows extract prepare status ${domain}\`. Meanwhile extract with --css and explicit selectors.`,

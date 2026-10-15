@@ -35,7 +35,7 @@ export const PREPARE_USAGE =
 
 export const PREPARE_HELP = [
   "Prepare a domain so `zenrows extract <url>` (extract=auto) works on it. Use it when an",
-  "extract fails with EXTRACT_DOMAIN_NOT_ENABLED (REQS007: the domain is not prepared yet).",
+  "extract fails with EXTRACT_DOMAIN_NOT_PREPARED (REQS007: the domain is not prepared yet).",
   "Not for EXTRACT_PAGE_NOT_RECOGNISED: that domain is already prepared, and preparing it",
   "again does not change that answer.",
   "",

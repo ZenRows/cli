@@ -36,14 +36,14 @@ of three cases it is and prints the next step. It never retries with Autoparse.
 
 | Error code | Meaning | Next step |
 | --- | --- | --- |
-| `EXTRACT_DOMAIN_NOT_ENABLED` | The domain is not prepared yet (also the legacy `402 AUTH010`). | Prepare it (below), then extract again. |
+| `EXTRACT_DOMAIN_NOT_PREPARED` | The domain is not prepared yet (also the legacy `402 AUTH010`). | Prepare it (below), then extract again. |
 | `EXTRACT_PAGE_NOT_RECOGNISED` | The domain is prepared, but Extract did not recognise this page as one it can extract (a page with nothing to extract, such as a home page, or a transient failure). | Try a product, article or listing page on the same site instead. If this page should work, retry it once in a few minutes; do not retry in a loop. Otherwise use `--css`. Preparing the domain again does not change this. |
-| `EXTRACT_DOMAIN_NOT_ALLOWED` | Extract is not enabled for the site. | Use `--css`, or contact Zenrows support to have the site enabled. Preparing does not change this. |
+| `EXTRACT_DOMAIN_NOT_ENABLED` | Extract is not enabled for the site. | Use `--css`, or contact Zenrows support to have the site enabled. Preparing does not change this. |
 
 Preparing a domain:
 
 ```
-zenrows extract https://example.com/p/1             # 1. fails: EXTRACT_DOMAIN_NOT_ENABLED
+zenrows extract https://example.com/p/1             # 1. fails: EXTRACT_DOMAIN_NOT_PREPARED
 zenrows extract prepare example.com \
   --url https://example.com/p/1 --url https://example.com/list --wait
                                                     # 2. prepare it and wait until ready (a few minutes)

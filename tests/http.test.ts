@@ -138,7 +138,7 @@ test("scrape does NOT advise a (billed) retry when the target cannot be resolved
   );
 });
 
-test("scrape maps AUTH010 on extract=auto to EXTRACT_DOMAIN_NOT_ENABLED", async () => {
+test("scrape maps AUTH010 on extract=auto to EXTRACT_DOMAIN_NOT_PREPARED", async () => {
   const AUTH010 = JSON.stringify({
     code: "AUTH010",
     detail: "This domain is not enabled for Extract.",
@@ -157,7 +157,7 @@ test("scrape maps AUTH010 on extract=auto to EXTRACT_DOMAIN_NOT_ENABLED", async 
           }),
         (err: unknown) => {
           assert.ok(err && typeof err === "object" && "code" in err);
-          assert.equal((err as { code: string }).code, "EXTRACT_DOMAIN_NOT_ENABLED");
+          assert.equal((err as { code: string }).code, "EXTRACT_DOMAIN_NOT_PREPARED");
           return true;
         },
       );
@@ -165,7 +165,7 @@ test("scrape maps AUTH010 on extract=auto to EXTRACT_DOMAIN_NOT_ENABLED", async 
   );
 });
 
-test("scrape maps REQS007 on extract=auto to EXTRACT_DOMAIN_NOT_ENABLED", async () => {
+test("scrape maps REQS007 on extract=auto to EXTRACT_DOMAIN_NOT_PREPARED", async () => {
   const REQS007 = JSON.stringify({
     code: "REQS007",
     detail: "Extract has not been prepared for example.net yet.",
@@ -178,7 +178,7 @@ test("scrape maps REQS007 on extract=auto to EXTRACT_DOMAIN_NOT_ENABLED", async 
       await assert.rejects(
         () => scrape("https://api.zenrows.com/v1/", "test-key", { url: "https://example.net", extract: "auto" }),
         (err: unknown) => {
-          assert.equal((err as { code: string }).code, "EXTRACT_DOMAIN_NOT_ENABLED");
+          assert.equal((err as { code: string }).code, "EXTRACT_DOMAIN_NOT_PREPARED");
           assert.equal(
             (err as { message: string }).message,
             "Extract hasn't prepared example.net yet. Prepare it with `zenrows extract prepare example.net --url https://example.net` (a few example URLs, a few minutes, no credits), then retry; meanwhile use --css.",
@@ -190,7 +190,7 @@ test("scrape maps REQS007 on extract=auto to EXTRACT_DOMAIN_NOT_ENABLED", async 
   );
 });
 
-test("scrape does not map REQS007 to EXTRACT_DOMAIN_NOT_ENABLED without extract=auto", async () => {
+test("scrape does not map REQS007 to EXTRACT_DOMAIN_NOT_PREPARED without extract=auto", async () => {
   const REQS007 = JSON.stringify({ code: "REQS007", detail: "Extract has not been prepared for example.net yet.", status: 403 });
   await withFetch(
     () => new Response(REQS007, { status: 403, headers: { "content-type": "application/json" } }),
@@ -198,7 +198,7 @@ test("scrape does not map REQS007 to EXTRACT_DOMAIN_NOT_ENABLED without extract=
       await assert.rejects(
         () => scrape("https://api.zenrows.com/v1/", "test-key", { url: "https://example.net", autoparse: true }),
         (err: unknown) => {
-          assert.notEqual((err as { code: string }).code, "EXTRACT_DOMAIN_NOT_ENABLED");
+          assert.notEqual((err as { code: string }).code, "EXTRACT_DOMAIN_NOT_PREPARED");
           return true;
         },
       );
@@ -208,7 +208,7 @@ test("scrape does not map REQS007 to EXTRACT_DOMAIN_NOT_ENABLED without extract=
 
 test("scrape treats AUTH010 without extract as a credits/plan error, not EXTRACT_DOMAIN", async () => {
   // AUTH010 is also used for other plan-gated features; only map it to
-  // EXTRACT_DOMAIN_NOT_ENABLED when the request asked for extract=auto.
+  // EXTRACT_DOMAIN_NOT_PREPARED when the request asked for extract=auto.
   const AUTH010 = JSON.stringify({
     code: "AUTH010",
     detail: "Feature is not included in plan.",

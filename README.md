@@ -124,7 +124,7 @@ zenrows extract <url> --output markdown
 ```
 
 On a domain Extract hasn't prepared yet, `zenrows extract` fails with
-`EXTRACT_DOMAIN_NOT_ENABLED` (API code REQS007) and prints the command to
+`EXTRACT_DOMAIN_NOT_PREPARED` (API code REQS007) and prints the command to
 prepare it. Preparing takes a few minutes and costs no credits; each new domain
 uses one slot of the monthly allowance. `EXTRACT_PAGE_NOT_RECOGNISED` (also
 REQS007) is different: the domain is prepared, but this page is not one Extract

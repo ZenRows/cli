@@ -100,7 +100,7 @@ export async function runExtract(
     try {
       return await runExtractOnce({ ...opts, method: "extract" }, config, policy, apiKey);
     } catch (err) {
-      if (err instanceof ToolkitError && err.code === "EXTRACT_DOMAIN_NOT_ENABLED") {
+      if (err instanceof ToolkitError && err.code === "EXTRACT_DOMAIN_NOT_PREPARED") {
         const outcome = await runExtractOnce({ ...opts, method: "autoparse" }, config, policy, apiKey);
         return { ...outcome, fellBackToAutoparse: true };
       }
