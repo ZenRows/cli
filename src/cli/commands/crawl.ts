@@ -72,7 +72,8 @@ export const crawl: Command = {
     "  content <id> <content_id>         print one kept URL's page (content_id or content_url)",
     "    --out <file>                    write it to a file instead",
     "  download <id> [--out <file>]      save the NDJSON export (with page HTML for html crawls),",
-    "                                    default <id>.jsonl; partial while the crawl runs",
+    "                                    default <id>.jsonl; partial while more can come (a running",
+    "                                    crawl, or pages still in flight after a stop)",
     "  stop <id>                         stop a running crawl (an ended crawl answers as it ended)",
     "  wait <id> [--timeout <s>]         poll until the crawl ends or s seconds (default 600) run out;",
     "                                    a crawl still running then is printed, not stopped",
@@ -308,12 +309,15 @@ async function downloadCmd(rest: string[], ctx: RunContext): Promise<number> {
   assertUsable("crawl");
   const apiKey = requireApiKey();
   const { status, count } = await downloadCrawl(id, (ndjson) => writeOutStream(file, ndjson), { apiKey });
-  const partial = status === "running";
+  // A stop reads `stopped` at once, but the API still reads the pages in flight for up to 10
+  // minutes and builds the file from what it has kept until then. Its next_cursor says when it is done.
+  const partial = status === "running" || (status === "stopped" && (await listAllResults(id, { apiKey, pageSize: 10_000 })).partial);
+  const note = partial ? downloadNote(status) : undefined;
   if (json) {
-    log.out(JSON.stringify({ ok: true, crawl_id: id, status: status ?? null, partial, count, file }, null, 2));
+    log.out(JSON.stringify({ ok: true, crawl_id: id, status: status ?? null, partial, ...(note ? { note } : {}), count, file }, null, 2));
   } else {
     log.success(`Downloaded ${count} result(s) → ${file}`);
-    if (partial) log.warn("  The crawl is still running: this file is partial. Download again once it ends.");
+    if (note) log.warn(`  ${note}`);
   }
   return 0;
 }
@@ -340,6 +344,12 @@ function printResults(
   }
   if (note) log.warn(`  ${note}`);
   return 0;
+}
+
+function downloadNote(status: string | undefined): string {
+  return status === "running"
+    ? "The crawl is still running: this file is partial. Download again once it ends."
+    : "The crawl was stopped, but pages fetched before the stop can still add lines for up to 10 minutes: download again later.";
 }
 
 function partialNote(status: string): string {

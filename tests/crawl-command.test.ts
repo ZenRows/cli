@@ -438,6 +438,44 @@ test("crawl download writes the NDJSON export to <id>.jsonl", async () => {
   );
 });
 
+test("crawl download on a stopped crawl is partial, with a note, while the API keeps next_cursor set", async () => {
+  await withCrawlWorkspace(
+    (url) =>
+      url.pathname.endsWith("/download")
+        ? new Response('{"url":"https://example.com/product/1"}\n', {
+            status: 200,
+            headers: { "content-type": "application/x-ndjson", "x-crawl-status": "stopped" },
+          })
+        : json({ ...crawlBody, status: "stopped", results: [], next_cursor: "p2" }),
+    async (calls) => {
+      const { code, out } = await run(["download", "c_1"]);
+      assert.equal(code, 0);
+      assert.equal(out.status, "stopped");
+      assert.equal(out.partial, true);
+      assert.match(out.note, /download again later/);
+      assert.equal(calls[1]!.url.pathname, "/v1/crawls/c_1");
+    },
+  );
+});
+
+test("crawl download on a stopped crawl is final once the API's next_cursor is null", async () => {
+  await withCrawlWorkspace(
+    (url) =>
+      url.pathname.endsWith("/download")
+        ? new Response('{"url":"https://example.com/product/1"}\n', {
+            status: 200,
+            headers: { "content-type": "application/x-ndjson", "x-crawl-status": "stopped" },
+          })
+        : json({ ...crawlBody, status: "stopped", results: [{ url: "https://example.com/product/1" }], next_cursor: null }),
+    async () => {
+      const { code, out } = await run(["download", "c_1"]);
+      assert.equal(code, 0);
+      assert.equal(out.partial, false);
+      assert.equal(out.note, undefined);
+    },
+  );
+});
+
 test("crawl download keeps an earlier file when the export fails", async () => {
   await withCrawlWorkspace(
     () => json({ code: "crawl_not_found", title: "Not found", status: 404 }, 404),
