@@ -335,6 +335,12 @@ test("crawl get exits 0 for completed and stopped crawls", async () => {
   }
 });
 
+// What the server says when credits end a crawl, as error.detail.
+const creditStopDetail: Record<string, string> = {
+  insufficient_credits: "The crawl stopped because your account has no credits left.",
+  api_key_cap_reached: "The crawl stopped because your API key reached one of its credit caps.",
+};
+
 test("a crawl the credits ended exits 1 with the code a 402 create gets, stopped or failed", async () => {
   const cases = [
     { status: "stopped", server: "insufficient_credits", code: "CRAWL_INSUFFICIENT_CREDITS", advice: /zenrows usage/ },
@@ -350,7 +356,7 @@ test("a crawl the credits ended exits 1 with the code a 402 create gets, stopped
         json({
           ...crawlBody,
           status: k.status,
-          error: { code: k.server, detail: "Batch stopped the crawl." },
+          error: { code: k.server, detail: creditStopDetail[k.server] },
           results: [{ url: "https://example.com/product/a" }],
           next_cursor: null,
         }),
@@ -362,7 +368,7 @@ test("a crawl the credits ended exits 1 with the code a 402 create gets, stopped
         assert.equal(out.error.code, k.code, label);
         assert.equal(out.error.server_code, k.server, label);
         assert.equal(out.error.crawl_id, "c_1", label);
-        assert.match(out.error.likely_cause, /Batch stopped the crawl\. Stopped crawl c_1/, label);
+        assert.ok(out.error.likely_cause.includes(`${creditStopDetail[k.server]} Stopped crawl c_1`), label);
         assert.match(out.error.next_action, k.advice, label);
         assert.ok(out.error.suggested_commands.includes("zenrows crawl get c_1"), label);
         assert.equal(out.results.length, 1, label);
