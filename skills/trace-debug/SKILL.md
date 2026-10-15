@@ -54,7 +54,8 @@ zenrows trace export <run-id>     # JSON for sharing
   its limit of active jobs (3 by default), shared with its Batch jobs.
   Nothing was created; retry after `retry_after` seconds (see
   `zenrows crawl list`).
-- `CRAWL_FAILED` → the crawl ended `failed`; `error.code` in
+- `CRAWL_FAILED` → the crawl ended `failed`, or `stopped` because credits
+  ran out or the key hit a credit cap; `error.code` in
   `zenrows crawl get <id> --json` says why, with `error.detail`. See
   [[crawl]].
 - `PARAM_CONFLICT_AUTO_MANUAL` → drop the managed flags or add `--manual`.

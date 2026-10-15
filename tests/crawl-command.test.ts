@@ -335,6 +335,30 @@ test("crawl get exits 0 for completed and stopped crawls", async () => {
   }
 });
 
+test("crawl get exits 1 with CRAWL_FAILED on a crawl stopped on credits", async () => {
+  for (const code of ["insufficient_credits", "api_key_cap_reached"]) {
+    await withCrawlWorkspace(
+      () =>
+        json({
+          ...crawlBody,
+          status: "stopped",
+          error: { code, detail: "Batch stopped the crawl." },
+          results: [{ url: "https://example.com/product/a" }],
+          next_cursor: null,
+        }),
+      async () => {
+        const { code: exit, out } = await run(["get", "c_1"]);
+        assert.equal(exit, 1, code);
+        assert.equal(out.ok, false);
+        assert.equal(out.status, "stopped");
+        assert.equal(out.error.code, "CRAWL_FAILED");
+        assert.equal(out.error.server_code, code);
+        assert.equal(out.results.length, 1);
+      },
+    );
+  }
+});
+
 test("crawl get on an unknown id exits 1 with CRAWL_NOT_FOUND", async () => {
   await withCrawlWorkspace(
     () => json({ code: "crawl_not_found", title: "Crawl not found", detail: "No crawl c_x.", status: 404 }, 404),

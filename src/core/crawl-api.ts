@@ -42,7 +42,7 @@ export interface CrawlCoverage {
   items_found: number;
 }
 
-/** Why a crawl ended `failed` (part of the crawl, not an error response). */
+/** Why a crawl ended `failed`, or `stopped` because credits ran out or the API key hit a credit cap (part of the crawl, not an error response). */
 export interface CrawlRunError {
   code: string;
   detail: string;

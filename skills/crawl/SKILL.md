@@ -77,8 +77,12 @@ zenrows crawl stop <id>                      # stop it; kept URLs stay readable
 ```
 
 A crawl ends `completed` (nothing left, or a cap hit: `stop_reason`
-`max_items` / `max_pages`), `stopped` (you stopped it) or `failed` (`error.code`
-and `error.detail` say why). Only `failed` exits non-zero (`CRAWL_FAILED`).
+`max_items` / `max_pages`), `stopped` or `failed` (`error.code` and
+`error.detail` say why). `stopped` with `stop_reason` `user` means you stopped
+it. `stopped` with no `stop_reason` and `error.code` `insufficient_credits` or
+`api_key_cap_reached` means the account ran out of credits or the API key hit a
+credit cap; the pages fetched before that stay readable. `failed`, and a
+`stopped` crawl with an `error`, exit non-zero (`CRAWL_FAILED`).
 `stop` on a crawl that already ended prints the status it ended with.
 
 With `--json`, `create`, `get`, `wait` and `stop` print
@@ -120,7 +124,7 @@ The "Retry?" column is for errors that remain after these retries.
 | `CRAWL_TOO_MANY_CRAWLS` | 429 `too_many_crawls` on `create`: the account's active-job limit | yes, after `retry_after` |
 | `CRAWL_RATE_LIMITED` | any other 429: requests are being throttled | yes, after `retry_after` |
 | `CRAWL_BUSY` | 503 `crawl_busy` on `stop`: the stop was not saved yet and the crawl still runs | yes, run the stop again after `retry_after` |
-| `CRAWL_FAILED` | the crawl ended `failed`, or another error | 5xx: yes, with backoff |
+| `CRAWL_FAILED` | the crawl ended `failed`, or `stopped` on credits (`server_code` `insufficient_credits` / `api_key_cap_reached`), or another error | 5xx: yes, with backoff; credits: after they are added or the cap resets |
 | `BACKEND_UNAVAILABLE` | the API could not be reached | yes |
 
 Rules: start small (`--depth 1`, low caps) and check the results before a

@@ -203,7 +203,10 @@ run out (default 600). When the time runs out, the command exits 0 and prints
 the crawl with status `running` and the hint `zenrows crawl wait <crawl-id>`
 (under `--json`, in `note`); the crawl keeps running. Ctrl-C stops the wait, not the crawl, and exits 130;
 resume with `zenrows crawl wait <crawl-id>`. A crawl that ends `failed` exits 1
-with `CRAWL_FAILED`.
+with `CRAWL_FAILED`. So does a crawl that ends `stopped` because the account ran
+out of credits or the API key hit a credit cap (`server_code`
+`insufficient_credits` or `api_key_cap_reached`); its fetched pages stay
+readable.
 
 Errors carry the API's code as `server_code`, `crawl_id` on any call about one
 crawl, and `retry_after` on a 429. When the account has reached its limit of
