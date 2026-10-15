@@ -387,6 +387,23 @@ test("crawl results on a running crawl returns what is kept with partial: true",
   );
 });
 
+test("crawl results on a stopped crawl is partial, with a note, while the API keeps next_cursor set", async () => {
+  const pages: Record<string, unknown> = {
+    "": { ...crawlBody, status: "stopped", results: [{ url: "https://example.com/product/1" }], next_cursor: "p2" },
+    p2: { ...crawlBody, status: "stopped", results: [], next_cursor: "p2" },
+  };
+  await withCrawlWorkspace(
+    (url) => json(pages[url.searchParams.get("cursor") ?? ""]),
+    async () => {
+      const { code, out } = await run(["results", "c_1"]);
+      assert.equal(code, 0);
+      assert.equal(out.partial, true);
+      assert.match(out.note, /read the results again later/);
+      assert.equal(out.count, 1);
+    },
+  );
+});
+
 test("crawl get --cursor reads one page and returns next_cursor while running", async () => {
   await withCrawlWorkspace(
     () => json({ ...crawlBody, results: [{ url: "https://example.com/product/3" }], next_cursor: "p4" }),

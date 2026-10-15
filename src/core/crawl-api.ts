@@ -556,9 +556,9 @@ export async function listAllResults(
     const rows = page.results ?? [];
     results.push(...rows);
     if (!rows.length || !page.next_cursor || page.next_cursor === cursor) {
-      // Every page was read. An ended crawl keeps no new URLs, even while pages in flight after
-      // a stop keep next_cursor set, so only a running crawl's results are partial.
-      return { crawl: page, results, partial: !isTerminal(page.status) };
+      // Every page was read. The API keeps next_cursor set while URLs can still come: on a
+      // running crawl, and for up to 10 minutes after a stop, from the pages still in flight.
+      return { crawl: page, results, partial: page.next_cursor != null };
     }
     cursor = page.next_cursor;
   }

@@ -580,7 +580,7 @@ if (HAS_KEY) {
 await liveCheck(
   "20",
   "Results after stop",
-  "crawl results on a crawl stopped with pages in flight: partial false, and no URL lost",
+  "crawl results on a crawl stopped with pages in flight: no URL lost; partial follows the API, and a partial read carries a note to read again",
   async () => {
     if (!B || stopInfo?.error) return { status: FAIL, actual: `setup failed: ${stopInfo?.error}` };
     if (stopInfo.status !== "stopped") {
@@ -601,8 +601,8 @@ await liveCheck(
     const same = urls(j.results) === urls(later);
     const pending = (j.results ?? []).filter((x) => x.content_status === "pending").length;
     return {
-      status: passIf(now.code === 0 && j.partial === false && same),
-      actual: `stopped with ${stopInfo.items} kept; first read: exit ${now.code}, ${j.count} URLs (${pending} pending), partial ${j.partial}; then ${settledNote}: ${later.length} URLs, same set ${same}`,
+      status: passIf(now.code === 0 && same && (!j.partial || Boolean(j.note))),
+      actual: `stopped with ${stopInfo.items} kept; first read: exit ${now.code}, ${j.count} URLs (${pending} pending), partial ${j.partial}, note: ${j.note ?? "none"}; then ${settledNote}: ${later.length} URLs, same set ${same}`,
       evidence: show(now),
     };
   },

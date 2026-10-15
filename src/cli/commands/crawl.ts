@@ -65,8 +65,9 @@ export const crawl: Command = {
     "  get <id> [--cursor <c>] [--limit <n>]",
     "                                    the crawl and one page of its results (limit up to 10000)",
     "  list [--cursor <c>] [--limit <n>] your crawls, newest first (limit up to 100)",
-    "  results <id> [--limit <n>]        every kept URL as JSONL; on a running crawl, those kept so far",
-    "                                    (partial). --limit is the page size per request",
+    "  results <id> [--limit <n>]        every kept URL as JSONL; partial while more can come (a running",
+    "                                    crawl, or pages still in flight after a stop). --limit is the page size",
+    "                                    per request",
     "    --out <file>                    write the results to a file instead of printing",
     "  content <id> <content_id>         print one kept URL's page (content_id or content_url)",
     "    --out <file>                    write it to a file instead",
@@ -325,9 +326,10 @@ function printResults(
   o: { outFile?: string; json: boolean; partial: boolean },
 ): number {
   if (o.outFile) writeOut(o.outFile, toJsonl(results));
+  const note = o.partial ? partialNote(status) : undefined;
   if (o.json) {
     const rows = o.outFile ? { file: o.outFile } : { results };
-    log.out(JSON.stringify({ ok: true, crawl_id: id, status, count: results.length, ...rows, partial: o.partial }, null, 2));
+    log.out(JSON.stringify({ ok: true, crawl_id: id, status, count: results.length, ...rows, partial: o.partial, ...(note ? { note } : {}) }, null, 2));
     return 0;
   }
   if (o.outFile) {
@@ -336,8 +338,14 @@ function printResults(
     log.info(`${results.length} result(s) for crawl ${id} (status: ${status}):`);
     log.out(toJsonl(results).trimEnd());
   }
-  if (o.partial) log.warn("  The crawl is still running: these results are partial. Read them again once it ends.");
+  if (note) log.warn(`  ${note}`);
   return 0;
+}
+
+function partialNote(status: string): string {
+  return isTerminal(status)
+    ? "The crawl ended, but pages fetched before the end can still add URLs for up to 10 minutes: read the results again later."
+    : "The crawl is still running: these results are partial. Read them again once it ends.";
 }
 
 async function contentCmd(rest: string[], ctx: RunContext): Promise<number> {

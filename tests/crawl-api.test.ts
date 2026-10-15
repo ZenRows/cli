@@ -571,14 +571,14 @@ test("listAllResults returns what a running crawl kept, ending at the first empt
   assert.equal(calls(), 2);
 });
 
-test("listAllResults on a stopped crawl is complete at the first empty page, even with next_cursor still set", async () => {
+test("listAllResults on a stopped crawl is partial while the API keeps next_cursor set", async () => {
   const { impl, calls } = pagedFetch([
     { status: "stopped", results: [{ url: "https://example.com/product/1" }], next_cursor: "c1" },
     { status: "stopped", results: [], next_cursor: "c1" },
   ]);
   const { results, partial } = await listAllResults("c_1", { apiKey: "k", fetchImpl: impl });
   assert.deepEqual(results.map((r) => r.url), ["https://example.com/product/1"]);
-  assert.equal(partial, false);
+  assert.equal(partial, true);
   assert.equal(calls(), 2);
 });
 
