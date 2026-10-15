@@ -185,7 +185,7 @@ function problemToError(status: number, body: string, method: string, path: stri
       code: "AUTH_INVALID",
       message: "Zenrows refused the Batch API request because the subscription is not active.",
       likely_cause: `${cause.replace(/\.?$/, ".")} The API key is valid, but the subscription is past due, unpaid, incomplete or paused.`,
-      next_action: `Fix the subscription in Billing (${BILLING_URL}), then retry.`,
+      next_action: `Fix the subscription in Billing (${BILLING_URL}), or in Azure Marketplace if you subscribed there, then retry.`,
     });
   }
   if (status === 401) {
