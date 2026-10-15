@@ -17,7 +17,7 @@
       "command": "zenrows extract",
       "backend": "Extract — GET https://api.zenrows.com/v1/ (extract=auto, css_extractor, outputs, response_type; autoparse deprecated)",
       "requiresAuth": true,
-      "notes": "Default is extract=auto, which works on any prepared domain with any key. On a domain not prepared yet (REQS007, legacy AUTH010) the CLI reports the error and does not retry; prepare the domain with POST /v1/extract/prepared-domains (a few example URLs, a few minutes, no credits). CSS / outputs / markdown work on any domain; autoparse is deprecated and runs only with --autoparse."
+      "notes": "Default is extract=auto, which works on any prepared domain with any key. On a domain not prepared yet (REQS007, legacy AUTH010) the CLI reports the error and does not retry; prepare the domain with `zenrows extract prepare <domain> --url <page> [--wait]` (POST /v1/extract/prepared-domains: 1 to 5 example URLs, a few minutes, no credits) and check it with `zenrows extract prepare status <domain>`. CSS / outputs / markdown work on any domain; autoparse is deprecated and runs only with --autoparse."
     },
     "batch": {
       "key": "batch",

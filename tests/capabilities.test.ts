@@ -16,6 +16,8 @@ test("capability matrix loads with the honest classifications", () => {
 test("extract notes name the prepare step and no automatic autoparse fallback", () => {
   const notes = loadCapabilities().extract?.notes ?? "";
   assert.match(notes, /POST \/v1\/extract\/prepared-domains/);
+  assert.match(notes, /zenrows extract prepare <domain> --url <page>/);
+  assert.match(notes, /zenrows extract prepare status <domain>/);
   assert.match(notes, /autoparse is deprecated/);
   assert.doesNotMatch(notes, /falls? back/i);
 });

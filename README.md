@@ -37,7 +37,7 @@ that endpoint with extraction parameters, not a separate product.
 | Command | What it does | Status (this build) |
 | --- | --- | --- |
 | `zenrows fetch` | Fetch: retrieve a protected page | **available**: `GET https://api.zenrows.com/v1/` |
-| `zenrows extract` | Extract: turn a page into structured data with `extract=auto` on any prepared domain (you can prepare one yourself), CSS selectors, or Markdown | **available**: `GET https://api.zenrows.com/v1/?extract=auto` |
+| `zenrows extract` | Extract: turn a page into structured data with `extract=auto` on any prepared domain (prepare one yourself with `zenrows extract prepare`), CSS selectors, or Markdown | **available**: `GET https://api.zenrows.com/v1/?extract=auto` |
 | `zenrows batch` | Batch: run Fetch and Extract over many URLs in one job; specs validate and estimate locally with no key | **available**: `POST https://async.api.zenrows.com/v1/jobs` |
 | `zenrows crawl` | Crawl (new): collect the URLs behind one start page, optionally with each page's HTML | **available**: `POST https://api.zenrows.com/v1/crawls` |
 | `zenrows browser` | Browser Sessions: a real cloud browser over REST (same backend as MCP `browser_*`); escalation-only, billed by bandwidth + time | **available**: `POST https://mcp.zenrows.com/browser/sessions` |
@@ -121,6 +121,16 @@ zenrows extract https://www.scrapingcourse.com/ecommerce/ --autoparse   # deprec
 zenrows extract <url> --css '{"title":"h1","price":".price"}' --validate
 zenrows extract <url> --outputs emails,links                            # built-in output filters → JSON
 zenrows extract <url> --output markdown
+```
+
+On a domain Extract hasn't prepared yet, `zenrows extract` fails with REQS007
+and prints the command to prepare it. Preparing takes a few minutes and costs
+no credits; each new domain uses one slot of the monthly allowance.
+
+```bash
+zenrows extract prepare example.com --url https://example.com/p/1 --url https://example.com/list --wait
+zenrows extract prepare status example.com   # progress + monthly allowance
+zenrows extract https://example.com/p/1      # then extract again
 ```
 
 ## 9. Batch

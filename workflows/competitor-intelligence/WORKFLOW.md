@@ -20,7 +20,7 @@ simple per-URL loop).
    ```
    zenrows fetch https://competitor.example/products
    ```
-2. **Validate extraction** on one page (on a domain not prepared yet, prepare it first: see the extract skill).
+2. **Validate extraction** on one page (on a domain not prepared yet, run `zenrows extract prepare <domain> --url <page> --wait` first).
    ```
    zenrows extract https://competitor.example/p/123 --validate
    ```

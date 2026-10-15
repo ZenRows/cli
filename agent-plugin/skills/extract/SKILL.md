@@ -31,22 +31,29 @@ protected or dynamic sites. Set `js_render` or `premium_proxy` only to force a
 fixed configuration; that turns Adaptive Stealth Mode off. Check `empty` in the
 result: true means no field came back with a value.
 
-## Domain not prepared yet (REQS007)
+## Domain not prepared yet (REQS007): prepare it, then extract again
 
 `mode=auto` works on any prepared domain, and you can prepare one yourself. On
 a domain Extract hasn't prepared yet, `extract` returns a tool error (`REQS007`;
-legacy `AUTH010`) that names the next step. It does not retry with Autoparse
-unless you set `fallback_autoparse: true`. To prepare the domain:
+legacy `AUTH010`) whose `next_tool` holds the `prepare_domain` arguments. It does
+not retry with Autoparse unless you set `fallback_autoparse: true`. The flow:
 
 ```
-POST https://api.zenrows.com/v1/extract/prepared-domains
-X-API-Key: <your key>
-{"domain":"example.com","example_urls":["https://example.com/p/1","https://example.com/p/2"]}
+extract({ url })                                          # 1. error REQS007
+prepare_domain({ domain: "example.com",
+  example_urls: ["https://example.com/p/1", "https://example.com/list"] })
+                                                          # 2. returns at once, status "preparing"
+prepared_domain_status({ domain: "example.com" })         # 3. every ~30 s until status "ready"
+extract({ url })                                          # 4. extract again
 ```
 
-Give 1 to 5 example URLs of the pages you want. Preparation takes a few
-minutes and uses no credits. Poll `GET /v1/extract/prepared-domains/{domain}`
-until `status` is `ready` (or `failed`), then call `extract` again.
+- `example_urls`: 1 to 5 real pages you want to extract, one per kind of page.
+- Preparing takes a few minutes and costs no credits. Each new domain uses one
+  slot of the account's monthly allowance; `prepared_domain_status` returns it
+  (`used` / `limit` / `remaining`) and a `next` field with what to do now.
+- `out_of_allowance`: no slots left this month; use `mode=css`.
+  `overloaded` / `disabled`: retry in a few minutes, do not loop.
+  A `failed` status carries `failure.code`; follow `next`.
 
 ## Fallback: `scrape` extraction params
 

@@ -11,6 +11,7 @@ import { ENV_KEY, resolveApiKey } from "./auth.ts";
 import { registerSecret } from "./logger.ts";
 import { CLI_USER_AGENT } from "./config.ts";
 import { agentClientHeader } from "./agent-client.ts";
+import { normalizeDomain, prepareCommand } from "./prepared-domains-api.ts";
 
 export interface ScraperResult {
   status: number;
@@ -306,31 +307,21 @@ export async function scrape(
  * the operator to check connectivity would send them at the wrong problem. The
  * elapsed time is included so the 90s server budget is visible in the output.
  */
-/** How to prepare a domain for Extract, shared by every surface that reports REQS007. */
-export const PREPARE_DOMAIN_STEP =
-  "Prepare it with POST /v1/extract/prepared-domains (a few example URLs, a few minutes, no credits), then retry; or run with --autoparse.";
-
 /**
  * REQS007 (or the legacy AUTH010) on extract=auto: Extract has not prepared the
- * URL's domain yet. The message names the next step, because agents copy it.
+ * URL's domain yet. The message names the exact command to run, because agents
+ * copy it.
  */
 export function extractDomainNotPrepared(url: string, detail: string | null): ToolkitError {
-  const domain = hostnameOf(url);
+  const domain = normalizeDomain(url);
+  const prepare = prepareCommand(url);
   return new ToolkitError({
     code: "EXTRACT_DOMAIN_NOT_ENABLED",
-    message: `Extract hasn't prepared ${domain} yet. ${PREPARE_DOMAIN_STEP}`,
+    message: `Extract hasn't prepared ${domain} yet. Prepare it with \`${prepare}\` (a few example URLs, a few minutes, no credits), then retry; or run with --autoparse.`,
     likely_cause: detail ?? `Extract has not prepared ${domain} yet.`,
-    next_action: `${PREPARE_DOMAIN_STEP.replace("Prepare it", `Prepare ${domain}`)} The body is {"domain":"${domain}","example_urls":["${url}"]} (1 to 5 URLs) with your key in the X-API-Key header; poll GET /v1/extract/prepared-domains/${domain} until status is ready.`,
-    suggested_commands: [`zenrows extract ${url} --autoparse`],
+    next_action: `Run \`${prepare} --wait\` (add up to 5 --url pages, one per kind of page you want), then retry \`zenrows extract ${url}\`. Without --wait, check progress with \`zenrows extract prepare status ${domain}\`.`,
+    suggested_commands: [`${prepare} --wait`, `zenrows extract prepare status ${domain}`, `zenrows extract ${url}`],
   });
-}
-
-function hostnameOf(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
 }
 
 export function requestTimeout(url: string, timeoutMs: number, elapsedMs: number): ToolkitError {

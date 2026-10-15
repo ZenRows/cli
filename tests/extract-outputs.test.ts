@@ -188,9 +188,13 @@ test("runExtract reports REQS007 with the prepare step and does not retry", asyn
         assert.equal(e.code, "EXTRACT_DOMAIN_NOT_ENABLED");
         assert.equal(
           e.message,
-          "Extract hasn't prepared x.com yet. Prepare it with POST /v1/extract/prepared-domains (a few example URLs, a few minutes, no credits), then retry; or run with --autoparse.",
+          "Extract hasn't prepared x.com yet. Prepare it with `zenrows extract prepare x.com --url https://www.x.com/item/1` (a few example URLs, a few minutes, no credits), then retry; or run with --autoparse.",
         );
-        assert.match(e.toJSON().next_action, /"example_urls":\["https:\/\/www\.x\.com\/item\/1"\]/);
+        assert.deepEqual(e.toJSON().suggested_commands, [
+          "zenrows extract prepare x.com --url https://www.x.com/item/1 --wait",
+          "zenrows extract prepare status x.com",
+          "zenrows extract https://www.x.com/item/1",
+        ]);
         return true;
       },
     );
@@ -209,7 +213,7 @@ test("runExtract reports legacy AUTH010 like REQS007 and does not retry", async 
       (e: unknown) =>
         e instanceof ToolkitError &&
         e.code === "EXTRACT_DOMAIN_NOT_ENABLED" &&
-        e.message.startsWith("Extract hasn't prepared x.com yet. Prepare it with POST /v1/extract/prepared-domains"),
+        e.message.startsWith("Extract hasn't prepared x.com yet. Prepare it with `zenrows extract prepare x.com --url https://x.com`"),
     );
     assert.equal(calls.length, 1, "AUTH010 must not be retried with autoparse");
   });

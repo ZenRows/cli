@@ -28,22 +28,29 @@ zenrows extract <url> --validate                   # fail if not valid JSON
 - **CSS**: you know the exact fields/selectors and want determinism.
 - **Markdown/plaintext**: feed clean content to an LLM yourself.
 
-## Domain not prepared yet (REQS007)
+## Domain not prepared yet (REQS007): prepare it, then extract again
 
 `extract=auto` works on any prepared domain, and you can prepare one yourself.
-On a domain Extract hasn't prepared yet the API answers `403 REQS007` (legacy:
-`402 AUTH010`) and `zenrows extract` reports it; it does not retry with
-Autoparse. To prepare the domain:
+On a domain Extract hasn't prepared yet, `zenrows extract` fails with
+`EXTRACT_DOMAIN_NOT_ENABLED` (API code `403 REQS007`; legacy `402 AUTH010`) and
+prints the command to run. It does not retry with Autoparse. The flow:
 
 ```
-POST https://api.zenrows.com/v1/extract/prepared-domains
-X-API-Key: <your key>
-{"domain":"example.com","example_urls":["https://example.com/p/1","https://example.com/p/2"]}
+zenrows extract https://example.com/p/1             # 1. fails: Extract hasn't prepared example.com yet
+zenrows extract prepare example.com \
+  --url https://example.com/p/1 --url https://example.com/list --wait
+                                                    # 2. prepare it and wait until ready (a few minutes)
+zenrows extract https://example.com/p/1             # 3. extract again
 ```
 
-Give 1 to 5 example URLs of the pages you want. Preparation takes a few
-minutes and uses no credits. Poll `GET /v1/extract/prepared-domains/{domain}`
-until `status` is `ready` (or `failed`), then retry the extract.
+- `--url`: 1 to 5 real pages you want to extract, one per kind of page.
+- Without `--wait` the command returns at once; then poll with
+  `zenrows extract prepare status example.com` until it says `ready`.
+- Preparing costs no credits. Each new domain uses one slot of the account's
+  monthly allowance; `prepare status` shows `used` / `limit` / `remaining`.
+- `EXTRACT_PREPARE_OUT_OF_ALLOWANCE`: no slots left this month; use `--css`.
+  `EXTRACT_PREPARE_UNAVAILABLE`: retry in a few minutes, do not loop.
+  A `failed` status prints the next step for its failure code.
 
 ## Rules
 - Validate on a single page before scaling across many URLs.

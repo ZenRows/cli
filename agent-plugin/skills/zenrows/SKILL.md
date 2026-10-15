@@ -67,6 +67,7 @@ If the user needs login, clicks, forms, sessions, or persistent state:
 | --- | --- | --- |
 | Protected Fetch | `scrape` | Default markdown; HTML / plaintext / PDF / screenshot options |
 | Extract | `extract` | Structured JSON (`extract=auto` on any prepared domain, css_extractor; autoparse deprecated). `extract=auto` is currently free; billing may apply later |
+| Prepare a domain | `prepare_domain`, `prepared_domain_status` | After an `extract` REQS007: prepare the domain with 1 to 5 example URLs, poll until ready, extract again. No credits; uses the monthly allowance |
 | Batch | `batch_create`, `batch_status`, `batch_results`, `batch_cancel` | Same credits as Fetch; a 403 maps to `BATCH_ACCESS_DENIED` |
 | Browser | `browser_*` (start with `browser_navigate`) | Escalation-only; same backend as Browser Sessions |
 

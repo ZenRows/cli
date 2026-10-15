@@ -4,7 +4,8 @@
  * Default: `extract=auto` (site-tailored Extract). If Extract has not prepared
  * the domain yet (REQS007 / AUTH010), the error names the prepare step; nothing
  * is retried. `--autoparse` runs the deprecated Autoparse explicitly. Other
- * methods: `--css`, `--outputs`, `--output`.
+ * methods: `--css`, `--outputs`, `--output`. `zenrows extract prepare` prepares a
+ * domain (see extract-prepare.ts).
  */
 import { ensureApiKey } from "../../core/ensure-key.ts";
 import { maybeNudgeClaim } from "../../core/nudge.ts";
@@ -18,15 +19,18 @@ import { runExtract, type ExtractMethod, type ExtractOptions } from "../../adapt
 import { formatRequestCost } from "../../core/http.ts";
 import { parse, asString, asNumber, type Command, type RunContext } from "../command.ts";
 import { printError, writeOut } from "../output.ts";
+import { PREPARE_HELP, PREPARE_USAGE, runPrepare } from "./extract-prepare.ts";
 
 export const extract: Command = {
   name: "extract",
   summary: "Turn a protected page into structured data (Extract / Autoparse / CSS / Markdown).",
-  usage: "zenrows extract <url> [--autoparse | --css <json> | --outputs <filters> | --output md|text] [flags]",
+  usage:
+    "zenrows extract <url> [--autoparse | --css <json> | --outputs <filters> | --output md|text] [flags]\n       " +
+    PREPARE_USAGE,
   help: [
     "Methods:",
     "  (default)              extract=auto: site-tailored Extract on any prepared domain",
-    "                         (not prepared yet? prepare it: POST /v1/extract/prepared-domains)",
+    "                         (REQS007 = not prepared yet: run zenrows extract prepare, below)",
     "  --autoparse            deprecated general-purpose Autoparse (any domain)",
     "  --css <json>           CSS selector map, e.g. '{\"title\":\"h1\",\"price\":\".price\"}'",
     "  --outputs <list>       built-in output filters → JSON: emails, phone_numbers, headings,",
@@ -42,8 +46,12 @@ export const extract: Command = {
     "",
     "Cost (credits per request): 1x normal · 5x --js-render · 10x --premium-proxy · 25x both.",
     "The exact charge is reported after every request (costCredits / X-Request-Credits).",
+    "",
+    "Prepare a domain:",
+    PREPARE_HELP.split("\n").map((l) => (l ? "  " + l : l)).join("\n"),
   ].join("\n"),
   async run(argv: string[], ctx: RunContext): Promise<number> {
+    if (argv[0] === "prepare") return runPrepare(argv.slice(1), ctx);
     const { values, positionals } = parse(argv, {
       autoparse: { type: "boolean" },
       css: { type: "string" },
