@@ -53,7 +53,15 @@ extract({ url })                                          # 4. extract again
   (`used` / `limit` / `remaining`) and a `next` field with what to do now.
 - `out_of_allowance`: no slots left this month; use `mode=css`.
   `overloaded` / `disabled`: retry in a few minutes, do not loop.
-  A `failed` status carries `failure.code`; follow `next`.
+  A `failed` status carries `failure.code` and `failure.slot_consumed`; follow `next`.
+- The domain is the host: `shop.example.com` and `example.com` are prepared
+  separately; a leading `www.` is dropped.
+- **Do not loop.** If `prepare_domain` answers `ready` at once
+  (`already_prepared: true`), the domain was prepared before; an `extract` that
+  still returns REQS007 means that kind of page is not covered, and preparing
+  again changes nothing. The same goes for REQS007 with
+  `reason: "page_not_recognised"`. Use `mode=css`, or contact Zenrows support
+  with the URL.
 
 ## Fallback: `scrape` extraction params
 

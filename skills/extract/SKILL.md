@@ -45,12 +45,22 @@ zenrows extract https://example.com/p/1             # 3. extract again
 
 - `--url`: 1 to 5 real pages you want to extract, one per kind of page.
 - Without `--wait` the command returns at once; then poll with
-  `zenrows extract prepare status example.com` until it says `ready`.
+  `zenrows extract prepare status example.com` (about every 30 seconds) until
+  it says `ready`.
+- The domain is the host: `shop.example.com` and `example.com` are prepared
+  separately; a leading `www.` is dropped.
 - Preparing costs no credits. Each new domain uses one slot of the account's
   monthly allowance; `prepare status` shows `used` / `limit` / `remaining`.
 - `EXTRACT_PREPARE_OUT_OF_ALLOWANCE`: no slots left this month; use `--css`.
   `EXTRACT_PREPARE_UNAVAILABLE`: retry in a few minutes, do not loop.
-  A `failed` status prints the next step for its failure code.
+  A `failed` status prints the next step for its failure code and says whether
+  the attempt used an allowance slot.
+- **Do not loop.** If `prepare` answers `ready` at once (`already_prepared`),
+  the domain was prepared before; an extract that still fails with REQS007
+  means that kind of page is not covered, and preparing again changes nothing.
+  The same goes for `EXTRACT_PAGE_NOT_RECOGNISED` (REQS007 on a prepared domain:
+  Extract did not recognise this page). Use `--css`, or contact Zenrows support
+  with the URL.
 
 ## Rules
 - Validate on a single page before scaling across many URLs.

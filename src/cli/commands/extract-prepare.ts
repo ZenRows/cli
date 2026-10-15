@@ -61,7 +61,6 @@ export async function runPrepare(argv: string[], ctx: RunContext, deps: PrepareD
     url: { type: "string", multiple: true },
     wait: { type: "boolean" },
     timeout: { type: "string" },
-    "no-signup": { type: "boolean" },
     json: { type: "boolean" },
     help: { type: "boolean" },
   });
@@ -84,12 +83,8 @@ export async function runPrepare(argv: string[], ctx: RunContext, deps: PrepareD
     const policy = loadPolicy();
     const apiKey =
       deps.apiKey ??
-      (await ensureApiKey(isStatus || values["no-signup"] ? { ...policy, auto_signup: false } : policy, {
-        onProvision: (a) => {
-          log.info("No API key found — created a Zenrows Free plan account for you.");
-          log.dim(`Claim it anytime (keeps your usage): ${a.claimUrl}`);
-        },
-      }));
+      // Preparing never creates a Free plan account: it needs a key the user already has.
+      (await ensureApiKey({ ...policy, auto_signup: false }));
     const opts: PrepareRequestOpts = { apiKey, apiBase: loadConfig().apiBase, fetchImpl: deps.fetchImpl };
 
     if (isStatus) {
@@ -101,6 +96,8 @@ export async function runPrepare(argv: string[], ctx: RunContext, deps: PrepareD
     log.step(`Prepare ${domain} for Extract (${urls.length} example URL${urls.length === 1 ? "" : "s"})…`);
     let record: PreparedDomain = await prepareDomain(domain, urls, opts);
     if (record.already_in_progress) log.info(`${domain} was already being prepared; following that preparation.`);
+    // A submit that answers ready at once found the domain already prepared.
+    const alreadyReady = record.status === "ready" && !record.already_in_progress;
     if (values.wait === true && record.status !== "ready" && record.status !== "failed") {
       record = await waitForPreparedDomain(domain, {
         ...opts,
@@ -116,11 +113,11 @@ export async function runPrepare(argv: string[], ctx: RunContext, deps: PrepareD
         code: "EXTRACT_PREPARE_FAILED",
         message: `Preparing ${domain} failed${record.failure?.code ? ` (${record.failure.code})` : ""}.`,
         likely_cause: record.failure?.detail ?? "The preparation did not finish.",
-        next_action: failureNextStep(domain, record.failure?.code),
+        next_action: failureNextStep(domain, record.failure),
         server_code: record.failure?.code,
       });
     }
-    report(record, undefined, json, urls[0]);
+    report(record, undefined, json, { exampleUrl: urls[0], alreadyReady });
     return 0;
   } catch (err) {
     printError(err, json);
@@ -172,10 +169,21 @@ function parseTimeout(v?: string): number {
   return n * 1000;
 }
 
-function report(record: PreparedDomain, allowance: Allowance | undefined, json: boolean, exampleUrl?: string): void {
-  const next = statusNextStep(record, exampleUrl);
+function report(
+  record: PreparedDomain,
+  allowance: Allowance | undefined,
+  json: boolean,
+  opts: { exampleUrl?: string; alreadyReady?: boolean } = {},
+): void {
+  const next = statusNextStep(record, opts);
   if (json) {
-    log.out(JSON.stringify({ ok: true, ...record, ...(allowance ? { allowance } : {}), next }, null, 2));
+    log.out(
+      JSON.stringify(
+        { ok: true, ...record, ...(opts.alreadyReady ? { already_prepared: true } : {}), ...(allowance ? { allowance } : {}), next },
+        null,
+        2,
+      ),
+    );
     return;
   }
   const line = `${record.domain}: ${record.status}${record.state && record.state !== record.status ? ` (${record.state})` : ""}`;

@@ -188,17 +188,48 @@ test("runExtract reports REQS007 with the prepare step and does not retry", asyn
         assert.equal(e.code, "EXTRACT_DOMAIN_NOT_ENABLED");
         assert.equal(
           e.message,
-          "Extract hasn't prepared x.com yet. Prepare it with `zenrows extract prepare x.com --url https://www.x.com/item/1` (a few example URLs, a few minutes, no credits), then retry; or run with --autoparse.",
+          "Extract hasn't prepared x.com yet. Prepare it with `zenrows extract prepare x.com --url https://www.x.com/item/1` (a few example URLs, a few minutes, no credits), then retry; meanwhile use --css.",
         );
         assert.deepEqual(e.toJSON().suggested_commands, [
           "zenrows extract prepare x.com --url https://www.x.com/item/1 --wait",
           "zenrows extract prepare status x.com",
-          "zenrows extract https://www.x.com/item/1",
+          `zenrows extract https://www.x.com/item/1 --css '{"title":"h1"}'`,
         ]);
+        assert.doesNotMatch(JSON.stringify(e.toJSON()), /autoparse/);
         return true;
       },
     );
     assert.equal(calls.length, 1, "REQS007 must not be retried with autoparse");
+  });
+});
+
+test("runExtract on REQS007 for a page a prepared domain does not recognise points to --css, not prepare", async () => {
+  // The gateway's body for a prepared domain whose page it did not recognise.
+  const body = JSON.stringify({
+    code: "REQS007",
+    title: "Extract did not recognise this page on x.com (REQS007)",
+    detail: "Extract serves x.com, but did not recognise this page as one it can extract.",
+    status: 403,
+  });
+  let calls = 0;
+  await withFetchHandler(() => {
+    calls += 1;
+    return new Response(body, { status: 403, headers: { "content-type": "application/json" } });
+  }, async () => {
+    await assert.rejects(
+      () => runExtract({ url: "https://x.com/search?q=a" }, cfg, defaultPolicy(), "testkey"),
+      (e: unknown) => {
+        assert.ok(e instanceof ToolkitError);
+        assert.equal(e.code, "EXTRACT_PAGE_NOT_RECOGNISED");
+        assert.match(e.message, /Preparing the domain again does not help/);
+        const shape = JSON.stringify(e.toJSON());
+        assert.doesNotMatch(shape, /extract prepare/, "no prepare command: it would answer ready and loop");
+        assert.doesNotMatch(shape, /autoparse/);
+        assert.match(shape, /--css/);
+        return true;
+      },
+    );
+    assert.equal(calls, 1);
   });
 });
 

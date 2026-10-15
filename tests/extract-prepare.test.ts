@@ -226,14 +226,42 @@ test("prepare status on 404 says to prepare the domain first", async () => {
   assert.match(out.error.next_action, /zenrows extract prepare example\.com --url/);
 });
 
-test("failureNextStep covers every documented failure code", () => {
-  assert.match(failureNextStep("x.com", "interrupted"), /same zenrows extract prepare/);
-  assert.match(failureNextStep("x.com", "preparation_exhausted"), /same zenrows extract prepare/);
-  assert.match(failureNextStep("x.com", "discovery_failed"), /--url page URLs/);
-  assert.match(failureNextStep("x.com", "unpreparable"), /different --url pages/);
-  assert.match(failureNextStep("x.com", "preparation_failed"), /other --url pages/);
-  assert.match(failureNextStep("x.com", "verification_failed"), /support/);
-  assert.match(failureNextStep("x.com", "unsupported"), /support/);
+test("failureNextStep: the step comes from failure.code, the slot sentence from failure.slot_consumed", () => {
+  assert.match(failureNextStep("x.com", { code: "interrupted" }), /same zenrows extract prepare/);
+  assert.match(failureNextStep("x.com", { code: "preparation_exhausted" }), /same zenrows extract prepare/);
+  assert.match(failureNextStep("x.com", { code: "discovery_failed" }), /--url page URLs/);
+  assert.match(failureNextStep("x.com", { code: "unpreparable" }), /different --url pages/);
+  assert.match(failureNextStep("x.com", { code: "preparation_failed" }), /other --url pages/);
+  assert.match(failureNextStep("x.com", { code: "verification_failed" }), /support/);
+  assert.match(failureNextStep("x.com", { code: "unsupported" }), /support/);
+  assert.match(failureNextStep("x.com", { code: "unpreparable", slot_consumed: false }), /did not use an allowance slot/);
+  assert.match(failureNextStep("x.com", { code: "unpreparable", slot_consumed: true }), /This attempt used an allowance slot/);
+  assert.doesNotMatch(failureNextStep("x.com", { code: "unpreparable" }), /slot/);
+});
+
+test("prepare answering ready at once says the domain was already prepared, not to run the extract again", async () => {
+  const { calls, fetchImpl } = stub({ [`POST ${BASE}`]: () => res({ ...RECORD, status: "ready", state: "ready" }, 202) });
+  const { code, out } = await run(["example.com", "--url", "https://example.com/search", "--wait"], fetchImpl);
+  assert.equal(code, 0);
+  assert.equal(out.already_prepared, true);
+  assert.match(out.next, /already prepared/);
+  assert.match(out.next, /use --css/);
+  assert.doesNotMatch(out.next, /Run the extract again/);
+  assert.equal(calls.length, 1, "--wait does not poll a domain that is already ready");
+});
+
+test("prepare never auto-creates a Free plan account", async () => {
+  const { calls, fetchImpl } = stub({});
+  const saved = process.env.ZENROWS_API_KEY;
+  delete process.env.ZENROWS_API_KEY;
+  let code = -1;
+  const raw = await captureOut(async () => {
+    code = await runPrepare(["example.com", "--url", "https://example.com/p/1"], ctx, { fetchImpl });
+  });
+  if (saved !== undefined) process.env.ZENROWS_API_KEY = saved;
+  assert.equal(code, 1);
+  assert.equal(JSON.parse(raw).error.code, "AUTH_MISSING");
+  assert.equal(calls.length, 0);
 });
 
 test("zenrows extract routes `prepare` to the prepare command", async () => {

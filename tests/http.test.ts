@@ -181,7 +181,7 @@ test("scrape maps REQS007 on extract=auto to EXTRACT_DOMAIN_NOT_ENABLED", async 
           assert.equal((err as { code: string }).code, "EXTRACT_DOMAIN_NOT_ENABLED");
           assert.equal(
             (err as { message: string }).message,
-            "Extract hasn't prepared example.net yet. Prepare it with `zenrows extract prepare example.net --url https://example.net` (a few example URLs, a few minutes, no credits), then retry; or run with --autoparse.",
+            "Extract hasn't prepared example.net yet. Prepare it with `zenrows extract prepare example.net --url https://example.net` (a few example URLs, a few minutes, no credits), then retry; meanwhile use --css.",
           );
           return true;
         },

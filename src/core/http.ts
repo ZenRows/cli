@@ -149,7 +149,7 @@ export async function scrape(
   // REQS007 on extract=auto: Extract has not prepared the domain yet. Reported,
   // never retried: the fix is to prepare the domain, which the error names.
   if (res.status === 403 && params.extract !== undefined && zrErrorCode(body) === "REQS007") {
-    throw extractDomainNotPrepared(params.url, zrErrorDetail(body));
+    throw extractDomainNotPrepared(params.url, body);
   }
   // 422 no_data_extracted on an Extract request: the page was processed and had
   // nothing to extract. It is an answer, not a failure to reach the target, so
@@ -210,7 +210,7 @@ export async function scrape(
     // AUTH010 on extract=auto is the legacy code for REQS007: the domain is
     // not prepared for Extract. Distinct from credit exhaustion (AUTH004).
     if (params.extract !== undefined && zrErrorCode(body) === "AUTH010") {
-      throw extractDomainNotPrepared(params.url, zrErrorDetail(body));
+      throw extractDomainNotPrepared(params.url, body);
     }
     // AUTH014: this key hit one of its credit caps; the account still has credits.
     if (isKeyCapReached(zrErrorCode(body) ?? undefined)) {
@@ -302,28 +302,60 @@ export async function scrape(
 }
 
 /**
+ * REQS007 has two causes, which the problem body tells apart: the domain is not
+ * prepared ("Extract is not prepared for the requested domain (...)"), or it is
+ * prepared and Extract did not recognise this page ("Extract did not recognise
+ * this page on ...", detail "Extract serves ..."). Only the first is fixed by
+ * preparing the domain; preparing a prepared domain returns its existing ready
+ * record, so pointing there would loop.
+ */
+export function isPageNotRecognised(body: string): boolean {
+  try {
+    const j = JSON.parse(body) as { title?: unknown; detail?: unknown };
+    const title = typeof j.title === "string" ? j.title : "";
+    const detail = typeof j.detail === "string" ? j.detail : "";
+    return /did not recogni[sz]e this page/i.test(title) || /^Extract serves /.test(detail);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * REQS007 (or the legacy AUTH010) on extract=auto. On a domain not prepared yet
+ * the message names the exact command to prepare it, because agents copy it; on
+ * a page a prepared domain does not recognise it names --css instead. Neither
+ * offers Autoparse.
+ */
+export function extractDomainNotPrepared(url: string, body: string): ToolkitError {
+  const domain = normalizeDomain(url);
+  const detail = zrErrorDetail(body);
+  const css = `zenrows extract ${url} --css '{"title":"h1"}'`;
+  if (isPageNotRecognised(body)) {
+    return new ToolkitError({
+      code: "EXTRACT_PAGE_NOT_RECOGNISED",
+      message: `Extract serves ${domain} but did not recognise this page. Preparing the domain again does not help; use --css, or contact Zenrows support with the URL.`,
+      likely_cause: detail ?? `Extract serves ${domain} but did not recognise this page.`,
+      next_action: "Extract this page with --css and explicit selectors, or contact Zenrows support with the URL.",
+      suggested_commands: [css],
+      server_code: "REQS007",
+    });
+  }
+  const prepare = prepareCommand(url);
+  return new ToolkitError({
+    code: "EXTRACT_DOMAIN_NOT_ENABLED",
+    message: `Extract hasn't prepared ${domain} yet. Prepare it with \`${prepare}\` (a few example URLs, a few minutes, no credits), then retry; meanwhile use --css.`,
+    likely_cause: detail ?? `Extract has not prepared ${domain} yet.`,
+    next_action: `Run \`${prepare} --wait\` (add up to 5 --url pages, one per kind of page you want), then retry \`zenrows extract ${url}\`. Without --wait, check progress with \`zenrows extract prepare status ${domain}\`. Meanwhile extract with --css and explicit selectors.`,
+    suggested_commands: [`${prepare} --wait`, `zenrows extract prepare status ${domain}`, css],
+  });
+}
+
+/**
  * The CLI gave up waiting before the API answered. This is NOT unreachability:
  * the connection was established and the gateway was still working, so telling
  * the operator to check connectivity would send them at the wrong problem. The
  * elapsed time is included so the 90s server budget is visible in the output.
  */
-/**
- * REQS007 (or the legacy AUTH010) on extract=auto: Extract has not prepared the
- * URL's domain yet. The message names the exact command to run, because agents
- * copy it.
- */
-export function extractDomainNotPrepared(url: string, detail: string | null): ToolkitError {
-  const domain = normalizeDomain(url);
-  const prepare = prepareCommand(url);
-  return new ToolkitError({
-    code: "EXTRACT_DOMAIN_NOT_ENABLED",
-    message: `Extract hasn't prepared ${domain} yet. Prepare it with \`${prepare}\` (a few example URLs, a few minutes, no credits), then retry; or run with --autoparse.`,
-    likely_cause: detail ?? `Extract has not prepared ${domain} yet.`,
-    next_action: `Run \`${prepare} --wait\` (add up to 5 --url pages, one per kind of page you want), then retry \`zenrows extract ${url}\`. Without --wait, check progress with \`zenrows extract prepare status ${domain}\`.`,
-    suggested_commands: [`${prepare} --wait`, `zenrows extract prepare status ${domain}`, `zenrows extract ${url}`],
-  });
-}
-
 export function requestTimeout(url: string, timeoutMs: number, elapsedMs: number): ToolkitError {
   const suggestedMs = Math.max(timeoutMs + 60_000, SERVER_BUDGET_MS + 60_000);
   const atBudget = elapsedMs >= SERVER_BUDGET_MS;

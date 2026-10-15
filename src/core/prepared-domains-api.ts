@@ -16,7 +16,7 @@ import { agentClientHeader } from "./agent-client.ts";
 
 export const MAX_EXAMPLE_URLS = 5;
 /** How often `--wait` polls, and for how long by default. */
-export const DEFAULT_POLL_INTERVAL_MS = 15_000;
+export const DEFAULT_POLL_INTERVAL_MS = 30_000;
 export const DEFAULT_WAIT_TIMEOUT_MS = 15 * 60_000;
 
 /** status: preparing | ready | failed. state adds the step (received, discovering, preparing, verifying). */
@@ -45,7 +45,16 @@ export interface PrepareRequestOpts {
   fetchImpl?: typeof fetch;
 }
 
-/** The domain as the API wants it: host only, no scheme, path or leading `www.`. Accepts a URL. */
+/**
+ * The domain as the API keys it: host only, no scheme, path or leading `www.`.
+ * Accepts a URL.
+ *
+ * Deliberately not the registrable domain: Extract prepares and serves each host
+ * on its own. A prepared `es.wikipedia.org` does not cover `pt.wikipedia.org`
+ * (REQS007 names `pt.wikipedia.org`), and `wikipedia.org` has no record of its
+ * own. The API itself folds `www.` into the bare host, so dropping it here
+ * matches what it stores.
+ */
 export function normalizeDomain(input: string): string {
   const trimmed = input.trim();
   let host = trimmed;
@@ -267,26 +276,54 @@ export async function waitForPreparedDomain(
   }
 }
 
-/** What to do after a failed preparation, by failure.code (docs.zenrows.com extract/endpoints). */
-export function failureNextStep(domain: string, code: string | undefined): string {
-  switch (code) {
-    case "interrupted":
-    case "preparation_exhausted":
-      return `Run the same zenrows extract prepare ${domain} command again. This did not use an allowance slot.`;
-    case "discovery_failed":
-      return `Run zenrows extract prepare ${domain} again with 1 to ${MAX_EXAMPLE_URLS} --url page URLs. This did not use an allowance slot.`;
-    case "unpreparable":
-      return `Run zenrows extract prepare ${domain} again with different --url pages from the same site; the same URLs fail again. This did not use an allowance slot.`;
-    case "preparation_failed":
-      return "Try other --url pages, or contact Zenrows support. This used an allowance slot.";
-    default:
-      return "Contact Zenrows support before preparing this domain again. Meanwhile extract with --css.";
-  }
+/** Whether a failed preparation used an allowance slot, from the record's failure.slot_consumed. */
+function slotSentence(slotConsumed: boolean | undefined): string {
+  if (slotConsumed === true) return " This attempt used an allowance slot.";
+  if (slotConsumed === false) return " This attempt did not use an allowance slot.";
+  return "";
 }
 
-/** The next step for a status record. */
-export function statusNextStep(record: PreparedDomain, exampleUrl?: string): string {
-  if (record.status === "ready") return `Ready. Run the extract again${exampleUrl ? `: zenrows extract ${exampleUrl}` : "."}`;
-  if (record.status === "failed") return failureNextStep(record.domain, record.failure?.code);
+/** What to do after a failed preparation, by failure.code (docs.zenrows.com extract/endpoints). */
+export function failureNextStep(domain: string, failure: PreparedDomain["failure"]): string {
+  let step: string;
+  switch (failure?.code) {
+    case "interrupted":
+    case "preparation_exhausted":
+      step = `Run the same zenrows extract prepare ${domain} command again.`;
+      break;
+    case "discovery_failed":
+      step = `Run zenrows extract prepare ${domain} again with 1 to ${MAX_EXAMPLE_URLS} --url page URLs.`;
+      break;
+    case "unpreparable":
+      step = `Run zenrows extract prepare ${domain} again with different --url pages from the same site; the same URLs fail again.`;
+      break;
+    case "preparation_failed":
+      step = "Try other --url pages, or contact Zenrows support.";
+      break;
+    default:
+      step = "Contact Zenrows support before preparing this domain again. Meanwhile extract with --css.";
+  }
+  return step + slotSentence(failure?.slot_consumed);
+}
+
+/**
+ * What an already-prepared domain means for an extract that answered REQS007:
+ * that kind of page is not covered, and preparing again does not change it (the
+ * API returns the existing ready record). Said instead of "run the extract
+ * again", which would loop.
+ */
+export const PAGE_KIND_NOT_COVERED =
+  "If the extract still fails with REQS007 on this domain, that kind of page is not covered and preparing again does not change it: use --css, or contact Zenrows support with the URL.";
+
+/**
+ * The next step for a status record. `alreadyReady` is set when a submit answered
+ * ready at once: the domain was prepared before this call.
+ */
+export function statusNextStep(record: PreparedDomain, opts: { exampleUrl?: string; alreadyReady?: boolean } = {}): string {
+  if (record.status === "ready") {
+    if (opts.alreadyReady) return `${record.domain} was already prepared, so nothing new was submitted. ${PAGE_KIND_NOT_COVERED}`;
+    return `Ready. Run the extract again${opts.exampleUrl ? `: zenrows extract ${opts.exampleUrl}` : ""}. ${PAGE_KIND_NOT_COVERED}`;
+  }
+  if (record.status === "failed") return failureNextStep(record.domain, record.failure);
   return `Preparing (a few minutes). Check with: zenrows extract prepare status ${record.domain}`;
 }
