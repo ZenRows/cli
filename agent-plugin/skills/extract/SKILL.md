@@ -41,7 +41,7 @@ unless you set `fallback_autoparse: true`.
 | `reason` | Meaning | Next step |
 | --- | --- | --- |
 | `domain_not_prepared` | The domain is not prepared yet. | `prepare_domain` (the error's `next_tool` holds its arguments), then poll, then `extract` again. |
-| `page_not_recognised` | The domain is prepared, but Extract did not recognise this page as one it can extract (a home, search, login or category page, or a transient failure). | Try a product, article or listing page on the same site instead. If this page should work, retry it once in a few minutes; do not retry in a loop. Otherwise use `mode=css`. Do not call `prepare_domain`: preparing again does not change this. |
+| `page_not_recognised` | The domain is prepared, but Extract did not recognise this page as one it can extract (a page with nothing to extract, such as a home page, or a transient failure). | Try a product, article or listing page on the same site instead. If this page should work, retry it once in a few minutes; do not retry in a loop. Otherwise use `mode=css`. Do not call `prepare_domain`: preparing again does not change this. |
 | `domain_not_enabled` | Extract is not enabled for the site. | Use `mode=css`, or contact Zenrows support to have the site enabled. Preparing does not change this. |
 
 Preparing a domain:

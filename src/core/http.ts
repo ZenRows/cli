@@ -346,7 +346,7 @@ export function extractDomainNotPrepared(url: string, body: string): ToolkitErro
   if (reason === "page_not_recognised") {
     return new ToolkitError({
       code: "EXTRACT_PAGE_NOT_RECOGNISED",
-      message: `Extract serves ${domain} but did not recognise this page as one it can extract (it may be a home, search, login or category page). ${PAGE_NOT_RECOGNISED_STEPS} The request was not charged.`,
+      message: `Extract serves ${domain} but did not recognise this page as one it can extract (it may be a page with nothing to extract, such as a home page). ${PAGE_NOT_RECOGNISED_STEPS} The request was not charged.`,
       likely_cause: detail ?? `Extract serves ${domain} but did not recognise this page.`,
       next_action: PAGE_NOT_RECOGNISED_STEPS,
       suggested_commands: [css],
