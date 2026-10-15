@@ -34,11 +34,18 @@ zenrows crawl results <id> --out urls.jsonl  # same, as JSONL
   a depth has no `depth` field in its output.
 - `--max-items` (kept URLs) and `--max-pages` (fetched pages) cap the crawl;
   both default to 100. `--max-pages` bounds the cost: each page is one fetch.
+  Every page the crawl opens counts and is billed, including pages opened only
+  to walk through to matching URLs.
   The local policy `max_pages_per_run` caps `--max-pages` (default 1000);
   above it the CLI refuses with `POLICY_LIMIT_EXCEEDED` before any request.
 - `--include-patterns` / `--exclude-patterns` are substring matches on the
   normalized URL and repeat:
-  `--include-patterns /product/ --exclude-patterns ?add-to-cart`.
+  `--include-patterns /product/ --exclude-patterns ?add-to-cart`. They filter
+  the URLs the crawl returns, not the pages it opens: it still opens on-site
+  pages that fail them (such as `/page/2/`) to reach pages that match, and
+  `--max-pages` counts and bills those fetches. A crawl whose patterns match no
+  URL it read ends `completed` with no results, exits 0, and prints a note
+  (under `--json`, in `note`) to loosen them or raise `--depth` / `--max-pages`.
 - `create` returns at once. `--follow` (or `zenrows crawl wait <id>`) polls
   until the crawl ends or `--timeout` seconds run out (default 600). When the
   time runs out, the command exits 0 and prints the crawl with status

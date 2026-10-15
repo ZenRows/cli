@@ -761,11 +761,11 @@ await check(
   },
 );
 
-// ---------- 19-21: a failed crawl, results after a stop, the documented defaults ----------
+// ---------- 19-21: a crawl that matches nothing, results after a stop, the documented defaults ----------
 await liveCheck(
   "19",
-  "Failed crawl",
-  "a crawl that keeps nothing ends failed (no_items_found); crawl wait exits 1 with ok: false and CRAWL_FAILED",
+  "No match",
+  "a crawl whose pattern matches nothing ends completed with 0 results and no error; crawl wait exits 0 with ok: true and a note",
   async () => {
     const r = createWith([CRAWL_URL, "--depth", "1", "--include-patterns", H.NO_MATCH]);
     F = r.json;
@@ -773,15 +773,16 @@ await liveCheck(
     const w = z(["crawl", "wait", F.crawl_id, "--json"]);
     const j = w.json ?? {};
     const ok =
-      w.code === 1 &&
-      j.ok === false &&
-      j.status === "failed" &&
-      j.crawl?.error?.code === "no_items_found" &&
-      j.error?.code === "CRAWL_FAILED" &&
-      j.error?.server_code === "no_items_found";
+      w.code === 0 &&
+      j.ok === true &&
+      j.status === "completed" &&
+      j.crawl?.coverage?.items_found === 0 &&
+      j.crawl?.error === undefined &&
+      j.error === undefined &&
+      typeof j.note === "string";
     return {
       status: passIf(ok),
-      actual: `${F.crawl_id}: exit ${w.code}, status ${j.status}, ok ${j.ok}, error ${j.error?.code}/${j.error?.server_code}`,
+      actual: `${F.crawl_id}: exit ${w.code}, status ${j.status}, ok ${j.ok}, items ${j.crawl?.coverage?.items_found}, error ${j.crawl?.error?.code ?? "none"}, note ${j.note ? "yes" : "no"}`,
       evidence: show(w),
     };
   },

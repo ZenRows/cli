@@ -335,6 +335,56 @@ test("crawl get exits 0 for completed and stopped crawls", async () => {
   }
 });
 
+test("a completed crawl whose patterns matched nothing exits 0 with a note about the patterns", async () => {
+  const empty = { ...crawlBody, status: "completed", results: [], next_cursor: null };
+  await withCrawlWorkspace(
+    () => json({ ...empty, include_patterns: ["/product/"] }),
+    async () => {
+      const { code, out } = await run(["get", "c_1"]);
+      assert.equal(code, 0);
+      assert.equal(out.ok, true);
+      assert.equal(out.error, undefined);
+      assert.match(out.note, /matched --include-patterns \/ --exclude-patterns/);
+
+      let human = -1;
+      const err = await captureErr(async () => {
+        human = await crawl.run(["get", "c_1"], { json: false, yes: false });
+      });
+      assert.equal(human, 0);
+      assert.match(err, /Loosen them, or raise --depth or --max-pages/);
+    },
+  );
+  await withCrawlWorkspace(
+    () => json(empty),
+    async () => {
+      const { out } = await run(["get", "c_1"]);
+      assert.equal(out.note, undefined, "no patterns, no note");
+    },
+  );
+});
+
+test("a no_items_found crawl points at the start page, not the patterns", async () => {
+  await withCrawlWorkspace(
+    () =>
+      json({
+        ...crawlBody,
+        status: "failed",
+        include_patterns: ["/product/"],
+        error: { code: "no_items_found", detail: "The crawl found no items." },
+        results: [],
+        next_cursor: null,
+      }),
+    async () => {
+      const { code, out } = await run(["get", "c_1"]);
+      assert.equal(code, 1);
+      assert.equal(out.error.code, "CRAWL_FAILED");
+      assert.match(out.error.next_action, /zenrows fetch <url>/);
+      assert.doesNotMatch(out.error.next_action, /patterns/);
+      assert.equal(out.note, undefined);
+    },
+  );
+});
+
 // What the server says when credits end a crawl, as error.detail.
 const creditStopDetail: Record<string, string> = {
   insufficient_credits: "The crawl stopped because your account has no credits left.",
