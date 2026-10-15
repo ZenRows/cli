@@ -62,7 +62,7 @@ Use MCP tool names — not CLI `zenrows fetch`:
 | --- | --- |
 | `zenrows` | Decision tree across all primitives |
 | `protected-fetch` | `scrape` |
-| `extract` | `extract` (fallback: `scrape` + autoparse / css_extractor) |
+| `extract` | `extract` (fallback: `scrape` + css_extractor) |
 | `batch-jobs` | `batch_create`, `batch_status`, `batch_results`, `batch_cancel` |
 | `interact-browser` | `browser_*` (escalation only) |
 | `cost-control` | Cost multipliers + escalate-with-evidence |

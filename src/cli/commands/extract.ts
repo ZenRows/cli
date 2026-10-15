@@ -1,9 +1,10 @@
 /**
  * `zenrows extract <url> [flags]` → Extract (structured extraction on `/v1/`).
  *
- * Default: `extract=auto` (site-tailored Extract). If the domain is
- * not enabled or prepared (AUTH010 / REQS007), falls back once to Autoparse. Opt into Autoparse
- * directly with `--autoparse`. Other methods: `--css`, `--outputs`, `--output`.
+ * Default: `extract=auto` (site-tailored Extract). If Extract has not prepared
+ * the domain yet (REQS007 / AUTH010), the error names the prepare step; nothing
+ * is retried. `--autoparse` runs the deprecated Autoparse explicitly. Other
+ * methods: `--css`, `--outputs`, `--output`.
  */
 import { ensureApiKey } from "../../core/ensure-key.ts";
 import { maybeNudgeClaim } from "../../core/nudge.ts";
@@ -24,8 +25,9 @@ export const extract: Command = {
   usage: "zenrows extract <url> [--autoparse | --css <json> | --outputs <filters> | --output md|text] [flags]",
   help: [
     "Methods:",
-    "  (default)              extract=auto: site-tailored Extract; falls back to Autoparse if the domain is not enabled or prepared",
-    "  --autoparse            general-purpose Autoparse (any domain, no Extract fallback)",
+    "  (default)              extract=auto: site-tailored Extract on any prepared domain",
+    "                         (not prepared yet? prepare it: POST /v1/extract/prepared-domains)",
+    "  --autoparse            deprecated general-purpose Autoparse (any domain)",
     "  --css <json>           CSS selector map, e.g. '{\"title\":\"h1\",\"price\":\".price\"}'",
     "  --outputs <list>       built-in output filters → JSON: emails, phone_numbers, headings,",
     "                         images, audios, videos, links, menus, hashtags, metadata, tables,",
@@ -122,6 +124,9 @@ export const extract: Command = {
     const runId = newRunId();
     const startedAt = new Date().toISOString();
     log.step(`Extract ${url} (method=${opts.method ?? "extract"})…`);
+    if (opts.method === "autoparse") {
+      log.warn("Autoparse is deprecated. Prefer the default extract=auto on a prepared domain, or --css.");
+    }
 
     try {
       const outcome = await runExtract(opts, config, policy, apiKey);

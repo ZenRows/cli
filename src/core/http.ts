@@ -145,18 +145,10 @@ export async function scrape(
     redactedUrl: redacted,
   };
 
-  // REQS007 on extract=auto: the domain hasn't been prepared for Extract yet.
-  // Same recovery as AUTH010 (the extract adapter falls back to autoparse), so it
-  // maps to the same code. Checked before the 403 auth branch below.
+  // REQS007 on extract=auto: Extract has not prepared the domain yet. Reported,
+  // never retried: the fix is to prepare the domain, which the error names.
   if (res.status === 403 && params.extract !== undefined && zrErrorCode(body) === "REQS007") {
-    throw new ToolkitError({
-      code: "EXTRACT_DOMAIN_NOT_ENABLED",
-      message: "Extract has not been prepared for this domain yet.",
-      likely_cause: zrErrorDetail(body) ?? "This domain is not prepared for Extract.",
-      next_action:
-        "Retry with --autoparse for general-purpose extraction on any site, or get the domain prepared for Extract (POST /v1/extract/prepared-domains).",
-      suggested_commands: [`zenrows extract ${params.url} --autoparse`],
-    });
+    throw extractDomainNotPrepared(params.url, zrErrorDetail(body));
   }
   // 422 no_data_extracted on an Extract request: the page was processed and had
   // nothing to extract. It is an answer, not a failure to reach the target, so
@@ -214,18 +206,10 @@ export async function scrape(
     }
   }
   if (res.status === 402 && isZenrowsErrorEnvelope(body)) {
-    // AUTH010 on extract=auto means the target domain is not enabled for
-    // Extract, distinct from credit exhaustion (AUTH004). Let the extract
-    // adapter fall back to autoparse.
+    // AUTH010 on extract=auto is the legacy code for REQS007: the domain is
+    // not prepared for Extract. Distinct from credit exhaustion (AUTH004).
     if (params.extract !== undefined && zrErrorCode(body) === "AUTH010") {
-      throw new ToolkitError({
-        code: "EXTRACT_DOMAIN_NOT_ENABLED",
-        message: "Extract is not enabled for this domain yet.",
-        likely_cause: zrErrorDetail(body) ?? "This domain is not enabled for Extract.",
-        next_action:
-          "Retry with --autoparse for general-purpose extraction on any site, or get the domain prepared for Extract (POST /v1/extract/prepared-domains).",
-        suggested_commands: [`zenrows extract ${params.url} --autoparse`],
-      });
+      throw extractDomainNotPrepared(params.url, zrErrorDetail(body));
     }
     // AUTH014: this key hit one of its credit caps; the account still has credits.
     if (isKeyCapReached(zrErrorCode(body) ?? undefined)) {
@@ -322,6 +306,33 @@ export async function scrape(
  * the operator to check connectivity would send them at the wrong problem. The
  * elapsed time is included so the 90s server budget is visible in the output.
  */
+/** How to prepare a domain for Extract, shared by every surface that reports REQS007. */
+export const PREPARE_DOMAIN_STEP =
+  "Prepare it with POST /v1/extract/prepared-domains (a few example URLs, a few minutes, no credits), then retry; or run with --autoparse.";
+
+/**
+ * REQS007 (or the legacy AUTH010) on extract=auto: Extract has not prepared the
+ * URL's domain yet. The message names the next step, because agents copy it.
+ */
+export function extractDomainNotPrepared(url: string, detail: string | null): ToolkitError {
+  const domain = hostnameOf(url);
+  return new ToolkitError({
+    code: "EXTRACT_DOMAIN_NOT_ENABLED",
+    message: `Extract hasn't prepared ${domain} yet. ${PREPARE_DOMAIN_STEP}`,
+    likely_cause: detail ?? `Extract has not prepared ${domain} yet.`,
+    next_action: `${PREPARE_DOMAIN_STEP.replace("Prepare it", `Prepare ${domain}`)} The body is {"domain":"${domain}","example_urls":["${url}"]} (1 to 5 URLs) with your key in the X-API-Key header; poll GET /v1/extract/prepared-domains/${domain} until status is ready.`,
+    suggested_commands: [`zenrows extract ${url} --autoparse`],
+  });
+}
+
+function hostnameOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
 export function requestTimeout(url: string, timeoutMs: number, elapsedMs: number): ToolkitError {
   const suggestedMs = Math.max(timeoutMs + 60_000, SERVER_BUDGET_MS + 60_000);
   const atBudget = elapsedMs >= SERVER_BUDGET_MS;

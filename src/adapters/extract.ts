@@ -8,10 +8,10 @@
  *   - outputs=<filters>    → built-in output filters → JSON
  *   - response_type=markdown|plaintext
  *
- * Default method is `extract`. On AUTH010 / REQS007 (domain not enabled or not
- * prepared for Extract) we
- * automatically retry once with Autoparse unless the caller opted into
- * `--autoparse` (or another explicit method) or disabled the fallback.
+ * Default method is `extract`. REQS007 (or the legacy AUTH010: Extract has not
+ * prepared the domain yet) is reported with the prepare step, not retried.
+ * Autoparse is deprecated and runs only when asked for: `--autoparse`, or
+ * `fallbackAutoparse: true`.
  */
 import type { Policy, ToolkitConfig } from "../types/index.ts";
 import { ToolkitError } from "../core/errors.ts";
@@ -28,8 +28,9 @@ export interface ExtractOptions extends Omit<FetchOptions, "autoparse" | "cssExt
   /** Validate the parsed JSON shape locally (best-effort). */
   validate?: boolean;
   /**
-   * When method is `extract` (default), retry once with Autoparse if the domain
-   * is not enabled or prepared for Extract (AUTH010 / REQS007). Defaults to true.
+   * When method is `extract` (default), retry once with the deprecated Autoparse
+   * if Extract has not prepared the domain yet (REQS007 / AUTH010). Defaults to
+   * false: the error names the prepare step instead.
    */
   fallbackAutoparse?: boolean;
 }
@@ -40,7 +41,7 @@ export interface ExtractOutcome extends FetchOutcome {
   data?: unknown;
   /** Raw HTML from `extract=auto` responses (validation aid). */
   html?: string;
-  /** True when Extract fell back to Autoparse because the domain is not enabled. */
+  /** True when Extract fell back to Autoparse (only with `fallbackAutoparse: true`). */
   fellBackToAutoparse?: boolean;
   /**
    * True when a structured method returned no data (null / empty object / empty
@@ -54,12 +55,17 @@ export interface ExtractOutcome extends FetchOutcome {
   noDataExtracted?: boolean;
 }
 
-/** True when a parsed extraction result carries no usable structured data. */
-function isEmptyData(data: unknown): boolean {
+/**
+ * True when a parsed extraction result carries no usable structured data: null,
+ * a blank string, or an array / object whose every value is itself empty. So
+ * `{"title": null, "items": [], "author": {"name": ""}}` is empty. Numbers and
+ * booleans are values, so `0` and `false` count as data.
+ */
+export function isEmptyData(data: unknown): boolean {
   if (data === null || data === undefined) return true;
-  if (Array.isArray(data)) return data.length === 0;
-  if (typeof data === "object") return Object.keys(data as object).length === 0;
   if (typeof data === "string") return data.trim() === "";
+  if (Array.isArray(data)) return data.every(isEmptyData);
+  if (typeof data === "object") return Object.values(data as object).every(isEmptyData);
   return false;
 }
 
@@ -90,7 +96,7 @@ export async function runExtract(
     });
   }
 
-  if (method === "extract" && opts.fallbackAutoparse !== false) {
+  if (method === "extract" && opts.fallbackAutoparse === true) {
     try {
       return await runExtractOnce({ ...opts, method: "extract" }, config, policy, apiKey);
     } catch (err) {
@@ -179,7 +185,7 @@ function parseExtractBody(
   }
 
   const empty = isEmptyData(data);
-  // ACT-1514: an empty result must not read as a silent success. Under
+  // An empty result must not read as a silent success. Under
   // --validate it's an error; otherwise the command surfaces a warning.
   if (opts.validate && empty) {
     throw new ToolkitError({

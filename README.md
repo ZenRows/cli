@@ -37,7 +37,7 @@ that endpoint with extraction parameters, not a separate product.
 | Command | What it does | Status (this build) |
 | --- | --- | --- |
 | `zenrows fetch` | Fetch: retrieve a protected page | **available**: `GET https://api.zenrows.com/v1/` |
-| `zenrows extract` | Extract: turn a page into structured data with `extract=auto` on any prepared domain (falls back to Autoparse on one not prepared yet), CSS selectors, or Markdown | **available**: `GET https://api.zenrows.com/v1/?extract=auto` |
+| `zenrows extract` | Extract: turn a page into structured data with `extract=auto` on any prepared domain (you can prepare one yourself), CSS selectors, or Markdown | **available**: `GET https://api.zenrows.com/v1/?extract=auto` |
 | `zenrows batch` | Batch: run Fetch and Extract over many URLs in one job; specs validate and estimate locally with no key | **available**: `POST https://async.api.zenrows.com/v1/jobs` |
 | `zenrows crawl` | Crawl (new): collect the URLs behind one start page, optionally with each page's HTML | **available**: `POST https://api.zenrows.com/v1/crawls` |
 | `zenrows browser` | Browser Sessions: a real cloud browser over REST (same backend as MCP `browser_*`); escalation-only, billed by bandwidth + time | **available**: `POST https://mcp.zenrows.com/browser/sessions` |
@@ -56,7 +56,7 @@ npm install -g @zenrows/cli # puts `zenrows` on PATH (466 ms, zero deps)
 zenrows init
 zenrows fetch https://httpbin.io/html # auto-provisions a Free plan account on first use
 zenrows extract https://www.owler.com/company/meltwater # extract=auto on a prepared domain
-zenrows extract https://www.scrapingcourse.com/ecommerce/ --autoparse # Autoparse (any domain)
+zenrows extract https://www.scrapingcourse.com/ecommerce/ --css '{"title":"h1"}' # CSS selectors (any domain)
 ```
 
 > Prefer no global install? Prefix each command with `npx -y @zenrows/cli`
@@ -117,7 +117,7 @@ zenrows fetch <url> --proxy-country us --wait-for ".price"
 
 ```bash
 zenrows extract https://www.owler.com/company/meltwater                # extract=auto (prepared domain)
-zenrows extract https://www.scrapingcourse.com/ecommerce/ --autoparse   # Autoparse (any domain)
+zenrows extract https://www.scrapingcourse.com/ecommerce/ --autoparse   # deprecated Autoparse (any domain)
 zenrows extract <url> --css '{"title":"h1","price":".price"}' --validate
 zenrows extract <url> --outputs emails,links                            # built-in output filters → JSON
 zenrows extract <url> --output markdown

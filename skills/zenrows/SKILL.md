@@ -32,7 +32,7 @@ If the user has a known URL and wants page content:
   → Use Protected Fetch.            (zenrows fetch <url>)
 
 If the user has a known URL and wants structured data:
-  → Use Extract.                    (zenrows extract <url> | --autoparse | --css)
+  → Use Extract.                    (zenrows extract <url> | --css)
 
 If the user has a start page (listing, index, section) but not the item URLs:
   → Use Crawl.                      (zenrows crawl create <url> --depth 1 --follow,
@@ -72,13 +72,14 @@ Run `zenrows status` for the live capability matrix. As of this toolkit:
 | Primitive | Command | Status |
 | --- | --- | --- |
 | Protected Fetch | `zenrows fetch` | **available**: `GET https://api.zenrows.com/v1/` |
-| Extract (`extract=auto`, Autoparse, CSS, Markdown) | `zenrows extract` | **available**: `GET https://api.zenrows.com/v1/?extract=auto` |
+| Extract (`extract=auto`, CSS, Markdown; Autoparse deprecated) | `zenrows extract` | **available**: `GET https://api.zenrows.com/v1/?extract=auto` |
 | Batch | `zenrows batch` | **available**: `POST https://async.api.zenrows.com/v1/jobs` |
 | Crawl (new) | `zenrows crawl` | **available**: `POST https://api.zenrows.com/v1/crawls` |
 | Browser | `zenrows browser` | **available**: `POST https://mcp.zenrows.com/browser/sessions` |
 | MCP | `zenrows mcp` | **available**: `https://mcp.zenrows.com/mcp` |
 
-- Extract: `extract=auto` falls back to Autoparse on a domain not prepared yet.
+- Extract: `extract=auto` works on any prepared domain. On one not prepared yet
+  (REQS007), prepare it with `POST /v1/extract/prepared-domains`; see [[extract]].
 - Batch: the cheapest path at scale (create, status, results). Estimate specs locally with no key.
 - Crawl: collects the URLs behind one start page, optionally with each page's HTML.
 - Browser: escalation-only, for pages Fetch can't handle; same backend as the MCP `browser_*` tools.
