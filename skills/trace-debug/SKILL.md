@@ -43,8 +43,23 @@ zenrows trace export <run-id>     # JSON for sharing
   local policy credit limit was hit). Do not retry-loop; `zenrows usage` shows
   when credits renew. Top up or upgrade, or claim the account if it is an
   auto-created Free plan.
-- `BATCH_FAILED` → the batch run ended `failed`; `failure_reason` and
-  `failure_detail` in `zenrows batch status <id> --json` say why.
+- `BATCH_FAILED` → the batch run ended `failed` for a reason other than
+  credits, subscription or key cap (those get `POLICY_MAX_CREDITS_EXCEEDED`,
+  `AUTH_INVALID` or `KEY_CREDIT_CAP_REACHED`, with the run's `failure_reason`
+  as `server_code` and its `job_id`); `failure_detail` in
+  `zenrows batch status <id> --json` says why. Once fixed, run the unfinished
+  tasks with `zenrows batch rerun <id> --status failed,pending,processing`;
+  do not resubmit. Also a 400 (fix the flagged tasks) or a 5xx (retry).
+- `BATCH_QUOTA_EXCEEDED` → 429: 3 active jobs (shared with Crawl), 5 scheduled
+  jobs, or an open job's task cap. Nothing was created; free a slot (see
+  `zenrows batch list` and `zenrows crawl list`).
+- `BATCH_ACCESS_DENIED` / `BATCH_NOT_FOUND` → 403 Batch not enabled, or 404
+  wrong or deleted job id. Do not retry.
+- `BATCH_RUN_IN_PROGRESS`, `BATCH_RUN_ENDED`, `BATCH_NO_MATCHING_TASKS`,
+  `BATCH_RERUN_WINDOW_EXPIRED`, `BATCH_REQUEST_IN_FLIGHT`, `BATCH_CONFLICT`,
+  `BATCH_TASK_NOT_READY`, `BATCH_TASK_FAILED`, `BATCH_RESULT_EXPIRED` → the
+  Batch API's 409/410/422 answers; `server_code` names the case and
+  `next_action` the fix. See [[batch-jobs]].
 - `CRAWL_NOT_ENABLED` → the API answered 403 `REQS008`: Crawl is not
   enabled for this account. Do not retry; ask Zenrows support for access.
 - `CRAWL_INSUFFICIENT_CREDITS` / `CRAWL_KEY_CAP_REACHED` → Crawl's 402: the
