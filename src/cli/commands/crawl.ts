@@ -80,7 +80,8 @@ export const crawl: Command = {
     "                                    a crawl still running then is printed, not stopped",
     "  --json                            print structured output: create/get/wait/stop print",
     "                                    {ok, crawl_id, status, crawl}; get adds results and next_cursor;",
-    "                                    a wait that runs out adds note",
+    "                                    a wait that runs out, or a completed crawl with patterns",
+    "                                    and 0 results, adds note",
   ].join("\n"),
   async run(argv: string[], ctx: RunContext): Promise<number> {
     const [sub, ...rest] = argv;
@@ -491,9 +492,10 @@ export function crawlFailure(c: Crawl | CrawlStop): ToolkitError | null {
   }
   const why = [code, c.error?.detail].filter(Boolean).join(": ");
   const next: Record<string, string> = {
-    seed_unreachable: "The start URL could not be fetched (the site may be blocking it). Check it with `zenrows fetch <url>`.",
+    seed_unreachable:
+      "The start URL could not be fetched or returned an empty page (the site may be blocking it). Check it with `zenrows fetch <url>`.",
     no_items_found:
-      "Nothing matched. Loosen --include-patterns / --exclude-patterns, raise or drop --depth, or check the start page with `zenrows fetch <url>`.",
+      "The crawl read the start page but found no data it could use, so it had nothing to follow. Start from a listing or product page.",
   };
   return new ToolkitError({
     code: "CRAWL_FAILED",
@@ -503,6 +505,18 @@ export function crawlFailure(c: Crawl | CrawlStop): ToolkitError | null {
     suggested_commands: [getCmd],
     ...ids,
   });
+}
+
+/**
+ * Set only when a crawl with patterns completed and kept nothing. The API ends a
+ * crawl whose pages held nothing new to follow `completed`, and does not count
+ * the links the patterns rejected, so the patterns are the first thing to check.
+ */
+function noMatchNote(c: Crawl | CrawlStop): string | undefined {
+  const crawl = c as Crawl;
+  const patterns = [...(crawl.include_patterns ?? []), ...(crawl.exclude_patterns ?? [])];
+  if (crawl.status !== "completed" || crawl.coverage?.items_found !== 0 || !patterns.length) return undefined;
+  return "The crawl completed with no results. Check --include-patterns / --exclude-patterns against the URLs the start page links to.";
 }
 
 /**
@@ -519,6 +533,7 @@ function printCrawl(
   extra: { results?: CrawlResult[]; next_cursor?: string | null; note?: string } = {},
 ): number {
   const err = crawlFailure(c);
+  const note = extra.note ?? noMatchNote(c);
   const crawlFields = { ...c } as Record<string, unknown>;
   // A wait polls with one result to stay cheap; that page is not "the results".
   delete crawlFields.results;
@@ -532,6 +547,7 @@ function printCrawl(
           status: c.status,
           crawl: crawlFields,
           ...extra,
+          note,
           ...(err ? { error: err.toJSON() } : {}),
         },
         null,
@@ -549,6 +565,7 @@ function printCrawl(
     log.info(`  ${cov.items_found} item(s) found · ${cov.pages_fetched} page(s) fetched · ${cov.pages_failed} failed`);
   }
   if (extra.note) log.dim(`  next: zenrows crawl wait ${c.crawl_id}`);
+  else if (note) log.warn(`  ${note}`);
   if (err) printError(err, false);
   return err ? 1 : 0;
 }

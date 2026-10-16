@@ -335,6 +335,88 @@ test("crawl get exits 0 for completed and stopped crawls", async () => {
   }
 });
 
+test("a completed crawl with patterns and 0 results exits 0 with a note to check the patterns", async () => {
+  const empty = { ...crawlBody, status: "completed", results: [], next_cursor: null };
+  await withCrawlWorkspace(
+    () => json({ ...empty, include_patterns: ["/product/"] }),
+    async () => {
+      const { code, out } = await run(["get", "c_1"]);
+      assert.equal(code, 0);
+      assert.equal(out.ok, true);
+      assert.equal(out.error, undefined);
+      assert.match(out.note, /Check --include-patterns \/ --exclude-patterns against the URLs the start page links to/);
+
+      let human = -1;
+      const err = await captureErr(async () => {
+        human = await crawl.run(["get", "c_1"], { json: false, yes: false });
+      });
+      assert.equal(human, 0);
+      assert.match(err, /against the URLs the start page links to/);
+    },
+  );
+  await withCrawlWorkspace(
+    () => json(empty),
+    async () => {
+      const { out } = await run(["get", "c_1"]);
+      assert.equal(out.note, undefined, "no patterns, no note");
+    },
+  );
+});
+
+test("a no_items_found crawl says the start page held no data the crawl could use, not that the patterns matched nothing", async () => {
+  await withCrawlWorkspace(
+    () =>
+      json({
+        ...crawlBody,
+        status: "failed",
+        include_patterns: ["/product/"],
+        error: {
+          code: "no_items_found",
+          detail:
+            "The crawl read the start page but found no data it could use, so it had nothing to follow. Start from a listing or product page.",
+        },
+        results: [],
+        next_cursor: null,
+      }),
+    async () => {
+      const { code, out } = await run(["get", "c_1"]);
+      assert.equal(code, 1);
+      assert.equal(out.error.code, "CRAWL_FAILED");
+      assert.equal(out.error.server_code, "no_items_found");
+      assert.match(out.error.next_action, /read the start page but found no data it could use/);
+      assert.match(out.error.next_action, /Start from a listing or product page/);
+      assert.doesNotMatch(out.error.next_action, /Extract|Fetch|Batch/);
+      assert.doesNotMatch(out.error.next_action, /patterns/);
+      assert.equal(out.note, undefined);
+    },
+  );
+});
+
+test("an empty start page fails seed_unreachable with exit 1 and CRAWL_FAILED", async () => {
+  await withCrawlWorkspace(
+    () =>
+      json({
+        ...crawlBody,
+        status: "failed",
+        error: {
+          code: "seed_unreachable",
+          detail: "The start URL returned an empty page, so the crawl could not begin. Check the URL.",
+        },
+        results: [],
+        next_cursor: null,
+      }),
+    async () => {
+      const { code, out } = await run(["get", "c_1"]);
+      assert.equal(code, 1);
+      assert.equal(out.ok, false);
+      assert.equal(out.error.code, "CRAWL_FAILED");
+      assert.equal(out.error.server_code, "seed_unreachable");
+      assert.match(out.error.next_action, /could not be fetched or returned an empty page/);
+      assert.equal(out.note, undefined);
+    },
+  );
+});
+
 // What the server says when credits end a crawl, as error.detail.
 const creditStopDetail: Record<string, string> = {
   insufficient_credits: "The crawl stopped because your account has no credits left.",

@@ -39,6 +39,10 @@ zenrows crawl results <id> --out urls.jsonl  # same, as JSONL
 - `--include-patterns` / `--exclude-patterns` are substring matches on the
   normalized URL and repeat:
   `--include-patterns /product/ --exclude-patterns ?add-to-cart`.
+- A crawl whose pages held nothing new to follow (no link, only links to other
+  sites, or only links the patterns reject) ends `completed` with no results
+  and exits 0. When patterns were set, it prints a note (under `--json`, in
+  `note`) to check them against the URLs the start page links to.
 - `create` returns at once. `--follow` (or `zenrows crawl wait <id>`) polls
   until the crawl ends or `--timeout` seconds run out (default 600). When the
   time runs out, the command exits 0 and prints the crawl with status
@@ -85,7 +89,10 @@ credit cap; the pages fetched before that stay readable. `failed`, and a
 `stopped` crawl with an `error`, exit non-zero: `CRAWL_INSUFFICIENT_CREDITS` or
 `CRAWL_KEY_CAP_REACHED` when credits ended it (the same codes a refused
 `create` gets, also when an older deployment reports it `failed`), else
-`CRAWL_FAILED`. `server_code` carries the API's `error.code`.
+`CRAWL_FAILED`. `server_code` carries the API's `error.code`:
+`seed_unreachable` when the start URL could not be fetched or returned an empty
+page, `no_items_found` when the crawl read the start page but found no data it
+could use.
 `stop` on a crawl that already ended prints the status it ended with.
 
 With `--json`, `create`, `get`, `wait` and `stop` print

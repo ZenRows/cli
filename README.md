@@ -187,7 +187,10 @@ to open. `--max-items` and `--max-pages` cap the crawl (API default 100 each),
 and `--max-pages` bounds the cost, since each page is one fetch. The local policy `max_pages_per_run` caps `--max-pages` (default
 1000). `--output-format html` uses up the page budget: each kept page is one
 more fetch, and `--max-pages` counts it. `--include-patterns` /
-`--exclude-patterns` are repeatable substring filters on the URL. `get` and
+`--exclude-patterns` are repeatable substring filters on the URL. A crawl whose
+pages held nothing new to follow ends `completed` with no results and exits 0.
+When patterns were set, it prints a note (under `--json`, in `note`) to check
+them against the URLs the start page links to. `get` and
 `list` read one page and take `--cursor` and `--limit`. `results` follows every
 page (`--limit` is the page size); on a running crawl it returns the URLs kept
 so far, with `partial: true`. `download` reports the crawl's `status` (`null`
