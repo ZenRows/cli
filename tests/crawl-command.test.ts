@@ -335,6 +335,61 @@ test("crawl get exits 0 for completed and stopped crawls", async () => {
   }
 });
 
+// What the server says when credits end a crawl, as error.detail.
+const creditStopDetail: Record<string, string> = {
+  insufficient_credits: "The crawl stopped because your account has no credits left.",
+  api_key_cap_reached: "The crawl stopped because your API key reached one of its credit caps.",
+};
+
+test("a crawl the credits ended exits 1 with the code a 402 create gets, stopped or failed", async () => {
+  const cases = [
+    { status: "stopped", server: "insufficient_credits", code: "CRAWL_INSUFFICIENT_CREDITS", advice: /zenrows usage/ },
+    { status: "stopped", server: "api_key_cap_reached", code: "CRAWL_KEY_CAP_REACHED", advice: /cap to reset/ },
+    // Older deployments end such a crawl `failed`: callers see the same code.
+    { status: "failed", server: "insufficient_credits", code: "CRAWL_INSUFFICIENT_CREDITS", advice: /zenrows usage/ },
+    { status: "failed", server: "api_key_cap_reached", code: "CRAWL_KEY_CAP_REACHED", advice: /cap to reset/ },
+  ];
+  for (const k of cases) {
+    const label = `${k.status} ${k.server}`;
+    await withCrawlWorkspace(
+      () =>
+        json({
+          ...crawlBody,
+          status: k.status,
+          error: { code: k.server, detail: creditStopDetail[k.server] },
+          results: [{ url: "https://example.com/product/a" }],
+          next_cursor: null,
+        }),
+      async () => {
+        const { code: exit, out } = await run(["get", "c_1"]);
+        assert.equal(exit, 1, label);
+        assert.equal(out.ok, false, label);
+        assert.equal(out.status, k.status, label);
+        assert.equal(out.error.code, k.code, label);
+        assert.equal(out.error.server_code, k.server, label);
+        assert.equal(out.error.crawl_id, "c_1", label);
+        assert.ok(out.error.likely_cause.includes(`${creditStopDetail[k.server]} Stopped crawl c_1`), label);
+        assert.match(out.error.next_action, k.advice, label);
+        assert.ok(out.error.suggested_commands.includes("zenrows crawl get c_1"), label);
+        assert.equal(out.results.length, 1, label);
+      },
+    );
+  }
+});
+
+test("a crawl stopped with any other error code exits 1 with CRAWL_FAILED", async () => {
+  await withCrawlWorkspace(
+    () => json({ ...crawlBody, status: "stopped", error: { code: "internal", detail: "Something broke." }, results: [], next_cursor: null }),
+    async () => {
+      const { code, out } = await run(["get", "c_1"]);
+      assert.equal(code, 1);
+      assert.equal(out.error.code, "CRAWL_FAILED");
+      assert.equal(out.error.server_code, "internal");
+      assert.match(out.error.message, /stopped before it finished/);
+    },
+  );
+});
+
 test("crawl get on an unknown id exits 1 with CRAWL_NOT_FOUND", async () => {
   await withCrawlWorkspace(
     () => json({ code: "crawl_not_found", title: "Crawl not found", detail: "No crawl c_x.", status: 404 }, 404),
