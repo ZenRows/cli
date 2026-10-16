@@ -35,8 +35,8 @@ result: true means no field came back with a value.
 
 `mode=auto` works on any prepared domain, and you can prepare one yourself.
 When Extract refuses a page, `extract` returns a tool error with code
-`REQS007` (legacy `AUTH010`) and a `reason`. It never retries with Autoparse
-unless you set `fallback_autoparse: true`.
+`REQS007` (legacy `AUTH010`) and a `reason`. It never retries with Autoparse.
+`fallback_autoparse` is deprecated and has no effect; don't send it.
 
 | `reason` | Meaning | Next step |
 | --- | --- | --- |

@@ -143,10 +143,6 @@ export const extract: Command = {
       const safeParams = { ...outcome.params };
       delete (safeParams as Record<string, unknown>).apikey;
 
-      if (outcome.fellBackToAutoparse) {
-        log.info("Extract not available for this domain yet — fell back to Autoparse.");
-      }
-
       const runDir = writeRun(
         {
           runId,
@@ -159,7 +155,6 @@ export const extract: Command = {
           request: {
             ...safeParams,
             method: outcome.method,
-            fellBackToAutoparse: outcome.fellBackToAutoparse ?? false,
           },
           result: { httpStatus: outcome.result.status, bytes: outcome.result.body.length, parsed: outcome.data !== undefined },
           costUsd: outcome.result.costUsd,
@@ -174,9 +169,8 @@ export const extract: Command = {
         writeOut(values.out as string, payload);
         log.success(`Wrote output → ${values.out}`);
       }
-      const via = outcome.fellBackToAutoparse ? `${outcome.method} (fallback)` : outcome.method;
       log.success(
-        `Extracted via ${via} · ${outcome.result.body.length} bytes · ${formatRequestCost(outcome.result.costUsd, outcome.result.costCredits)} · run ${runId}`,
+        `Extracted via ${outcome.method} · ${outcome.result.body.length} bytes · ${formatRequestCost(outcome.result.costUsd, outcome.result.costCredits)} · run ${runId}`,
       );
       if (runDir) log.dim(`  artifact: ${runDir}`);
       if (outcome.noDataExtracted) {
@@ -196,7 +190,6 @@ export const extract: Command = {
               ok: true,
               runId,
               method: outcome.method,
-              fellBackToAutoparse: outcome.fellBackToAutoparse ?? false,
               empty: outcome.empty ?? false,
               noDataExtracted: outcome.noDataExtracted ?? false,
               httpStatus: outcome.result.status,

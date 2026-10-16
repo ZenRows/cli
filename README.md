@@ -130,7 +130,8 @@ uses one slot of the monthly allowance. `EXTRACT_PAGE_NOT_RECOGNISED` (also
 REQS007) is different: the domain is prepared, but this page is not one Extract
 extracts. Try a product, article or listing page instead, retry it once in a
 few minutes if it should work, or use `--css`; preparing again does not change
-it.
+it. `zenrows extract` never falls back to Autoparse. The `fallbackAutoparse`
+adapter option is deprecated and has no effect.
 
 ```bash
 zenrows extract prepare example.com --url https://example.com/p/1 --url https://example.com/list --wait

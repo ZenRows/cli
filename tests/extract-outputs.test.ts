@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { normalizeOutputs } from "../src/cli/commands/extract.ts";
 import { buildParams, type FetchOptions } from "../src/adapters/protected-fetch.ts";
-import { isEmptyData, runExtract } from "../src/adapters/extract.ts";
+import { FALLBACK_AUTOPARSE_DEPRECATION, isEmptyData, runExtract } from "../src/adapters/extract.ts";
 import { defaultConfig } from "../src/core/config.ts";
 import { defaultPolicy } from "../src/core/policy.ts";
 import { ToolkitError } from "../src/core/errors.ts";
@@ -143,7 +143,6 @@ test("runExtract default method is extract=auto and unwraps {parsed,html}", asyn
       assert.equal(outcome.params.autoparse, undefined);
       assert.deepEqual(outcome.data, { title: "X" });
       assert.equal(outcome.html, "<html>x</html>");
-      assert.equal(outcome.fellBackToAutoparse, undefined);
     },
   );
 });
@@ -308,28 +307,59 @@ test("runExtract reports legacy AUTH010 like REQS007 and does not retry", async 
   });
 });
 
-test("runExtract retries with autoparse on REQS007 only when fallbackAutoparse is true", async () => {
-  const REQS007 = JSON.stringify({ code: "REQS007", detail: "Extract has not been prepared for x.com yet.", status: 403 });
-  const calls: string[] = [];
-  await withFetchHandler((url) => {
-    calls.push(url);
-    if (url.includes("extract=auto")) {
-      return new Response(REQS007, { status: 403, headers: { "content-type": "application/json" } });
-    }
-    return new Response('{"title":"fallback"}', {
-      status: 200,
-      headers: { "content-type": "application/json", "x-request-credits": "1" },
-    });
-  }, async () => {
-    const outcome = await runExtract({ url: "https://x.com", fallbackAutoparse: true }, cfg, defaultPolicy(), "testkey");
-    assert.equal(outcome.method, "autoparse");
-    assert.equal(outcome.fellBackToAutoparse, true);
-    assert.deepEqual(outcome.data, { title: "fallback" });
-    assert.equal(calls.length, 2);
-    assert.match(calls[0]!, /extract=auto/);
-    assert.match(calls[1]!, /autoparse=true/);
-    assert.doesNotMatch(calls[1]!, /extract=auto/);
+/** Runs fn with stderr captured, and returns what was written to it. */
+async function captureStderr(fn: () => Promise<void>): Promise<string> {
+  const original = process.stderr.write.bind(process.stderr);
+  let written = "";
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    written += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    await fn();
+  } finally {
+    process.stderr.write = original;
+  }
+  return written;
+}
+
+// fallbackAutoparse is deprecated and has no effect: the refusal is reported in
+// one request, with the prepare step, and the caller is told once.
+for (const [name, body, status] of [
+  ["REQS007", JSON.stringify({ code: "REQS007", detail: "Extract has not been prepared for x.com yet.", status: 403 }), 403],
+  ["AUTH010", AUTH010, 402],
+] as const) {
+  test(`runExtract ignores fallbackAutoparse: true on ${name}, in one request, with one deprecation warning`, async () => {
+    const calls: string[] = [];
+    const stderr = await captureStderr(() =>
+      withFetchHandler((url) => {
+        calls.push(url);
+        return new Response(body, { status, headers: { "content-type": "application/json" } });
+      }, async () => {
+        await assert.rejects(
+          () => runExtract({ url: "https://x.com", fallbackAutoparse: true }, cfg, defaultPolicy(), "testkey"),
+          (e: unknown) =>
+            e instanceof ToolkitError &&
+            e.code === "EXTRACT_DOMAIN_NOT_PREPARED" &&
+            e.suggested_commands?.includes("zenrows extract prepare x.com --url https://x.com --wait") === true,
+        );
+      }),
+    );
+    assert.equal(calls.length, 1, "fallbackAutoparse must not retry with autoparse");
+    assert.doesNotMatch(calls[0]!, /autoparse=true/);
+    assert.equal(stderr.split(FALLBACK_AUTOPARSE_DEPRECATION).length - 1, 1, `want one deprecation warning, got: ${stderr}`);
   });
+}
+
+test("runExtract prints no deprecation warning without fallbackAutoparse, or with it false", async () => {
+  for (const fallbackAutoparse of [undefined, false]) {
+    const stderr = await captureStderr(() =>
+      withFetch(JSON.stringify({ parsed: { title: "X" } }), async () => {
+        await runExtract({ url: "https://x.com", fallbackAutoparse }, cfg, defaultPolicy(), "testkey");
+      }),
+    );
+    assert.doesNotMatch(stderr, /fallbackAutoparse/);
+  }
 });
 
 test("runExtract does not fall back on AUTH004 (credits exhausted)", async () => {
@@ -343,20 +373,6 @@ test("runExtract does not fall back on AUTH004 (credits exhausted)", async () =>
       (e: unknown) => e instanceof ToolkitError && e.code === "POLICY_MAX_CREDITS_EXCEEDED",
     );
     assert.equal(calls, 1, "must not retry autoparse when credits are exhausted");
-  });
-});
-
-test("runExtract surfaces autoparse failure after an opted-in AUTH010 fallback", async () => {
-  await withFetchHandler((url) => {
-    if (url.includes("extract=auto")) {
-      return new Response(AUTH010, { status: 402, headers: { "content-type": "application/json" } });
-    }
-    return new Response("upstream boom", { status: 500, headers: { "content-type": "text/plain" } });
-  }, async () => {
-    await assert.rejects(
-      () => runExtract({ url: "https://x.com", fallbackAutoparse: true }, cfg, defaultPolicy(), "testkey"),
-      (e: unknown) => e instanceof ToolkitError && e.code === "FETCH_FAILED",
-    );
   });
 });
 
@@ -465,7 +481,6 @@ test("runExtract reports 422 no_data_extracted as an empty result, in one reques
     assert.equal(outcome.method, "extract");
     assert.equal(outcome.empty, true);
     assert.equal(outcome.noDataExtracted, true);
-    assert.equal(outcome.fellBackToAutoparse, undefined);
     assert.equal(outcome.data, undefined);
     assert.equal(calls.length, 1);
     assert.match(calls[0]!, /extract=auto/);

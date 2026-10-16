@@ -9,12 +9,13 @@
  *   - response_type=markdown|plaintext
  *
  * Default method is `extract`. REQS007 (or the legacy AUTH010: Extract has not
- * prepared the domain yet) is reported with the prepare step, not retried.
- * Autoparse is deprecated and runs only when asked for: `--autoparse`, or
- * `fallbackAutoparse: true`.
+ * prepared the domain yet) is reported with the prepare step, never retried:
+ * there is no fallback to Autoparse. Autoparse is deprecated and runs only when
+ * asked for directly, with `--autoparse` (method `autoparse`).
  */
 import type { Policy, ToolkitConfig } from "../types/index.ts";
 import { ToolkitError } from "../core/errors.ts";
+import { log } from "../core/logger.ts";
 import { runFetch, type FetchOptions, type FetchOutcome } from "./protected-fetch.ts";
 
 export type ExtractMethod = "extract" | "autoparse" | "css" | "outputs" | "markdown" | "plaintext";
@@ -28,9 +29,9 @@ export interface ExtractOptions extends Omit<FetchOptions, "autoparse" | "cssExt
   /** Validate the parsed JSON shape locally (best-effort). */
   validate?: boolean;
   /**
-   * When method is `extract` (default), retry once with the deprecated Autoparse
-   * if Extract has not prepared the domain yet (REQS007 / AUTH010). Defaults to
-   * false: the error names the prepare step instead.
+   * @deprecated Has no effect: Extract no longer falls back to Autoparse. Still
+   * accepted so existing callers keep working; `true` prints one deprecation
+   * warning. On REQS007, prepare the domain with `zenrows extract prepare`.
    */
   fallbackAutoparse?: boolean;
 }
@@ -41,8 +42,6 @@ export interface ExtractOutcome extends FetchOutcome {
   data?: unknown;
   /** Raw HTML from `extract=auto` responses (validation aid). */
   html?: string;
-  /** True when Extract fell back to Autoparse (only with `fallbackAutoparse: true`). */
-  fellBackToAutoparse?: boolean;
   /**
    * True when a structured method returned no data (null / empty object / empty
    * array / non-JSON). Lets callers warn instead of reporting a silent success.
@@ -68,6 +67,11 @@ export function isEmptyData(data: unknown): boolean {
   if (typeof data === "object") return Object.values(data as object).every(isEmptyData);
   return false;
 }
+
+/** The warning a caller that still passes `fallbackAutoparse: true` gets. */
+export const FALLBACK_AUTOPARSE_DEPRECATION =
+  "fallbackAutoparse is deprecated and has no effect: Extract no longer falls back to Autoparse. " +
+  "On REQS007, prepare the domain with `zenrows extract prepare <domain> --url <page>` instead.";
 
 export async function runExtract(
   opts: ExtractOptions,
@@ -96,17 +100,7 @@ export async function runExtract(
     });
   }
 
-  if (method === "extract" && opts.fallbackAutoparse === true) {
-    try {
-      return await runExtractOnce({ ...opts, method: "extract" }, config, policy, apiKey);
-    } catch (err) {
-      if (err instanceof ToolkitError && err.code === "EXTRACT_DOMAIN_NOT_PREPARED") {
-        const outcome = await runExtractOnce({ ...opts, method: "autoparse" }, config, policy, apiKey);
-        return { ...outcome, fellBackToAutoparse: true };
-      }
-      throw err;
-    }
-  }
+  if (opts.fallbackAutoparse === true) log.warn(FALLBACK_AUTOPARSE_DEPRECATION);
 
   return runExtractOnce({ ...opts, method }, config, policy, apiKey);
 }
