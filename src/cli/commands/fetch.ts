@@ -35,7 +35,8 @@ export const fetch_: Command = {
     "  --output <fmt>         html (default) | markdown | text | pdf",
     "  --screenshot           capture an above-the-fold screenshot",
     "  --out <file>           write the response body to a file",
-    "  --timeout <ms>         client-side timeout (default 120000; above the API's own 90s budget)",
+    "  --timeout <ms>         client-side timeout per attempt (default 120000; the API's own budget is 180s)",
+    "  --retries <n>          retries on 429/502/503/504 or a network error (default 2; 0 disables)",
     "  --no-signup            do not auto-create a Free plan account if no key exists",
     "  --json                 print a structured result",
     "",
@@ -58,6 +59,7 @@ export const fetch_: Command = {
       screenshot: { type: "boolean" },
       out: { type: "string" },
       timeout: { type: "string" },
+      retries: { type: "string" },
       "no-signup": { type: "boolean" },
       json: { type: "boolean" },
     });
@@ -100,6 +102,7 @@ export const fetch_: Command = {
       output: normalizeOutput(asString(values.output)),
       screenshot: values.screenshot === true,
       timeoutMs: normalizeTimeout(values.timeout),
+      retries: normalizeRetries(values.retries),
     };
 
     const runId = newRunId();
@@ -204,6 +207,25 @@ export function normalizeTimeout(v: unknown): number | undefined {
     });
   }
   return ms;
+}
+
+/**
+ * `--retries <n>`: a whole number, 0 or more. Like `--timeout`, a bad value is
+ * an error, never a silent fallback to the default.
+ */
+export function normalizeRetries(v: unknown): number | undefined {
+  if (v === undefined) return undefined;
+  const n = asNumber(v);
+  if (n === undefined || !Number.isInteger(n) || n < 0) {
+    throw new ToolkitError({
+      code: "INVALID_USAGE",
+      message: `Invalid --retries value '${String(v)}'.`,
+      likely_cause: "--retries takes a whole number, 0 or more.",
+      next_action: "Pass a count, e.g. --retries 2, or --retries 0 to send the request once.",
+      suggested_commands: ["zenrows fetch <url> --retries 0"],
+    });
+  }
+  return n;
 }
 
 export function normalizeOutput(v?: string): ResponseFormat | undefined {
