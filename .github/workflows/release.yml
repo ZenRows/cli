@@ -254,14 +254,16 @@ jobs:
         if: steps.npm.outputs.published != 'true'
         run: npm publish "./package/zenrows-cli-$VERSION.tgz" --access public --ignore-scripts
 
+      # npm can take a few minutes to serve a version published with
+      # provenance, so wait up to 10 minutes.
       - name: Verify on npm
         run: |
-          for _ in $(seq 10); do
+          for _ in $(seq 40); do
             status=$(curl -s -o /dev/null -w '%{http_code}' "https://registry.npmjs.org/@zenrows%2fcli/$VERSION")
             [ "$status" = 200 ] && exit 0
             sleep 15
           done
-          echo "::error::@zenrows/cli $VERSION is not on npm after 150 seconds."
+          echo "::error::@zenrows/cli $VERSION is not on npm after 10 minutes."
           exit 1
 
       - name: Write the summary
