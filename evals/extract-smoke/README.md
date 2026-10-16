@@ -2,7 +2,7 @@
 
 Reproducible smoke test for Extract (`extract=auto`).
 
-- **Target:** `https://www.owler.com/company/meltwater` (enabled domain, real company page)
+- **Target:** `https://www.owler.com/company/meltwater` (prepared domain, real company page)
 - **Config:** `extract=auto`
 - **Success criteria:** HTTP 2xx and a non-empty body
 - **Cost:** ~1× basic request

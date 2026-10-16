@@ -2,10 +2,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { normalizeOutputs } from "../src/cli/commands/extract.ts";
 import { buildParams, type FetchOptions } from "../src/adapters/protected-fetch.ts";
-import { runExtract } from "../src/adapters/extract.ts";
+import { FALLBACK_AUTOPARSE_DEPRECATION, isEmptyData, runExtract } from "../src/adapters/extract.ts";
 import { defaultConfig } from "../src/core/config.ts";
 import { defaultPolicy } from "../src/core/policy.ts";
 import { ToolkitError } from "../src/core/errors.ts";
+import { refusalReason } from "../src/core/http.ts";
 
 const cfg = defaultConfig();
 
@@ -142,7 +143,6 @@ test("runExtract default method is extract=auto and unwraps {parsed,html}", asyn
       assert.equal(outcome.params.autoparse, undefined);
       assert.deepEqual(outcome.data, { title: "X" });
       assert.equal(outcome.html, "<html>x</html>");
-      assert.equal(outcome.fellBackToAutoparse, undefined);
     },
   );
 });
@@ -174,66 +174,192 @@ test("runExtract --autoparse skips extract and does not unwrap envelope", async 
   });
 });
 
-test("runExtract falls back to autoparse on AUTH010 for extract=auto", async () => {
-  const calls: string[] = [];
-  await withFetchHandler((url) => {
-    calls.push(url);
-    if (url.includes("extract=auto")) {
-      return new Response(AUTH010, { status: 402, headers: { "content-type": "application/json" } });
-    }
-    return new Response('{"title":"fallback"}', {
-      status: 200,
-      headers: {
-        "content-type": "application/json",
-        "x-request-cost": "0.0003625",
-        "x-request-credits": "1",
-      },
-    });
-  }, async () => {
-    const outcome = await runExtract({ url: "https://x.com" }, cfg, defaultPolicy(), "testkey");
-    assert.equal(outcome.method, "autoparse");
-    assert.equal(outcome.fellBackToAutoparse, true);
-    assert.equal(outcome.params.autoparse, true);
-    assert.deepEqual(outcome.data, { title: "fallback" });
-    assert.equal(outcome.result.costCredits, 1);
-    assert.equal(calls.length, 2);
-    assert.match(calls[0]!, /extract=auto/);
-    assert.match(calls[1]!, /autoparse=true/);
-    assert.doesNotMatch(calls[1]!, /extract=auto/);
-  });
-});
-
-test("runExtract falls back to autoparse on REQS007 (domain not prepared) for extract=auto", async () => {
+test("runExtract reports REQS007 with the prepare step and does not retry", async () => {
   const REQS007 = JSON.stringify({ code: "REQS007", detail: "Extract has not been prepared for x.com yet.", status: 403 });
   const calls: string[] = [];
   await withFetchHandler((url) => {
     calls.push(url);
-    if (url.includes("extract=auto")) {
-      return new Response(REQS007, { status: 403, headers: { "content-type": "application/json" } });
-    }
-    return new Response('{"title":"fallback"}', { status: 200, headers: { "content-type": "application/json" } });
+    return new Response(REQS007, { status: 403, headers: { "content-type": "application/json" } });
   }, async () => {
-    const outcome = await runExtract({ url: "https://x.com" }, cfg, defaultPolicy(), "testkey");
-    assert.equal(outcome.method, "autoparse");
-    assert.equal(outcome.fellBackToAutoparse, true);
-    assert.equal(calls.length, 2);
-    assert.match(calls[1]!, /autoparse=true/);
+    await assert.rejects(
+      () => runExtract({ url: "https://www.x.com/item/1" }, cfg, defaultPolicy(), "testkey"),
+      (e: unknown) => {
+        assert.ok(e instanceof ToolkitError);
+        assert.equal(e.code, "EXTRACT_DOMAIN_NOT_PREPARED");
+        assert.equal(
+          e.message,
+          "Extract hasn't prepared x.com yet. Prepare it with `zenrows extract prepare x.com --url https://www.x.com/item/1` (a few example URLs, a few minutes, no credits), then retry; meanwhile use --css.",
+        );
+        assert.deepEqual(e.toJSON().suggested_commands, [
+          "zenrows extract prepare x.com --url https://www.x.com/item/1 --wait",
+          "zenrows extract prepare status x.com",
+          `zenrows extract https://www.x.com/item/1 --css '{"title":"h1"}'`,
+        ]);
+        assert.doesNotMatch(JSON.stringify(e.toJSON()), /autoparse/);
+        return true;
+      },
+    );
+    assert.equal(calls.length, 1, "REQS007 must not be retried with autoparse");
   });
 });
 
-test("runExtract does not fall back when fallbackAutoparse is false", async () => {
-  await withFetch(AUTH010, async () => {
-    await assert.rejects(
-      () =>
-        runExtract(
-          { url: "https://x.com", method: "extract", fallbackAutoparse: false },
-          cfg,
-          defaultPolicy(),
-          "testkey",
-        ),
-      (e: unknown) => e instanceof ToolkitError && e.code === "EXTRACT_DOMAIN_NOT_ENABLED",
+/** A REQS007 the way the gateway sends it: with `reason`, or (an older gateway) without. */
+function reqs007(kind: "domain" | "page" | "allowlist", withReason: boolean): string {
+  const bodies = {
+    domain: {
+      title: "Extract is not prepared for the requested domain (x.com) (REQS007)",
+      detail: "Extract has not been prepared for x.com yet.",
+      reason: "domain_not_prepared",
+    },
+    page: {
+      title: "Extract did not recognise this page on x.com (REQS007)",
+      detail: "Extract serves x.com, but did not recognise this page as one it can extract.",
+      reason: "page_not_recognised",
+    },
+    allowlist: {
+      title: "Extract is not enabled for the requested domain (x.com) (REQS007)",
+      detail: "Extract is not enabled for the requested domain (x.com) yet.",
+      reason: "domain_not_enabled",
+    },
+  } as const;
+  const { reason, ...rest } = bodies[kind];
+  return JSON.stringify({ code: "REQS007", status: 403, ...rest, ...(withReason ? { reason } : {}) });
+}
+
+async function reqs007Error(body: string, url = "https://x.com/search?q=a"): Promise<ToolkitError> {
+  let calls = 0;
+  let caught: unknown;
+  await withFetchHandler(() => {
+    calls += 1;
+    return new Response(body, { status: 403, headers: { "content-type": "application/json" } });
+  }, async () => {
+    caught = await runExtract({ url }, cfg, defaultPolicy(), "testkey").then(
+      () => undefined,
+      (e: unknown) => e,
     );
-  }, { status: 402 });
+  });
+  assert.equal(calls, 1, "a REQS007 is never retried");
+  assert.ok(caught instanceof ToolkitError);
+  return caught;
+}
+
+for (const withReason of [true, false]) {
+  const via = withReason ? "the reason field" : "the title (gateway without the reason field)";
+
+  test(`REQS007 page_not_recognised, read from ${via}: the gateway's advice in order, no prepare command`, async () => {
+    const e = await reqs007Error(reqs007("page", withReason));
+    assert.equal(e.code, "EXTRACT_PAGE_NOT_RECOGNISED");
+    let last = -1;
+    for (const step of [
+      /product, article or listing page/,
+      /retry it once in a few minutes; do not retry in a loop/,
+      /--css with explicit selectors/,
+      /Preparing the domain again does not change this/,
+    ]) {
+      const at = e.message.search(step);
+      assert.ok(at > last, `${step} missing or out of order in: ${e.message}`);
+      last = at;
+    }
+    const shape = JSON.stringify(e.toJSON());
+    assert.doesNotMatch(shape, /extract prepare/, "no prepare command: it would answer ready and loop");
+    assert.doesNotMatch(shape, /autoparse|contact Zenrows support/);
+  });
+
+  test(`REQS007 domain_not_enabled, read from ${via}: no prepare command, --css`, async () => {
+    const e = await reqs007Error(reqs007("allowlist", withReason));
+    assert.equal(e.code, "EXTRACT_DOMAIN_NOT_ENABLED");
+    assert.match(e.message, /preparing it does not change this/);
+    const shape = JSON.stringify(e.toJSON());
+    assert.doesNotMatch(shape, /extract prepare|autoparse/);
+    assert.match(shape, /--css/);
+  });
+
+  test(`REQS007 domain_not_prepared, read from ${via}: the prepare command`, async () => {
+    const e = await reqs007Error(reqs007("domain", withReason), "https://www.x.com/p/1");
+    assert.equal(e.code, "EXTRACT_DOMAIN_NOT_PREPARED");
+    assert.equal(e.toJSON().suggested_commands?.[0], "zenrows extract prepare x.com --url https://www.x.com/p/1 --wait");
+  });
+}
+
+test("refusalReason trusts the field over the sentence, and ignores a reason it does not know", () => {
+  assert.equal(
+    refusalReason(JSON.stringify({ title: "Extract did not recognise this page on x.com", reason: "domain_not_prepared" })),
+    "domain_not_prepared",
+  );
+  assert.equal(refusalReason(JSON.stringify({ reason: "something_new", detail: "Extract serves x.com, but" })), "page_not_recognised");
+  assert.equal(refusalReason("not json"), "domain_not_prepared");
+});
+
+test("runExtract reports legacy AUTH010 like REQS007 and does not retry", async () => {
+  const calls: string[] = [];
+  await withFetchHandler((url) => {
+    calls.push(url);
+    return new Response(AUTH010, { status: 402, headers: { "content-type": "application/json" } });
+  }, async () => {
+    await assert.rejects(
+      () => runExtract({ url: "https://x.com" }, cfg, defaultPolicy(), "testkey"),
+      (e: unknown) =>
+        e instanceof ToolkitError &&
+        e.code === "EXTRACT_DOMAIN_NOT_PREPARED" &&
+        e.message.startsWith("Extract hasn't prepared x.com yet. Prepare it with `zenrows extract prepare x.com --url https://x.com`"),
+    );
+    assert.equal(calls.length, 1, "AUTH010 must not be retried with autoparse");
+  });
+});
+
+/** Runs fn with stderr captured, and returns what was written to it. */
+async function captureStderr(fn: () => Promise<void>): Promise<string> {
+  const original = process.stderr.write.bind(process.stderr);
+  let written = "";
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    written += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString();
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    await fn();
+  } finally {
+    process.stderr.write = original;
+  }
+  return written;
+}
+
+// fallbackAutoparse is deprecated and has no effect: the refusal is reported in
+// one request, with the prepare step, and the caller is told once.
+for (const [name, body, status] of [
+  ["REQS007", JSON.stringify({ code: "REQS007", detail: "Extract has not been prepared for x.com yet.", status: 403 }), 403],
+  ["AUTH010", AUTH010, 402],
+] as const) {
+  test(`runExtract ignores fallbackAutoparse: true on ${name}, in one request, with one deprecation warning`, async () => {
+    const calls: string[] = [];
+    const stderr = await captureStderr(() =>
+      withFetchHandler((url) => {
+        calls.push(url);
+        return new Response(body, { status, headers: { "content-type": "application/json" } });
+      }, async () => {
+        await assert.rejects(
+          () => runExtract({ url: "https://x.com", fallbackAutoparse: true }, cfg, defaultPolicy(), "testkey"),
+          (e: unknown) =>
+            e instanceof ToolkitError &&
+            e.code === "EXTRACT_DOMAIN_NOT_PREPARED" &&
+            e.suggested_commands?.includes("zenrows extract prepare x.com --url https://x.com --wait") === true,
+        );
+      }),
+    );
+    assert.equal(calls.length, 1, "fallbackAutoparse must not retry with autoparse");
+    assert.doesNotMatch(calls[0]!, /autoparse=true/);
+    assert.equal(stderr.split(FALLBACK_AUTOPARSE_DEPRECATION).length - 1, 1, `want one deprecation warning, got: ${stderr}`);
+  });
+}
+
+test("runExtract prints no deprecation warning without fallbackAutoparse, or with it false", async () => {
+  for (const fallbackAutoparse of [undefined, false]) {
+    const stderr = await captureStderr(() =>
+      withFetch(JSON.stringify({ parsed: { title: "X" } }), async () => {
+        await runExtract({ url: "https://x.com", fallbackAutoparse }, cfg, defaultPolicy(), "testkey");
+      }),
+    );
+    assert.doesNotMatch(stderr, /fallbackAutoparse/);
+  }
 });
 
 test("runExtract does not fall back on AUTH004 (credits exhausted)", async () => {
@@ -247,20 +373,6 @@ test("runExtract does not fall back on AUTH004 (credits exhausted)", async () =>
       (e: unknown) => e instanceof ToolkitError && e.code === "POLICY_MAX_CREDITS_EXCEEDED",
     );
     assert.equal(calls, 1, "must not retry autoparse when credits are exhausted");
-  });
-});
-
-test("runExtract surfaces autoparse failure after AUTH010 fallback", async () => {
-  await withFetchHandler((url) => {
-    if (url.includes("extract=auto")) {
-      return new Response(AUTH010, { status: 402, headers: { "content-type": "application/json" } });
-    }
-    return new Response("upstream boom", { status: 500, headers: { "content-type": "text/plain" } });
-  }, async () => {
-    await assert.rejects(
-      () => runExtract({ url: "https://x.com" }, cfg, defaultPolicy(), "testkey"),
-      (e: unknown) => e instanceof ToolkitError && e.code === "FETCH_FAILED",
-    );
   });
 });
 
@@ -286,7 +398,7 @@ test("runExtract --css without a selector map fails locally (no network)", async
   );
 });
 
-// --- ACT-1514: empty extraction must not be a silent success ----------------
+// --- empty extraction must not be a silent success --------------------------
 test("runExtract flags an empty extract=auto result (empty=true)", async () => {
   await withFetch(JSON.stringify({ parsed: {}, html: "<html/>" }), async () => {
     const outcome = await runExtract({ url: "https://x.com" }, cfg, defaultPolicy(), "testkey");
@@ -306,6 +418,27 @@ test("runExtract flags an empty autoparse result (empty=true)", async () => {
     );
     assert.equal(outcome.empty, true);
   });
+});
+
+test("runExtract flags a result whose fields are all null or empty (empty=true)", async () => {
+  const scaffolding = {
+    title: null,
+    author: { name: "", url: null },
+    tags: [],
+    comments: [{ body: null, date: "  " }],
+  };
+  await withFetch(JSON.stringify({ parsed: scaffolding, html: "<html/>" }), async () => {
+    const outcome = await runExtract({ url: "https://x.com" }, cfg, defaultPolicy(), "testkey");
+    assert.deepEqual(outcome.data, scaffolding);
+    assert.equal(outcome.empty, true);
+  });
+});
+
+test("isEmptyData keeps 0, false and one filled nested field as data", () => {
+  assert.equal(isEmptyData({ count: 0 }), false);
+  assert.equal(isEmptyData({ in_stock: false }), false);
+  assert.equal(isEmptyData({ title: null, items: [{ name: null }, { name: "A" }] }), false);
+  assert.equal(isEmptyData([[], {}, null, ""]), true);
 });
 
 test("runExtract does not flag a non-empty result", async () => {
@@ -348,7 +481,6 @@ test("runExtract reports 422 no_data_extracted as an empty result, in one reques
     assert.equal(outcome.method, "extract");
     assert.equal(outcome.empty, true);
     assert.equal(outcome.noDataExtracted, true);
-    assert.equal(outcome.fellBackToAutoparse, undefined);
     assert.equal(outcome.data, undefined);
     assert.equal(calls.length, 1);
     assert.match(calls[0]!, /extract=auto/);

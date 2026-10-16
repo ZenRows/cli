@@ -11,6 +11,7 @@ import { ENV_KEY, resolveApiKey } from "./auth.ts";
 import { registerSecret } from "./logger.ts";
 import { CLI_USER_AGENT } from "./config.ts";
 import { agentClientHeader } from "./agent-client.ts";
+import { normalizeDomain, PAGE_NOT_RECOGNISED_STEPS, prepareCommand } from "./prepared-domains-api.ts";
 
 export interface ScraperResult {
   status: number;
@@ -145,18 +146,10 @@ export async function scrape(
     redactedUrl: redacted,
   };
 
-  // REQS007 on extract=auto: the domain hasn't been prepared for Extract yet.
-  // Same recovery as AUTH010 (the extract adapter falls back to autoparse), so it
-  // maps to the same code. Checked before the 403 auth branch below.
+  // REQS007 on extract=auto: Extract has not prepared the domain yet. Reported,
+  // never retried: the fix is to prepare the domain, which the error names.
   if (res.status === 403 && params.extract !== undefined && zrErrorCode(body) === "REQS007") {
-    throw new ToolkitError({
-      code: "EXTRACT_DOMAIN_NOT_ENABLED",
-      message: "Extract has not been prepared for this domain yet.",
-      likely_cause: zrErrorDetail(body) ?? "This domain is not prepared for Extract.",
-      next_action:
-        "Retry with --autoparse for general-purpose extraction on any site, or get the domain prepared for Extract (POST /v1/extract/prepared-domains).",
-      suggested_commands: [`zenrows extract ${params.url} --autoparse`],
-    });
+    throw extractDomainNotPrepared(params.url, body);
   }
   // 422 no_data_extracted on an Extract request: the page was processed and had
   // nothing to extract. It is an answer, not a failure to reach the target, so
@@ -214,18 +207,10 @@ export async function scrape(
     }
   }
   if (res.status === 402 && isZenrowsErrorEnvelope(body)) {
-    // AUTH010 on extract=auto means the target domain is not enabled for
-    // Extract, distinct from credit exhaustion (AUTH004). Let the extract
-    // adapter fall back to autoparse.
+    // AUTH010 on extract=auto is the legacy code for REQS007: the domain is
+    // not prepared for Extract. Distinct from credit exhaustion (AUTH004).
     if (params.extract !== undefined && zrErrorCode(body) === "AUTH010") {
-      throw new ToolkitError({
-        code: "EXTRACT_DOMAIN_NOT_ENABLED",
-        message: "Extract is not enabled for this domain yet.",
-        likely_cause: zrErrorDetail(body) ?? "This domain is not enabled for Extract.",
-        next_action:
-          "Retry with --autoparse for general-purpose extraction on any site, or get the domain prepared for Extract (POST /v1/extract/prepared-domains).",
-        suggested_commands: [`zenrows extract ${params.url} --autoparse`],
-      });
+      throw extractDomainNotPrepared(params.url, body);
     }
     // AUTH014: this key hit one of its credit caps; the account still has credits.
     if (isKeyCapReached(zrErrorCode(body) ?? undefined)) {
@@ -314,6 +299,79 @@ export async function scrape(
     });
   }
   return result;
+}
+
+/** Why a REQS007 refused, as the gateway's `reason` field names it. */
+export type RefusalReason = "domain_not_prepared" | "page_not_recognised" | "domain_not_enabled";
+
+const REFUSAL_REASONS: readonly string[] = ["domain_not_prepared", "page_not_recognised", "domain_not_enabled"];
+
+/**
+ * Which REQS007 this is. Only domain_not_prepared is fixed by preparing the
+ * domain: on page_not_recognised the domain is already prepared, and
+ * resubmitting it returns the existing ready record, so pointing there would
+ * loop.
+ *
+ * The gateway says it in the problem's `reason` field, read first. The sentence
+ * match below is only the fallback for a gateway deployed before that field
+ * existed, and reads the titles that gateway sends; remove it once every gateway
+ * sends `reason`.
+ */
+export function refusalReason(body: string): RefusalReason {
+  let j: { reason?: unknown; title?: unknown; detail?: unknown };
+  try {
+    j = JSON.parse(body) as typeof j;
+  } catch {
+    return "domain_not_prepared";
+  }
+  if (typeof j.reason === "string" && REFUSAL_REASONS.includes(j.reason)) return j.reason as RefusalReason;
+  const title = typeof j.title === "string" ? j.title : "";
+  const detail = typeof j.detail === "string" ? j.detail : "";
+  if (/did not recogni[sz]e this page/i.test(title) || /^Extract serves /.test(detail)) return "page_not_recognised";
+  if (/^Extract is not enabled/i.test(title)) return "domain_not_enabled";
+  return "domain_not_prepared";
+}
+
+/**
+ * REQS007 (or the legacy AUTH010) on extract=auto. Each reason names its own
+ * next step, because agents copy it: the exact prepare command for a domain not
+ * prepared yet, the gateway's advice in the gateway's order for a page it did not
+ * recognise. None offers Autoparse.
+ */
+export function extractDomainNotPrepared(url: string, body: string): ToolkitError {
+  const domain = normalizeDomain(url);
+  const detail = zrErrorDetail(body);
+  const css = `zenrows extract ${url} --css '{"title":"h1"}'`;
+  const reason = refusalReason(body);
+  if (reason === "page_not_recognised") {
+    return new ToolkitError({
+      code: "EXTRACT_PAGE_NOT_RECOGNISED",
+      message: `Extract serves ${domain} but did not recognise this page as one it can extract (it may be a page with nothing to extract, such as a home page). ${PAGE_NOT_RECOGNISED_STEPS} The request was not charged.`,
+      likely_cause: detail ?? `Extract serves ${domain} but did not recognise this page.`,
+      next_action: PAGE_NOT_RECOGNISED_STEPS,
+      suggested_commands: [css],
+      server_code: "REQS007",
+    });
+  }
+  if (reason === "domain_not_enabled") {
+    return new ToolkitError({
+      code: "EXTRACT_DOMAIN_NOT_ENABLED",
+      message: `Extract is not enabled for ${domain}, and preparing it does not change this.`,
+      likely_cause: detail ?? `Extract is not enabled for ${domain}.`,
+      next_action: "Extract this page with --css and explicit selectors, or contact Zenrows support to have the site enabled.",
+      suggested_commands: [css],
+      server_code: "REQS007",
+    });
+  }
+  const prepare = prepareCommand(url);
+  return new ToolkitError({
+    code: "EXTRACT_DOMAIN_NOT_PREPARED",
+    message: `Extract hasn't prepared ${domain} yet. Prepare it with \`${prepare}\` (a few example URLs, a few minutes, no credits), then retry; meanwhile use --css.`,
+    likely_cause: detail ?? `Extract has not prepared ${domain} yet.`,
+    next_action: `Run \`${prepare} --wait\` (up to 5 --url pages, one per page kind you want), then retry \`zenrows extract ${url}\`. Without --wait, check progress about every 30 seconds with \`zenrows extract prepare status ${domain}\`. Meanwhile extract with --css and explicit selectors.`,
+    suggested_commands: [`${prepare} --wait`, `zenrows extract prepare status ${domain}`, css],
+    server_code: "REQS007",
+  });
 }
 
 /**

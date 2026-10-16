@@ -3,13 +3,11 @@
 Extract structured pricing fields from product pages with Zenrows Extract.
 
 ```bash
-# Default: extract=auto on an enabled domain (site-tailored JSON)
+# Default: extract=auto on a prepared domain (site-tailored JSON).
+# Not prepared yet (EXTRACT_DOMAIN_NOT_PREPARED)? zenrows extract prepare <domain> --url <product-url> --wait
 zenrows extract https://www.owler.com/company/meltwater
 
-# Autoparse — general-purpose JSON on any domain
-zenrows extract https://www.scrapingcourse.com/ecommerce/ --autoparse
-
-# Or a precise CSS selector map
+# A precise CSS selector map, on any domain
 zenrows extract <product-url> --css '{"title":"h1","price":".price"}' --validate
 ```
 

@@ -19,8 +19,8 @@ These multipliers apply when you enable the flags (on `scrape` or `extract`):
 - Both: **25×**
 
 `extract` `mode=auto` is currently free; billing may apply
-later. Do not promise permanent free extract pricing. Autoparse / CSS still
-follow the multipliers above when stealth flags are set.
+later. Do not promise permanent free extract pricing. CSS (and the deprecated
+Autoparse) still follow the multipliers above when stealth flags are set.
 
 ## Browser sessions (`browser_*`)
 

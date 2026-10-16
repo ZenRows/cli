@@ -13,6 +13,17 @@ test("capability matrix loads with the honest classifications", () => {
   assert.equal(caps.crawl?.status, "available");
 });
 
+test("extract notes name the prepare step and no automatic autoparse fallback", () => {
+  const notes = loadCapabilities().extract?.notes ?? "";
+  assert.match(notes, /POST \/v1\/extract\/prepared-domains/);
+  assert.match(notes, /zenrows extract prepare <domain> --url <page>/);
+  assert.match(notes, /zenrows extract prepare status <domain>/);
+  assert.match(notes, /EXTRACT_PAGE_NOT_RECOGNISED/);
+  assert.match(notes, /preparing again does not change it/);
+  assert.match(notes, /autoparse is deprecated/);
+  assert.doesNotMatch(notes, /falls? back/i);
+});
+
 test("isUsable true for available + open beta, false for absent capabilities", () => {
   assert.equal(isUsable("protected_fetch"), true);
   assert.equal(isUsable("extract"), true);
