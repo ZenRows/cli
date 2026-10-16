@@ -34,18 +34,15 @@ zenrows crawl results <id> --out urls.jsonl  # same, as JSONL
   a depth has no `depth` field in its output.
 - `--max-items` (kept URLs) and `--max-pages` (fetched pages) cap the crawl;
   both default to 100. `--max-pages` bounds the cost: each page is one fetch.
-  Every page the crawl opens counts and is billed, including pages opened only
-  to walk through to matching URLs.
   The local policy `max_pages_per_run` caps `--max-pages` (default 1000);
   above it the CLI refuses with `POLICY_LIMIT_EXCEEDED` before any request.
 - `--include-patterns` / `--exclude-patterns` are substring matches on the
   normalized URL and repeat:
-  `--include-patterns /product/ --exclude-patterns ?add-to-cart`. They filter
-  the URLs the crawl returns, not the pages it opens: it still opens on-site
-  pages that fail them (such as `/page/2/`) to reach pages that match, and
-  `--max-pages` counts and bills those fetches. A crawl whose patterns match no
-  URL it read ends `completed` with no results, exits 0, and prints a note
-  (under `--json`, in `note`) to loosen them or raise `--depth` / `--max-pages`.
+  `--include-patterns /product/ --exclude-patterns ?add-to-cart`.
+- A crawl whose pages held nothing new to follow (no link, only links to other
+  sites, or only links the patterns reject) ends `completed` with no results
+  and exits 0. When patterns were set, it prints a note (under `--json`, in
+  `note`) to check them against the URLs the start page links to.
 - `create` returns at once. `--follow` (or `zenrows crawl wait <id>`) polls
   until the crawl ends or `--timeout` seconds run out (default 600). When the
   time runs out, the command exits 0 and prints the crawl with status
@@ -92,7 +89,9 @@ credit cap; the pages fetched before that stay readable. `failed`, and a
 `stopped` crawl with an `error`, exit non-zero: `CRAWL_INSUFFICIENT_CREDITS` or
 `CRAWL_KEY_CAP_REACHED` when credits ended it (the same codes a refused
 `create` gets, also when an older deployment reports it `failed`), else
-`CRAWL_FAILED`. `server_code` carries the API's `error.code`.
+`CRAWL_FAILED`. `server_code` carries the API's `error.code`:
+`seed_unreachable` when the start URL could not be fetched or returned an empty
+page, `no_items_found` when Extract read the start page and found no data on it.
 `stop` on a crawl that already ended prints the status it ended with.
 
 With `--json`, `create`, `get`, `wait` and `stop` print

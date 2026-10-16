@@ -51,13 +51,9 @@ export const crawl: Command = {
     "                                    leave it out for no depth limit (the caps below stop the crawl)",
     "    --max-items <n>                 stop after keeping n URLs (API default 100)",
     "    --max-pages <n>                 stop after fetching n pages (API default 100; bounds cost);",
-    "                                    every page opened counts and is billed, incl. pages opened",
-    "                                    only to walk through to matching URLs;",
     "                                    the local policy max_pages_per_run caps it (default 1000)",
     "    --include-patterns <p>          keep only URLs containing this substring (repeatable)",
-    "    --exclude-patterns <p>          drop URLs containing this substring (repeatable);",
-    "                                    patterns filter the URLs kept, not the pages opened: the",
-    "                                    crawl still opens on-site pages that fail them",
+    "    --exclude-patterns <p>          drop URLs containing this substring (repeatable)",
     "    --output-format <html|markdown> also fetch each kept URL's page, as HTML or Markdown",
     "                                    (read with content/download); each kept page is one more",
     "                                    fetch counted by --max-pages",
@@ -84,8 +80,8 @@ export const crawl: Command = {
     "                                    a crawl still running then is printed, not stopped",
     "  --json                            print structured output: create/get/wait/stop print",
     "                                    {ok, crawl_id, status, crawl}; get adds results and next_cursor;",
-    "                                    a wait that runs out, or a completed crawl whose patterns",
-    "                                    matched nothing, adds note",
+    "                                    a wait that runs out, or a completed crawl with patterns",
+    "                                    and 0 results, adds note",
   ].join("\n"),
   async run(argv: string[], ctx: RunContext): Promise<number> {
     const [sub, ...rest] = argv;
@@ -496,9 +492,10 @@ export function crawlFailure(c: Crawl | CrawlStop): ToolkitError | null {
   }
   const why = [code, c.error?.detail].filter(Boolean).join(": ");
   const next: Record<string, string> = {
-    seed_unreachable: "The start URL could not be fetched (the site may be blocking it). Check it with `zenrows fetch <url>`.",
+    seed_unreachable:
+      "The start URL could not be fetched or returned an empty page (the site may be blocking it). Check it with `zenrows fetch <url>`.",
     no_items_found:
-      "The pages the crawl read held nothing to follow (no links, or a block, consent or empty page). Check the start page with `zenrows fetch <url>`, or start from a listing page.",
+      "Extract read the start page and found no data on it. Start from a page Extract reads, such as a listing or a product page.",
   };
   return new ToolkitError({
     code: "CRAWL_FAILED",
@@ -511,14 +508,15 @@ export function crawlFailure(c: Crawl | CrawlStop): ToolkitError | null {
 }
 
 /**
- * Set only when a crawl with patterns completed and kept nothing: the patterns
- * matched no URL it read. The API ends that crawl `completed`, not `failed`.
+ * Set only when a crawl with patterns completed and kept nothing. The API ends a
+ * crawl whose pages held nothing new to follow `completed`, and does not count
+ * the links the patterns rejected, so the patterns are the first thing to check.
  */
 function noMatchNote(c: Crawl | CrawlStop): string | undefined {
   const crawl = c as Crawl;
   const patterns = [...(crawl.include_patterns ?? []), ...(crawl.exclude_patterns ?? [])];
   if (crawl.status !== "completed" || crawl.coverage?.items_found !== 0 || !patterns.length) return undefined;
-  return "No URL the crawl read matched --include-patterns / --exclude-patterns. Loosen them, or raise --depth or --max-pages.";
+  return "The crawl completed with no results. Check --include-patterns / --exclude-patterns against the URLs the start page links to.";
 }
 
 /**

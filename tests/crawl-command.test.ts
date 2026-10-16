@@ -335,7 +335,7 @@ test("crawl get exits 0 for completed and stopped crawls", async () => {
   }
 });
 
-test("a completed crawl whose patterns matched nothing exits 0 with a note about the patterns", async () => {
+test("a completed crawl with patterns and 0 results exits 0 with a note to check the patterns", async () => {
   const empty = { ...crawlBody, status: "completed", results: [], next_cursor: null };
   await withCrawlWorkspace(
     () => json({ ...empty, include_patterns: ["/product/"] }),
@@ -344,14 +344,14 @@ test("a completed crawl whose patterns matched nothing exits 0 with a note about
       assert.equal(code, 0);
       assert.equal(out.ok, true);
       assert.equal(out.error, undefined);
-      assert.match(out.note, /matched --include-patterns \/ --exclude-patterns/);
+      assert.match(out.note, /Check --include-patterns \/ --exclude-patterns against the URLs the start page links to/);
 
       let human = -1;
       const err = await captureErr(async () => {
         human = await crawl.run(["get", "c_1"], { json: false, yes: false });
       });
       assert.equal(human, 0);
-      assert.match(err, /Loosen them, or raise --depth or --max-pages/);
+      assert.match(err, /against the URLs the start page links to/);
     },
   );
   await withCrawlWorkspace(
@@ -363,14 +363,18 @@ test("a completed crawl whose patterns matched nothing exits 0 with a note about
   );
 });
 
-test("a no_items_found crawl points at the start page, not the patterns", async () => {
+test("a no_items_found crawl says Extract found no data on the start page, not that the patterns matched nothing", async () => {
   await withCrawlWorkspace(
     () =>
       json({
         ...crawlBody,
         status: "failed",
         include_patterns: ["/product/"],
-        error: { code: "no_items_found", detail: "The crawl found no items." },
+        error: {
+          code: "no_items_found",
+          detail:
+            "Extract read the start page and found no data on it, so the crawl had nothing to follow. Start from a page Extract reads, such as a listing or a product page.",
+        },
         results: [],
         next_cursor: null,
       }),
@@ -378,8 +382,35 @@ test("a no_items_found crawl points at the start page, not the patterns", async 
       const { code, out } = await run(["get", "c_1"]);
       assert.equal(code, 1);
       assert.equal(out.error.code, "CRAWL_FAILED");
-      assert.match(out.error.next_action, /zenrows fetch <url>/);
+      assert.equal(out.error.server_code, "no_items_found");
+      assert.match(out.error.next_action, /Extract read the start page and found no data on it/);
+      assert.match(out.error.next_action, /listing or a product page/);
       assert.doesNotMatch(out.error.next_action, /patterns/);
+      assert.equal(out.note, undefined);
+    },
+  );
+});
+
+test("an empty start page fails seed_unreachable with exit 1 and CRAWL_FAILED", async () => {
+  await withCrawlWorkspace(
+    () =>
+      json({
+        ...crawlBody,
+        status: "failed",
+        error: {
+          code: "seed_unreachable",
+          detail: "The start URL returned an empty page, so the crawl could not begin. Check the URL.",
+        },
+        results: [],
+        next_cursor: null,
+      }),
+    async () => {
+      const { code, out } = await run(["get", "c_1"]);
+      assert.equal(code, 1);
+      assert.equal(out.ok, false);
+      assert.equal(out.error.code, "CRAWL_FAILED");
+      assert.equal(out.error.server_code, "seed_unreachable");
+      assert.match(out.error.next_action, /could not be fetched or returned an empty page/);
       assert.equal(out.note, undefined);
     },
   );
