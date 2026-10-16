@@ -51,7 +51,7 @@ export const crawl: Command = {
     "                                    leave it out for no depth limit (the caps below stop the crawl)",
     "    --max-items <n>                 stop after keeping n URLs (API default 100)",
     "    --max-pages <n>                 stop after fetching n pages (API default 100; bounds cost);",
-    "                                    the local policy max_pages_per_run caps it (default 1000)",
+    "                                    the local policy max_pages_per_run caps it (default 10000)",
     "    --include-patterns <p>          keep only URLs containing this substring (repeatable)",
     "    --exclude-patterns <p>          drop URLs containing this substring (repeatable)",
     "    --output-format <html|markdown> also fetch each kept URL's page, as HTML or Markdown",
