@@ -495,7 +495,7 @@ export function crawlFailure(c: Crawl | CrawlStop): ToolkitError | null {
     seed_unreachable:
       "The start URL could not be fetched or returned an empty page (the site may be blocking it). Check it with `zenrows fetch <url>`.",
     no_items_found:
-      "Extract read the start page and found no data on it. Start from a page Extract reads, such as a listing or a product page.",
+      "The crawl read the start page but found no data it could use, so it had nothing to follow. Start from a listing or product page.",
   };
   return new ToolkitError({
     code: "CRAWL_FAILED",

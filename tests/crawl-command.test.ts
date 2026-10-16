@@ -363,7 +363,7 @@ test("a completed crawl with patterns and 0 results exits 0 with a note to check
   );
 });
 
-test("a no_items_found crawl says Extract found no data on the start page, not that the patterns matched nothing", async () => {
+test("a no_items_found crawl says the start page held no data the crawl could use, not that the patterns matched nothing", async () => {
   await withCrawlWorkspace(
     () =>
       json({
@@ -373,7 +373,7 @@ test("a no_items_found crawl says Extract found no data on the start page, not t
         error: {
           code: "no_items_found",
           detail:
-            "Extract read the start page and found no data on it, so the crawl had nothing to follow. Start from a page Extract reads, such as a listing or a product page.",
+            "The crawl read the start page but found no data it could use, so it had nothing to follow. Start from a listing or product page.",
         },
         results: [],
         next_cursor: null,
@@ -383,8 +383,9 @@ test("a no_items_found crawl says Extract found no data on the start page, not t
       assert.equal(code, 1);
       assert.equal(out.error.code, "CRAWL_FAILED");
       assert.equal(out.error.server_code, "no_items_found");
-      assert.match(out.error.next_action, /Extract read the start page and found no data on it/);
-      assert.match(out.error.next_action, /listing or a product page/);
+      assert.match(out.error.next_action, /read the start page but found no data it could use/);
+      assert.match(out.error.next_action, /Start from a listing or product page/);
+      assert.doesNotMatch(out.error.next_action, /Extract|Fetch|Batch/);
       assert.doesNotMatch(out.error.next_action, /patterns/);
       assert.equal(out.note, undefined);
     },

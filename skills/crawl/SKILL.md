@@ -91,7 +91,8 @@ credit cap; the pages fetched before that stay readable. `failed`, and a
 `create` gets, also when an older deployment reports it `failed`), else
 `CRAWL_FAILED`. `server_code` carries the API's `error.code`:
 `seed_unreachable` when the start URL could not be fetched or returned an empty
-page, `no_items_found` when Extract read the start page and found no data on it.
+page, `no_items_found` when the crawl read the start page but found no data it
+could use.
 `stop` on a crawl that already ended prints the status it ended with.
 
 With `--json`, `create`, `get`, `wait` and `stop` print
