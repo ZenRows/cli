@@ -13,6 +13,7 @@ export const DASHBOARD_URL = "https://app.zenrows.com/dashboard";
 /** Lands on Billing with the credit-pack purchase modal already open (app PR #1972). */
 export const BILLING_TOPUP_URL = "https://app.zenrows.com/billing?topup=open";
 export const PLANS_URL = "https://app.zenrows.com/plans";
+export const BILLING_URL = "https://app.zenrows.com/billing";
 export const DOCS_URL = "https://docs.zenrows.com";
 
 /** Append query params to a URL (used to attach anonymous `utm_*` attribution). */
