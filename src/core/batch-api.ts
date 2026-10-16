@@ -457,8 +457,8 @@ function classifyProblem(
     return err(
       "BATCH_RESULT_EXPIRED",
       "This result has expired.",
-      `Results are kept 14 days by default; after that a task reads as expired and its body is gone. Scrape it again with a full rerun: \`zenrows batch rerun ${id}\`.`,
-      [`zenrows batch rerun ${id}`],
+      `Results are kept 14 days by default; after that a task reads as expired and its body is gone. Scrape it again with a full rerun: \`zenrows batch rerun ${id} --all\`.`,
+      [`zenrows batch rerun ${id} --all`],
     );
   }
   if (status === 422 && /\/content$/.test(path)) {
@@ -519,15 +519,15 @@ function conflictError(serverCode: string | undefined, detail: string, cause: st
       return e(
         "BATCH_NO_MATCHING_TASKS",
         "No task of the last run has the statuses you asked to rerun.",
-        `Tasks a stop or a credit failure left unfinished are pending or processing: rerun them with \`zenrows batch rerun ${id} --status failed,pending,processing\`, or rerun every task with \`zenrows batch rerun ${id}\`.`,
+        `Tasks a stop or a credit failure left unfinished are pending or processing: rerun them with \`zenrows batch rerun ${id} --status failed,pending,processing\`, or rerun every task with \`zenrows batch rerun ${id} --all\`.`,
         [`zenrows batch rerun ${id} --status failed,pending,processing`],
       );
     case "partial_rerun_window_expired":
       return e(
         "BATCH_RERUN_WINDOW_EXPIRED",
         "Rerunning only some tasks is no longer allowed for this run.",
-        `A rerun with --status works for 10 days after the run started. Rerun every task with \`zenrows batch rerun ${id}\` instead.`,
-        [`zenrows batch rerun ${id}`],
+        `A partial rerun (the default, or --status) works for 10 days after the run started. Rerun every task with \`zenrows batch rerun ${id} --all\` instead.`,
+        [`zenrows batch rerun ${id} --all`],
       );
     case "idempotency_key_conflict":
       return e(
@@ -715,7 +715,7 @@ export interface DownloadOutcome {
 /** Why a row has no body to download. */
 function skipReason(row: ResultRow): string {
   if (row.status === "failed") return "task failed: no result body";
-  if (row.status === "expired") return "result expired (kept 14 days by default): a full rerun scrapes it again";
+  if (row.status === "expired") return "result expired (kept 14 days by default): a full rerun (--all) scrapes it again";
   if (row.status === "pending" || row.status === "processing") return "task not finished yet";
   return "no result_url";
 }

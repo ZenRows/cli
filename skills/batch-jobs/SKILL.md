@@ -112,7 +112,9 @@ zenrows batch resume <id>
 zenrows batch cancel <id>             # stop the run; an ended run answers as it ended
 zenrows batch retry-failed <id>       # rerun the failed tasks
 zenrows batch retry-failed <id> --include-pending   # also the unfinished ones
-zenrows batch rerun <id> [--status failed,pending,processing]
+zenrows batch rerun <id>              # failed + pending tasks; successful ones carry over
+zenrows batch rerun <id> --status failed,pending,processing
+zenrows batch rerun <id> --all        # every task (not with --status)
 zenrows batch delete <id> --yes       # job, runs and stored results; frees its slot
 ```
 
@@ -135,8 +137,10 @@ the run's `failure_reason` as `server_code` and the `job_id`:
 After any of these, and after a `cancel`, the tasks not yet run stay `pending`
 (some can stay `processing`): fix the cause, then run them with
 `zenrows batch rerun <id> --status failed,pending,processing`. Do not resubmit
-the job. A rerun with `--status` works for 10 days after the run started;
-after that only a full rerun (`zenrows batch rerun <id>`) does. Every rerun is
+the job. `rerun` with no flag reruns `failed,pending`, never the successful
+tasks. A partial rerun (the default, or `--status`) works for 10 days after the
+run started; after that only a full rerun (`zenrows batch rerun <id> --all`)
+does. Every rerun is
 a new run that answers 202 with `ingest_status: pending`.
 
 ## Limits
@@ -176,13 +180,13 @@ for errors that remain after these retries.
 | `BATCH_NOT_FOUND` | 404: wrong id, deleted, or another account's job | no |
 | `BATCH_RUN_IN_PROGRESS` | 409 `run_not_terminal`: the run is still going (or still receiving tasks) | after `wait` or `cancel` |
 | `BATCH_RUN_ENDED` | 409 `run_not_stoppable`: the run already ended (pause/resume) | no; `rerun` starts a new run |
-| `BATCH_NO_MATCHING_TASKS` | 409 `no_matching_tasks`: no task has the statuses asked for | with `--status failed,pending,processing`, or a full rerun |
-| `BATCH_RERUN_WINDOW_EXPIRED` | 409 `partial_rerun_window_expired`: `--status` is over 10 days late | with a full rerun |
+| `BATCH_NO_MATCHING_TASKS` | 409 `no_matching_tasks`: no task has the statuses asked for | with `--status failed,pending,processing`, or `rerun --all` |
+| `BATCH_RERUN_WINDOW_EXPIRED` | 409 `partial_rerun_window_expired`: a partial rerun is over 10 days late | with `rerun --all` |
 | `BATCH_REQUEST_IN_FLIGHT` | 409 `idempotency_key_conflict`: the key is in use or was used for another body | same command, same key, a moment later |
 | `BATCH_CONFLICT` | any other 409 (job state, key no longer valid, concurrent change) | read the cause |
 | `BATCH_TASK_NOT_READY` | 409 `task_not_ready` on `content`: the task has not finished | after `wait` |
 | `BATCH_TASK_FAILED` | 422 on `content`: the task failed | after `retry-failed` |
-| `BATCH_RESULT_EXPIRED` | 410 `result_expired`: past the 14-day visibility window | after a full rerun |
+| `BATCH_RESULT_EXPIRED` | 410 `result_expired`: past the 14-day visibility window | after `rerun --all` |
 | `BATCH_FAILED` | the run ended `failed` for another reason; a 400 (fix the flagged tasks) or 5xx | 5xx: yes |
 | `POLICY_LIMIT_EXCEEDED` | the local policy caps (see Limits) | after raising the cap |
 | `BACKEND_UNAVAILABLE` | the API could not be reached | yes |

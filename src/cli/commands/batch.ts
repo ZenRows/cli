@@ -55,6 +55,8 @@ import { asNumber, asString, parse, type Command, type RunContext } from "../com
 import { ToolkitError, isKeyCapReached, keyCapReached, quotaExhausted } from "../../core/errors.ts";
 import { printError, writeOut } from "../output.ts";
 
+/** What `rerun` selects with no --status: the unfinished tasks, never the successful ones. */
+const DEFAULT_RERUN = "failed,pending";
 /** The task statuses that recover every task a run did not finish successfully. */
 const UNFINISHED = "failed,pending,processing";
 
@@ -101,9 +103,12 @@ export const batch: Command = {
     "                                   print or save one task's result body",
     "  cancel <id>                      stop the in-flight run (an ended run answers as it ended)",
     "  pause <id> / resume <id>         pause the in-flight run, or resume it",
-    "  rerun <id> [--status <list>]     start a new run: every task, or only tasks with these",
-    "                                   statuses (pending,processing,failed,successful); takes",
-    "                                   --idempotency-key, --follow and --timeout like create",
+    "  rerun <id>                       start a new run of the failed and pending tasks",
+    "                                   (successful tasks carry over and are not billed again)",
+    "    --status <list>                rerun only tasks with these statuses",
+    "                                   (pending,processing,failed,successful)",
+    "    --all                          rerun every task (a full rerun; not with --status)",
+    "                                   rerun also takes --idempotency-key, --follow and --timeout",
     "  retry-failed <id>                rerun only the failed tasks (rerun --status failed); takes",
     "                                   --idempotency-key, --follow and --timeout like rerun",
     "    --include-pending              also the tasks a stop or a credit failure left unfinished",
@@ -540,7 +545,7 @@ async function resultsCmd(rest: string[], ctx: RunContext): Promise<number> {
       if (out.skipped.length) {
         log.dim(`  skipped ${out.skipped.length} with no body (failed, expired or unfinished tasks${expired ? `; ${expired} expired` : ""})`);
       }
-      if (expired) log.dim(`  expired results are gone after 14 days by default; rerun the job in full: zenrows batch rerun ${id}`);
+      if (expired) log.dim(`  expired results are gone after 14 days by default; rerun the job in full: zenrows batch rerun ${id} --all`);
       if (out.failed.length) {
         log.warn(`  ${out.failed.length} download(s) failed:`);
         out.failed.slice(0, 10).forEach((f) => log.dim(`    ${f.external_id ?? f.task_id}: ${f.reason}`));
@@ -669,7 +674,7 @@ function asJob(id: string, run: JobRun): Job {
 
 async function rerunCmd(rest: string[], ctx: RunContext, sub: "rerun" | "retry-failed"): Promise<number> {
   const { values, positionals } = parse(rest, {
-    ...(sub === "rerun" ? { status: { type: "string" } } : { "include-pending": { type: "boolean" } }),
+    ...(sub === "rerun" ? { status: { type: "string" }, all: { type: "boolean" } } : { "include-pending": { type: "boolean" } }),
     "idempotency-key": { type: "string" },
     follow: { type: "boolean" },
     timeout: { type: "string" },
@@ -677,8 +682,21 @@ async function rerunCmd(rest: string[], ctx: RunContext, sub: "rerun" | "retry-f
   });
   const json = ctx.json || values.json === true;
   const id = requireId(positionals[0], sub);
+  if (values.all === true && values.status !== undefined) {
+    throw usageError(
+      "--all and --status cannot be combined.",
+      "Pass --all to rerun every task, or --status <list> to pick statuses, not both.",
+      "--all reruns every task; --status reruns only some.",
+    );
+  }
   const status =
-    sub === "rerun" ? rerunStatus(asString(values.status)) : values["include-pending"] === true ? UNFINISHED : "failed";
+    sub === "rerun"
+      ? values.all === true
+        ? undefined
+        : (rerunStatus(asString(values.status)) ?? DEFAULT_RERUN)
+      : values["include-pending"] === true
+        ? UNFINISHED
+        : "failed";
   const waitMs = timeoutFlag(values.timeout);
   const givenKey = asString(values["idempotency-key"]);
   if (givenKey !== undefined) assertIdempotencyKey(givenKey);
@@ -698,7 +716,7 @@ async function rerunCmd(rest: string[], ctx: RunContext, sub: "rerun" | "retry-f
   return printJob(job, json, `Started a new run of job ${id} (${what})`);
 }
 
-/** `--status` for a rerun: a comma-separated list of task statuses; undefined (unset) means every task. */
+/** `--status` for a rerun: a comma-separated list of task statuses; undefined when unset. */
 function rerunStatus(v: string | undefined): string | undefined {
   if (v === undefined) return undefined;
   const parts = [...new Set(v.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean))];
@@ -706,7 +724,7 @@ function rerunStatus(v: string | undefined): string | undefined {
   if (!parts.length || bad !== undefined) {
     throw usageError(
       `Invalid --status '${v}'.`,
-      `Pass a comma-separated list of ${RERUN_STATUSES.join(", ")} (e.g. --status ${UNFINISHED}), or leave --status out to rerun every task.`,
+      `Pass a comma-separated list of ${RERUN_STATUSES.join(", ")} (e.g. --status ${UNFINISHED}), leave it out to rerun failed and pending tasks, or pass --all to rerun every task.`,
       `A rerun selects tasks of the previous run by status: ${RERUN_STATUSES.join(", ")}.`,
     );
   }

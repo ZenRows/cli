@@ -220,12 +220,12 @@ test("any other failure stays BATCH_FAILED, without 'fix the tasks' advice", () 
 
 // ---------- rerun ----------
 
-test("rerun with no --status is a full rerun; output keeps rerun_of, retried_tasks, inherited_tasks", async () => {
+test("rerun --all is a full rerun; output keeps rerun_of, retried_tasks, inherited_tasks", async () => {
   const answer = { job_id: "j1", status: "closed", latest_run: run({ run_id: "r2", ingest_status: "pending" }), rerun_of: "r1", retried_tasks: 5, inherited_tasks: 0 };
   await withWorkspace(
     () => json(answer, 202),
     async (calls) => {
-      const { code, out } = await run_(["rerun", "j1"]);
+      const { code, out } = await run_(["rerun", "j1", "--all"]);
       assert.equal(code, 0);
       assert.equal(calls[0]!.url.searchParams.get("status"), null);
       assert.ok(header(calls[0]!, "Idempotency-Key"));
@@ -234,6 +234,21 @@ test("rerun with no --status is a full rerun; output keeps rerun_of, retried_tas
       assert.equal(out.retried_tasks, 5);
       assert.equal(out.inherited_tasks, 0);
       assert.equal(out.ingest_status, "pending");
+    },
+  );
+});
+
+test("rerun with no flags reruns failed,pending only; --all and --status cannot be combined", async () => {
+  await withWorkspace(
+    () => json(job()),
+    async (calls) => {
+      const { code } = await run_(["rerun", "j1"]);
+      assert.equal(code, 0);
+      assert.equal(calls[0]!.url.searchParams.get("status"), "failed,pending");
+      const both = await run_(["rerun", "j1", "--all", "--status", "failed"]);
+      assert.equal(both.code, 1);
+      assert.equal(both.out.error.code, "INVALID_USAGE");
+      assert.equal(calls.length, 1);
     },
   );
 });
@@ -270,7 +285,7 @@ test("retry-failed sends status=failed, and --include-pending recovers unfinishe
 test("each lifecycle 409 gets its own code and advice, carrying server_code and job_id", async () => {
   const cases: Array<[string, string, string, RegExp]> = [
     ["no_matching_tasks", "No tasks match the requested statuses.", "BATCH_NO_MATCHING_TASKS", /--status failed,pending,processing/],
-    ["partial_rerun_window_expired", "Partial rerun window expired.", "BATCH_RERUN_WINDOW_EXPIRED", /zenrows batch rerun j1`/],
+    ["partial_rerun_window_expired", "Partial rerun window expired.", "BATCH_RERUN_WINDOW_EXPIRED", /zenrows batch rerun j1 --all`/],
     ["run_not_terminal", "Previous run is still in flight; call /stop before /rerun.", "BATCH_RUN_IN_PROGRESS", /batch wait j1/],
     ["idempotency_key_conflict", "Idempotency key conflict.", "BATCH_REQUEST_IN_FLIGHT", /same key/],
     ["run_has_descendants", "Run has descendants.", "BATCH_CONFLICT", /batch status j1/],

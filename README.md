@@ -142,7 +142,7 @@ zenrows batch content <job-id> <task-id>              # one task's result body
 zenrows batch pause <job-id>                          # pause the run (resume <job-id> continues it)
 zenrows batch cancel <job-id>                         # stop an in-flight run
 zenrows batch retry-failed <job-id> --include-pending # rerun every task that did not succeed
-zenrows batch rerun <job-id>                          # rerun every task
+zenrows batch rerun <job-id>                          # rerun failed + pending tasks (--all: every task)
 zenrows batch delete <job-id> --yes                   # delete the job, its runs and results
 ```
 
@@ -180,8 +180,11 @@ command; the job keeps running. Ctrl-C stops the wait, not the job, and exits
 cap `KEY_CREDIT_CAP_REACHED` (the same codes a refused request gets), anything
 else `BATCH_FAILED`, each with the run's `failure_reason` as `server_code` and
 the `job_id`. Then run the unfinished tasks with
-`zenrows batch rerun <job-id> --status failed,pending,processing`. A rerun with
-`--status` works for 10 days after the run started; a full rerun always does.
+`zenrows batch rerun <job-id> --status failed,pending,processing`. With no
+flag, `rerun` reruns the `failed` and `pending` tasks, so successful tasks are
+never billed again by surprise; `--status <list>` picks the statuses and
+`--all` reruns every task (not with `--status`). A partial rerun works for 10
+days after the run started; `--all` always does.
 
 With `--json`, `create`, `status`, `wait`, `cancel`, `pause`, `resume` and
 `rerun` print `{ok, job_id, run_id, status, stats, job}` (`jobId` is kept for
