@@ -60,6 +60,9 @@ zenrows trace export <run-id>     # JSON for sharing
   `failure_detail` in `zenrows batch status <id> --json` say why a run failed.
   A Batch 401, 403 and 404 keep their own codes: `AUTH_INVALID`,
   `BATCH_ACCESS_DENIED` and `BATCH_NOT_FOUND`.
+  A Batch `AUTH_INVALID` with `server_code: subscription_inactive` means the
+  key is valid but the subscription is not active: fix it in Billing, do not
+  log in again.
 - `CRAWL_NOT_ENABLED` → the API answered 403 `REQS008`: Crawl is not
   enabled for this account. Do not retry; ask Zenrows support for access.
 - `CRAWL_INSUFFICIENT_CREDITS` / `CRAWL_KEY_CAP_REACHED` → Crawl's 402: the

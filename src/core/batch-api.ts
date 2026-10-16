@@ -396,6 +396,7 @@ function problemToError(status: number, body: string, method: string, path: stri
     // AUTH_INVALID code as any 401 so callers that branch on it keep
     // working; only the guidance changes, since re-entering the key won't help.
     return new ToolkitError({
+      ...sc,
       code: "AUTH_INVALID",
       message: "Zenrows refused the Batch API request because the subscription is not active.",
       likely_cause: `${cause.replace(/\.?$/, ".")} The API key is valid, but the subscription is past due, unpaid, incomplete or paused.`,

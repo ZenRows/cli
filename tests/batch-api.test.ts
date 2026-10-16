@@ -177,6 +177,7 @@ test("problem+json 401 unauthenticated keeps AUTH_INVALID and the re-login guida
     (e: unknown) =>
       e instanceof ToolkitError &&
       e.code === "AUTH_INVALID" &&
+      e.server_code === "unauthenticated" &&
       /Re-check your key/.test(e.next_action) &&
       (e.suggested_commands ?? []).some((c) => c.startsWith("zenrows login")),
   );
@@ -198,6 +199,7 @@ test("problem+json 401 subscription_inactive keeps AUTH_INVALID but points to Bi
     (e: unknown) =>
       e instanceof ToolkitError &&
       e.code === "AUTH_INVALID" &&
+      e.server_code === "subscription_inactive" &&
       /subscription is not active/.test(e.message) &&
       /app\.zenrows\.com\/billing/.test(e.next_action) &&
       /Subscription is not active\./.test(e.likely_cause) &&
