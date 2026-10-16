@@ -32,6 +32,7 @@ import { readAccount } from "./agent-account.ts";
 import { registerSecret } from "./logger.ts";
 import { CLI_USER_AGENT } from "./config.ts";
 import { agentClientHeader } from "./agent-client.ts";
+import { BILLING_URL } from "./open-url.ts";
 
 /** Confirmed Batch API base (no trailing slash). */
 export const DEFAULT_BATCH_API_BASE = "https://async.api.zenrows.com/v1";
@@ -388,6 +389,17 @@ function problemToError(status: number, body: string, method: string, path: stri
       next_action:
         "Check that your Zenrows API key is active, and contact Zenrows support if the 403 persists. Meanwhile validate/estimate specs locally and fan out with `zenrows fetch` per URL.",
       suggested_commands: ["zenrows batch estimate jobs.jsonl"],
+    });
+  }
+  if (status === 401 && serverCode === "subscription_inactive") {
+    // The key is fine; the subscription needs a billing action. Same
+    // AUTH_INVALID code as any 401 so callers that branch on it keep
+    // working; only the guidance changes, since re-entering the key won't help.
+    return new ToolkitError({
+      code: "AUTH_INVALID",
+      message: "Zenrows refused the Batch API request because the subscription is not active.",
+      likely_cause: `${cause.replace(/\.?$/, ".")} The API key is valid, but the subscription is past due, unpaid, incomplete or paused.`,
+      next_action: `Fix the subscription in Billing (${BILLING_URL}), or in Azure Marketplace if you subscribed there, then retry.`,
     });
   }
   if (status === 401) {

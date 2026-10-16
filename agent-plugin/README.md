@@ -35,7 +35,7 @@ Or point any Agent Plugins–compatible client at that `agent-plugin` folder
 
 ### From git
 
-Clone [`zenrows/cli`](https://github.com/zenrows/cli) and use the repo-root `agent-plugin/` folder the same way.
+Clone [`ZenRows/cli`](https://github.com/ZenRows/cli) and use the repo-root `agent-plugin/` folder the same way.
 
 Clients discover:
 

@@ -166,6 +166,45 @@ test("problem+json 402 api_key_cap_reached maps to KEY_CREDIT_CAP_REACHED", asyn
   );
 });
 
+test("problem+json 401 unauthenticated keeps AUTH_INVALID and the re-login guidance", async () => {
+  const { impl } = jsonFetch(
+    401,
+    { title: "Unauthenticated (unauthenticated)", status: 401, code: "unauthenticated", detail: "Invalid API key." },
+    "application/problem+json",
+  );
+  await assert.rejects(
+    () => getJob("job_1", { apiKey: "k", fetchImpl: impl }),
+    (e: unknown) =>
+      e instanceof ToolkitError &&
+      e.code === "AUTH_INVALID" &&
+      /Re-check your key/.test(e.next_action) &&
+      (e.suggested_commands ?? []).some((c) => c.startsWith("zenrows login")),
+  );
+});
+
+test("problem+json 401 subscription_inactive keeps AUTH_INVALID but points to Billing", async () => {
+  const { impl } = jsonFetch(
+    401,
+    {
+      title: "Subscription not active (subscription_inactive)",
+      status: 401,
+      code: "subscription_inactive",
+      detail: "Subscription is not active.",
+    },
+    "application/problem+json",
+  );
+  await assert.rejects(
+    () => getJob("job_1", { apiKey: "k", fetchImpl: impl }),
+    (e: unknown) =>
+      e instanceof ToolkitError &&
+      e.code === "AUTH_INVALID" &&
+      /subscription is not active/.test(e.message) &&
+      /app\.zenrows\.com\/billing/.test(e.next_action) &&
+      /Subscription is not active\./.test(e.likely_cause) &&
+      !(e.suggested_commands ?? []).some((c) => c.startsWith("zenrows login")),
+  );
+});
+
 test("problem+json 404 maps to BATCH_NOT_FOUND", async () => {
   const { impl } = jsonFetch(404, { code: "not_found", detail: "job missing" }, "application/problem+json");
   await assert.rejects(

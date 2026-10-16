@@ -1,6 +1,6 @@
 ---
 name: crawl
-description: Collect the URLs behind one start page with Crawl (new): create a crawl, wait for it, read the kept URLs and optionally each page's HTML, stop it. Use when the user has a listing or section URL but not the item URLs.
+description: "Collect the URLs behind one start page with Crawl (new): create a crawl, wait for it, read the kept URLs and optionally each page's HTML, stop it. Use when the user has a listing or section URL but not the item URLs."
 version: 0.1.0
 requires_backend_capabilities: [crawl]
 ---
