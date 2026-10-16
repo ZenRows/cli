@@ -27,9 +27,14 @@ zenrows trace export <run-id>     # JSON for sharing
   multiplies the cost of the request, and both together are the most expensive
   configuration available ([[cost-control]]).
 - `REQUEST_TIMEOUT` → the CLI stopped waiting; the API was reached. Raise
-  `--timeout` (default 120000ms, above the API's own 90s budget), or drop
+  `--timeout` (default 120000ms; the API's own budget is 180s), or drop
   `--wait-for` so the request finishes inside that budget and the API returns
-  its own error. Not a connectivity problem — do not chase the network.
+  its own error. Not a connectivity problem — do not chase the network. The CLI
+  never retries a timeout on its own: the API may still finish and charge it.
+- `SERVICE_BUSY` → HTTP 503 `RESP009`: Zenrows had no capacity for the request
+  yet, or Extract is still preparing this layout. Not charged. The CLI already
+  retried it (`--retries`, default 2); run the same command again in about a
+  minute. Do not escalate to `--js-render` / `--premium-proxy`.
 - `BACKEND_UNAVAILABLE` → a genuine transport failure (DNS/TCP/TLS). Check
   connectivity and `zenrows config show`.
 - `AUTH_INVALID` → re-check the key, `zenrows login --api-key …`.

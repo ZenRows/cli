@@ -111,7 +111,15 @@ zenrows fetch <url> # Adaptive Stealth Mode (mode=auto)
 zenrows fetch <url> --output markdown
 zenrows fetch <url> --manual --js-render --premium-proxy
 zenrows fetch <url> --proxy-country us --wait-for ".price"
+zenrows fetch <url> --retries 0 # send once; the default is 2 retries
 ```
+
+`fetch` and `extract` retry a 429, 502, 503 or 504 answer and a network error
+up to `--retries` times (default 2). Each wait honours `Retry-After` (at most
+30 s) or is a random delay that grows with each retry, and no retry starts
+after 90 s in total. None of these statuses is charged. A client timeout
+(`--timeout`) is never retried, because the API may still finish and charge
+that request.
 
 ## 8. Extract
 
