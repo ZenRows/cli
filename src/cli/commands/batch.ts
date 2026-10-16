@@ -238,7 +238,8 @@ function jobFieldsOf(values: Record<string, unknown>): JobFields {
   const fields: JobFields = {};
   const name = asString(values.name);
   if (name !== undefined) {
-    if (!name.trim() || name.length > LIMITS.nameLength) {
+    // The API counts the name in characters (code points), not UTF-16 units.
+    if (!name.trim() || [...name].length > LIMITS.nameLength) {
       throw usageError(`Invalid --name: it must be 1 to ${LIMITS.nameLength} characters.`, "Pass a shorter name.");
     }
     fields.name = name;
@@ -389,10 +390,15 @@ function withRepeatCommand(err: unknown, sub: string, rest: string[]): unknown {
       continue;
     }
     if (a.startsWith("--idempotency-key=")) continue;
-    args.push(/^[A-Za-z0-9._\-/:=,@%+]+$/.test(a) ? a : `'${a.replace(/'/g, "'\\''")}'`);
+    args.push(shellQuote(a));
   }
-  const repeat = `zenrows batch ${sub} ${args.join(" ")} --idempotency-key ${err.idempotency_key}`.replace(/\s+/g, " ");
+  const repeat = ["zenrows", "batch", sub, ...args, "--idempotency-key", shellQuote(err.idempotency_key)].join(" ");
   return new ToolkitError({ ...err.toJSON(), suggested_commands: [repeat, "zenrows batch list"] });
+}
+
+/** `s` as one POSIX shell word: bare when it is plainly safe, else single-quoted. */
+export function shellQuote(s: string): string {
+  return /^[A-Za-z0-9._\-/:=,@%+]+$/.test(s) ? s : `'${s.replace(/'/g, "'\\''")}'`;
 }
 
 async function listCmd(rest: string[], ctx: RunContext): Promise<number> {
@@ -513,7 +519,11 @@ async function resultsCmd(rest: string[], ctx: RunContext): Promise<number> {
 
   const rows = await listResults(id, { apiKey, status, runId });
   const state = await runState(id, runId, apiKey);
-  const note = state.partial ? partialNote(state.status, id) : undefined;
+  const note = state.unknown
+    ? `The run's state could not be read, so these results may be partial. Check it with zenrows batch status ${id}, then read them again.`
+    : state.partial
+      ? partialNote(state.status, id)
+      : undefined;
   const meta = { jobId: id, job_id: id, ...(runId ? { run_id: runId } : {}), ...(state.status ? { status: state.status } : {}) };
 
   const downloadDir = asString(values.download);
@@ -578,13 +588,18 @@ async function resultsCmd(rest: string[], ctx: RunContext): Promise<number> {
  * Whether the run whose results were read can still change: in progress, or
  * still receiving its tasks. An error here never fails the listing.
  */
-async function runState(id: string, runId: string | undefined, apiKey: string): Promise<{ status?: string; partial: boolean }> {
+async function runState(
+  id: string,
+  runId: string | undefined,
+  apiKey: string,
+): Promise<{ status?: string; partial: boolean; unknown?: boolean }> {
   try {
     const run: JobRun | undefined = runId ? await getRun(id, runId, { apiKey }) : (await getJob(id, { apiKey })).latest_run;
     if (!run) return { partial: false };
     return { status: run.status, partial: !isTerminal(run) || run.ingest_status === "pending" };
   } catch {
-    return { partial: false };
+    // Unknown is not complete: report the rows as possibly partial.
+    return { partial: true, unknown: true };
   }
 }
 

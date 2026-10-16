@@ -25,14 +25,15 @@ zenrows batch estimate jobs.jsonl [--premium-proxy] [--js-render] [--manual]
 ```
 
 `jobs.jsonl` is one JSON object per line, each with a `url` (http or https,
-up to 2048 characters). Optional per-task keys:
+up to 2048 bytes). Optional per-task keys:
 
 - `external_id`: up to 128 letters, digits, `.`, `_` or `-`; echoed on each
   result row (it does not have to be unique).
 - `metadata`: up to 20 string-to-string entries; keys 1 to 64 of the same
-  characters, values up to 1024 characters, 4 KiB in total.
+  characters, values up to 1024 bytes (UTF-8), 4 KiB in total.
 - `method` and `body`: `"method": "POST"` sends `body` (up to 16 KiB): a JSON
-  string goes as a form body, any other JSON value as JSON. A POST task cannot
+  string goes as a form body, any other JSON value as JSON (`"body": null` means
+  no body). A POST task cannot
   use `js_render`, `js_instructions` or `json_response`.
 - scrape params, flat (`js_render`, `premium_proxy`, `proxy_country`, `mode`,
   `autoparse`, `extract`, ...) or nested under `zenrows_params`. Booleans are

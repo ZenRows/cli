@@ -151,7 +151,7 @@ per-line overrides like `js_render`, `premium_proxy`, `proxy_country`,
 `extract`, nested `zenrows_params`, an `external_id`, string `metadata`, and
 `"method": "POST"` with a `body` of up to 16 KiB). `estimate` and `create`
 check every line against the API's limits before anything is sent: `url` up
-to 2048 characters, `external_id` up to 128 letters, digits, `.`, `_` or `-`,
+to 2048 bytes, `external_id` up to 128 letters, digits, `.`, `_` or `-`,
 and `metadata` up to 20 string entries (4 KiB). Validate and estimate locally
 first, then submit with `create`. `estimate` takes `create`'s
 `--manual` / `--js-render` / `--premium-proxy` / `--proxy-country` flags and

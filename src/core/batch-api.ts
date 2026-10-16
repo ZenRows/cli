@@ -138,6 +138,11 @@ interface CallOpts {
   /** Per HTTP attempt. */
   timeoutMs?: number;
   sleepImpl?: (ms: number) => Promise<void>;
+  /**
+   * Epoch ms the whole call must end by, retries included: each attempt is cut
+   * off at it and no retry starts that would sleep past it.
+   */
+  deadline?: number;
 }
 
 interface RequestOpts extends CallOpts {
@@ -220,7 +225,9 @@ function transient(err: ToolkitError): ToolkitError {
 /** One HTTP attempt with its own timeout; the body is read inside it. */
 async function attempt(url: string, init: RequestInit, opts: RequestOpts): Promise<RawResponse> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 60_000);
+  const perAttempt = opts.timeoutMs ?? 60_000;
+  const ms = opts.deadline !== undefined ? Math.max(1, Math.min(perAttempt, opts.deadline - Date.now())) : perAttempt;
+  const timeout = setTimeout(() => controller.abort(), ms);
   try {
     const res = await (opts.fetchImpl ?? fetch)(url, { ...init, signal: controller.signal });
     return { status: res.status, headers: res.headers, body: Buffer.from(await res.arrayBuffer()) };
@@ -256,17 +263,22 @@ async function batchFetch(method: string, path: string, opts: RequestOpts): Prom
   // Set once an attempt of a keyed write got no answer: the API may have done the work.
   let mayHaveLanded = false;
 
+  // A retry that would sleep past the call's deadline is not started.
+  const fits = (waitMs: number) => opts.deadline === undefined || Date.now() + waitMs < opts.deadline;
+
   for (let n = 0; ; n++) {
     const canRetry = retryOn !== undefined && n < MAX_RETRIES;
     let res: RawResponse;
     try {
       res = await attempt(url.toString(), init, opts);
     } catch (err) {
-      if (canRetry) {
+      const wait = backoffMs(n);
+      if (canRetry && fits(wait)) {
         mayHaveLanded = true;
-        await sleep(backoffMs(n));
+        await sleep(wait);
         continue;
       }
+      if (key) mayHaveLanded = true;
       const failure = transient(
         new ToolkitError({
           code: "BACKEND_UNAVAILABLE",
@@ -281,16 +293,21 @@ async function batchFetch(method: string, path: string, opts: RequestOpts): Prom
       throw key ? outcomeUnknown(failure, key) : failure;
     }
     if (canRetry && retryOn.has(res.status)) {
-      if (res.status >= 500) mayHaveLanded = true;
-      await sleep(retryAfterMs(res.headers.get("retry-after")) ?? backoffMs(n));
-      continue;
+      const wait = retryAfterMs(res.headers.get("retry-after")) ?? backoffMs(n);
+      if (fits(wait)) {
+        if (res.status >= 500) mayHaveLanded = true;
+        await sleep(wait);
+        continue;
+      }
     }
     if (res.status < 200 || res.status >= 300) {
       let failure = problemToError(res.status, res.body.toString("utf8"), method, path, opts.jobId);
       if (res.status === 429 || res.status >= 500) failure = transient(failure);
-      if (key && (res.status >= 500 || (mayHaveLanded && failure.server_code === "idempotency_key_conflict"))) {
-        throw outcomeUnknown(failure, key);
-      }
+      if (key && res.status >= 500) throw outcomeUnknown(failure, key);
+      // An earlier attempt may have been accepted, and the API checks credit
+      // (402) and other gates before it looks at the key: whatever this attempt
+      // answers, the safe next step is still to repeat with the same key.
+      if (key && mayHaveLanded) throw outcomeUnknown(failure, key, { keepAdvice: true });
       throw failure;
     }
     return res;
@@ -325,12 +342,15 @@ async function batchJson<T>(method: string, path: string, opts: RequestOpts): Pr
  * done the work although no usable answer arrived. Carry the key and say what
  * is safe; the command layer adds the exact command to repeat.
  */
-function outcomeUnknown(err: ToolkitError, key: string): ToolkitError {
+function outcomeUnknown(err: ToolkitError, key: string, opts: { keepAdvice?: boolean } = {}): ToolkitError {
+  const lead = opts.keepAdvice
+    ? `${err.next_action.replace(/[.\s]*$/, ".")} An earlier attempt of this request got no answer and may have been accepted. Once that is resolved, repeat it with the same Idempotency-Key (${key}) `
+    : `The request may have been accepted even though no usable answer arrived. Repeat it with the same Idempotency-Key (${key}) `;
   const out = new ToolkitError({
     ...err.toJSON(),
     idempotency_key: key,
     next_action:
-      `The request may have been accepted even though no usable answer arrived. Repeat it with the same Idempotency-Key (${key}) ` +
+      lead +
       "within 24 hours: the API then answers with the original job or run instead of creating a second one. " +
       "Do not repeat it with a new key, which can create a duplicate. Check `zenrows batch list` first.",
   });
@@ -798,11 +818,12 @@ export async function waitForJob(id: string, opts: CallOpts & { waitMs?: number 
   const sleep = opts.sleepImpl ?? defaultSleep;
   const deadline = Date.now() + (opts.waitMs ?? 600_000);
   let delay = 2000;
+  const read = { ...opts, deadline };
   let last: Job | undefined;
   let lastErr: unknown;
   for (;;) {
     try {
-      last = await getJob(id, opts);
+      last = await getJob(id, read);
       if (isTerminal(last.latest_run) || isPaused(last.latest_run)) return last;
     } catch (err) {
       if (!isTransient(err)) throw err;

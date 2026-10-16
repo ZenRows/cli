@@ -10,9 +10,10 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { batch, runFailure, timeoutFlag } from "../src/cli/commands/batch.ts";
+import { batch, runFailure, shellQuote, timeoutFlag } from "../src/cli/commands/batch.ts";
 import { estimateCredits, toJobBody, validateJsonl, withAdaptiveStealth } from "../src/adapters/batch.ts";
-import { waitForJob } from "../src/core/batch-api.ts";
+import { createJob, waitForJob } from "../src/core/batch-api.ts";
+import { ToolkitError } from "../src/core/errors.ts";
 import { createWorkspace } from "../src/core/workspace.ts";
 import { savePolicy, defaultPolicy } from "../src/core/policy.ts";
 import { saveApiKey } from "../src/core/auth.ts";
@@ -662,4 +663,99 @@ test("delete needs --yes, then sends DELETE /jobs/{id}", async () => {
       assert.equal(calls[0]!.url.pathname, "/v1/jobs/j1");
     },
   );
+});
+
+// ---------- review follow-ups ----------
+
+test("a 402 after a lost attempt keeps the Idempotency-Key and the safe-repeat advice", async () => {
+  let n = 0;
+  const impl = (async () => {
+    if (n++ === 0) throw new TypeError("socket hang up");
+    return problem(402, "payment_required", "Subscription has no credit available.");
+  }) as unknown as typeof fetch;
+  await assert.rejects(
+    () => createJob({ type: "regular", status: "closed", tasks: [] }, { apiKey: "k", fetchImpl: impl, sleepImpl: async () => {}, idempotencyKey: "key-1" }),
+    (e: unknown) =>
+      e instanceof ToolkitError &&
+      e.code === "POLICY_MAX_CREDITS_EXCEEDED" &&
+      e.idempotency_key === "key-1" &&
+      /may have been accepted/.test(e.next_action) &&
+      /same Idempotency-Key \(key-1\)/.test(e.next_action),
+  );
+  // Without a lost attempt, a 402 is a plain refusal.
+  const plain = (async () => problem(402, "payment_required", "Subscription has no credit available.")) as unknown as typeof fetch;
+  await assert.rejects(
+    () => createJob({ type: "regular", status: "closed", tasks: [] }, { apiKey: "k", fetchImpl: plain, idempotencyKey: "key-2" }),
+    (e: unknown) => e instanceof ToolkitError && e.idempotency_key === undefined,
+  );
+});
+
+test("the repeat command shell-quotes every argument and the key, keeping inner whitespace", async () => {
+  assert.equal(shellQuote("plain-1.jsonl"), "plain-1.jsonl");
+  assert.equal(shellQuote("key with  space"), "'key with  space'");
+  assert.equal(shellQuote("it's;$(rm)"), "'it'\\''s;$(rm)'");
+  assert.equal(shellQuote(""), "''");
+  await withWorkspace(
+    () => problem(503, "internal", "boom"),
+    async (_calls, root) => {
+      const file = spec(root, [{ url: "https://example.com/a" }]);
+      const { out } = await run_(["create", file, "--name", "two  spaces", "--idempotency-key", "k $(x) y"]);
+      assert.equal(out.error.suggested_commands[0], `zenrows batch create ${file} --name 'two  spaces' --idempotency-key 'k $(x) y'`);
+    },
+  );
+});
+
+test("a wait never sleeps or retries past its --timeout", async () => {
+  const sleeps: number[] = [];
+  let n = 0;
+  const impl = (async () => {
+    if (n++ === 0) return json(job());
+    return new Response(JSON.stringify({ code: "internal", detail: "boom" }), { status: 503, headers: { "retry-after": "30" } });
+  }) as unknown as typeof fetch;
+  const started = Date.now();
+  const done = await waitForJob("j1", {
+    apiKey: "k",
+    fetchImpl: impl,
+    waitMs: 3000,
+    sleepImpl: async (ms) => {
+      sleeps.push(ms);
+    },
+  });
+  assert.equal(done.latest_run?.status, "running", "returns the last state read");
+  assert.ok(sleeps.every((ms) => ms < 3000), `no sleep reaches past the deadline: ${sleeps}`);
+  assert.ok(!sleeps.includes(30_000), "a 30 s Retry-After is not slept on a 3 s wait");
+  assert.ok(Date.now() - started < 3000);
+
+  // A request that hangs is cut off at the deadline, not after the 60 s per-attempt timeout.
+  const hang = ((_u: string, init?: RequestInit) =>
+    new Promise((_r, reject) => init?.signal?.addEventListener("abort", () => reject(new Error("aborted"))))) as unknown as typeof fetch;
+  const t0 = Date.now();
+  await assert.rejects(() => waitForJob("j1", { apiKey: "k", fetchImpl: hang, waitMs: 300, sleepImpl: async () => {} }));
+  assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
+});
+
+test("results whose run state cannot be read are reported as possibly partial", async () => {
+  await withWorkspace(
+    (url) =>
+      url.pathname.endsWith("/results")
+        ? json({ results: [{ task_id: "t1", status: "pending" }], next_cursor: null })
+        : problem(404, "not_found", "Job not found."),
+    async () => {
+      const { code, out } = await run_(["results", "j1"]);
+      assert.equal(code, 0);
+      assert.equal(out.partial, true);
+      assert.match(out.note, /could not be read/);
+    },
+  );
+});
+
+test("url and metadata limits count UTF-8 bytes, as the API does", () => {
+  const dir = mkdtempSync(join(tmpdir(), "zr-bytes-"));
+  const file = spec(dir, [
+    { url: "https://ok.example/", metadata: { v: "é".repeat(512) } },
+    { url: "https://b.example/", metadata: { v: "é".repeat(600) } },
+    { url: `https://c.example/${"é".repeat(1100)}` },
+  ]);
+  const v = validateJsonl(file);
+  assert.deepEqual(v.errors.map((e) => e.line), [2, 3]);
 });

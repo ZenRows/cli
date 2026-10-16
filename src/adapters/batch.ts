@@ -103,7 +103,8 @@ function taskError(obj: unknown): string | null {
     return `invalid url: ${job.url}`;
   }
   if (u.protocol !== "http:" && u.protocol !== "https:") return `url must be http or https: ${job.url}`;
-  if (job.url.length > LIMITS.urlLength) return `url is longer than ${LIMITS.urlLength} characters`;
+  // The API counts these limits in UTF-8 bytes, not characters.
+  if (Buffer.byteLength(job.url) > LIMITS.urlLength) return `url is longer than ${LIMITS.urlLength} bytes`;
   if (job.external_id !== undefined && job.external_id !== null) {
     const e = externalIdError(job.external_id);
     if (e) return e;
@@ -127,7 +128,7 @@ export function externalIdError(v: unknown): string | null {
 
 /**
  * Why `metadata` is invalid, or null: the API takes at most 20 string-to-string
- * entries, keys of 1 to 64 safe characters, values up to 1024 characters, 4 KiB
+ * entries, keys of 1 to 64 safe characters, values up to 1024 bytes, 4 KiB
  * in total. Any other shape fails the whole submit.
  */
 export function metadataError(metadata: unknown): string | null {
@@ -141,7 +142,7 @@ export function metadataError(metadata: unknown): string | null {
       return `\`metadata\` key "${k}" must be 1 to ${LIMITS.metadataKeyLength} letters, digits, \`.\`, \`_\` or \`-\``;
     }
     if (typeof v !== "string") return `\`metadata.${k}\` must be a string`;
-    if (v.length > LIMITS.metadataValueLength) return `\`metadata.${k}\` is longer than ${LIMITS.metadataValueLength} characters`;
+    if (Buffer.byteLength(v) > LIMITS.metadataValueLength) return `\`metadata.${k}\` is longer than ${LIMITS.metadataValueLength} bytes`;
     total += Buffer.byteLength(k) + Buffer.byteLength(v);
   }
   if (total > LIMITS.metadataTotalBytes) return "`metadata` is larger than 4 KiB";
