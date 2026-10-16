@@ -28,7 +28,15 @@ mkdirSync(APP, { recursive: true });
 mkdirSync(HOME, { recursive: true });
 
 // Without a key, "invalid" keeps the CLI from creating an account.
-const baseEnv = { ...process.env, HOME, NO_COLOR: "1", ZENROWS_API_KEY: HAS_KEY ? KEY : "invalid" };
+// The CLI reads its own variable, not CRAWL_API_BASE: without it every call
+// would reach production whatever the run targets.
+const baseEnv = {
+  ...process.env,
+  HOME,
+  NO_COLOR: "1",
+  ZENROWS_API_KEY: HAS_KEY ? KEY : "invalid",
+  ZENROWS_CRAWL_API_BASE: H.API_BASE,
+};
 const parse = (s) => {
   try {
     return JSON.parse(s);
@@ -572,7 +580,7 @@ if (HAS_KEY) {
 await liveCheck(
   "20",
   "Results after stop",
-  "crawl results on a crawl stopped with pages in flight: partial false, and no URL lost",
+  "crawl results on a crawl stopped with pages in flight: no URL lost; partial follows the API, and a partial read carries a note to read again",
   async () => {
     if (!B || stopInfo?.error) return { status: FAIL, actual: `setup failed: ${stopInfo?.error}` };
     if (stopInfo.status !== "stopped") {
@@ -593,8 +601,8 @@ await liveCheck(
     const same = urls(j.results) === urls(later);
     const pending = (j.results ?? []).filter((x) => x.content_status === "pending").length;
     return {
-      status: passIf(now.code === 0 && j.partial === false && same),
-      actual: `stopped with ${stopInfo.items} kept; first read: exit ${now.code}, ${j.count} URLs (${pending} pending), partial ${j.partial}; then ${settledNote}: ${later.length} URLs, same set ${same}`,
+      status: passIf(now.code === 0 && same && (!j.partial || Boolean(j.note))),
+      actual: `stopped with ${stopInfo.items} kept; first read: exit ${now.code}, ${j.count} URLs (${pending} pending), partial ${j.partial}, note: ${j.note ?? "none"}; then ${settledNote}: ${later.length} URLs, same set ${same}`,
       evidence: show(now),
     };
   },
@@ -869,6 +877,21 @@ await liveCheck(
   },
 );
 
+await liveCheck(
+  "24",
+  "Discovery",
+  "crawl create --discovery links is echoed back, and --discovery pagination is refused before any network call",
+  async () => {
+    const r = create(["--discovery", "links", "--max-items", "1", "--max-pages", "1"]);
+    if (r.code !== 0 || !r.json?.crawl_id) return { status: FAIL, actual: H.trim(show(r), 400) };
+    z(["crawl", "stop", r.json.crawl_id, "--json"]);
+    const got = r.json.crawl?.discovery ?? r.json.discovery;
+    const refused = create(["--discovery", "pagination"]);
+    const ok = JSON.stringify(got) === JSON.stringify(["links"]) && refused.code === 1 && refused.json?.error?.code === "INVALID_USAGE";
+    return { status: passIf(ok), actual: `discovery ${JSON.stringify(got)}; pagination exit ${refused.code} ${refused.json?.error?.code}` };
+  },
+);
+
 H.naming({
   operations: {
     create: "crawl create",
@@ -888,6 +911,7 @@ H.naming({
     include_patterns: "--include-patterns",
     exclude_patterns: "--exclude-patterns",
     output_format: "--output-format",
+    discovery: "--discovery",
     idempotency_key: "--idempotency-key",
     cursor: "--cursor",
     limit: "--limit",
