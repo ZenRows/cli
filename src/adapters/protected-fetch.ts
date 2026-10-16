@@ -51,6 +51,11 @@ export interface FetchOptions {
    * gateway's own request budget on purpose.
    */
   timeoutMs?: number;
+  /**
+   * Retries for a retryable failure (429, 502, 503, 504, or a network error).
+   * Not an API parameter. Unset means `http.ts`'s default; 0 sends the request once.
+   */
+  retries?: number;
 }
 
 const RESPONSE_TYPE: Partial<Record<ResponseFormat, string>> = {
@@ -152,6 +157,6 @@ export async function runFetch(
   validateAutoManual(opts, config);
   const params = buildParams(opts, config);
   const mode: "auto" | "manual" = params.mode === "auto" ? "auto" : "manual";
-  const result = await scrape(config.apiBase, apiKey, params, { timeoutMs: opts.timeoutMs, projectRoot });
+  const result = await scrape(config.apiBase, apiKey, params, { timeoutMs: opts.timeoutMs, retries: opts.retries, projectRoot });
   return { result, params, mode };
 }

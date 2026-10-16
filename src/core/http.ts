@@ -9,9 +9,10 @@ import { ToolkitError, isKeyCapReached, keyCapReached, quotaExhausted } from "./
 import { storedClaimHint, usableClaimUrl } from "./claim-link.ts";
 import { readAccount } from "./agent-account.ts";
 import { ENV_KEY, resolveApiKey } from "./auth.ts";
-import { registerSecret } from "./logger.ts";
+import { log, registerSecret } from "./logger.ts";
 import { CLI_USER_AGENT } from "./config.ts";
 import { agentClientHeader } from "./agent-client.ts";
+import { defaultSleep, fullJitterMs, retryAfterMs } from "./backoff.ts";
 
 export interface ScraperResult {
   status: number;
@@ -52,20 +53,44 @@ export interface ScraperParams {
 }
 
 /**
- * Client-side timeout for a Fetch and Extract request, deliberately ABOVE the
- * gateway's own 90s request budget.
+ * Client-side timeout for one Fetch and Extract HTTP attempt.
  *
- * The two must not be equal. When they were both 90s, any request that used
- * the full server budget became a race between our own abort and the API's
- * real error envelope — and the abort usually won, so a specific, actionable
- * server error (a 422, a 499) was reported as "could not reach the API". The
- * client must outlive the server budget so the API always gets the chance to
- * answer for itself.
+ * It was raised from 90s when the gateway's budget was believed to be 90s, so
+ * that our abort would not race the API's own error envelope. The gateway's
+ * real budget is `SERVER_BUDGET_MS` (180s), so a request that runs longer than
+ * this can still be aborted while the API is working on it. That is why a
+ * timeout is never retried: the API keeps running and may still charge a 200.
  */
 export const DEFAULT_TIMEOUT_MS = 120_000;
 
-/** The gateway's own request budget. Kept here only to justify the default above. */
-export const SERVER_BUDGET_MS = 90_000;
+/** The gateway's budget for the whole request: auth, fetch and parse. */
+export const SERVER_BUDGET_MS = 180_000;
+
+/** Retries for a retryable failure (`--retries`). 0 sends the request once. */
+export const DEFAULT_RETRIES = 2;
+
+/** No retry starts when the time already spent plus its delay would pass this. */
+export const RETRY_BUDGET_MS = 90_000;
+
+/**
+ * Statuses that can succeed on the next attempt. The gateway charges only
+ * 2xx, 304, 404 and 410, so none of these is charged.
+ */
+const RETRY_STATUSES: ReadonlySet<number> = new Set([429, 502, 503, 504]);
+
+export interface ScrapeOptions {
+  /** Per HTTP attempt. */
+  timeoutMs?: number;
+  projectRoot?: string;
+  /** Retries after the first attempt; defaults to `DEFAULT_RETRIES`. */
+  retries?: number;
+  fetchImpl?: typeof fetch;
+  sleepImpl?: (ms: number) => Promise<void>;
+  /** Clock for the retry budget. */
+  nowImpl?: () => number;
+  /** Source of the jitter. */
+  randomImpl?: () => number;
+}
 
 function buildUrl(apiBase: string, apiKey: string, params: ScraperParams): { full: string; redacted: string } {
   const u = new URL(apiBase);
@@ -80,15 +105,69 @@ function buildUrl(apiBase: string, apiKey: string, params: ScraperParams): { ful
   return { full, redacted: redactedUrl.toString() };
 }
 
-/** Perform a Fetch and Extract API request. Throws ToolkitError on failure. */
+/**
+ * Perform a Fetch and Extract API request. Throws ToolkitError on failure.
+ *
+ * Retries 429, 502, 503 and 504 and network errors that came before any
+ * response, up to `retries` times, with full jitter or the server's
+ * Retry-After. A retry never starts past `RETRY_BUDGET_MS`. Our own timeout is
+ * never retried, and neither is any other status.
+ */
 export async function scrape(
   apiBase: string,
   apiKey: string,
   params: ScraperParams,
-  opts: { timeoutMs?: number; projectRoot?: string } = {},
+  opts: ScrapeOptions = {},
 ): Promise<ScraperResult> {
   registerSecret(apiKey);
   const { full, redacted } = buildUrl(apiBase, apiKey, params);
+  const retries = opts.retries ?? DEFAULT_RETRIES;
+  const sleep = opts.sleepImpl ?? defaultSleep;
+  const now = opts.nowImpl ?? Date.now;
+  const startedAt = now();
+
+  for (let n = 0; ; n++) {
+    let sent: { res: Response; raw: Buffer };
+    try {
+      sent = await sendOnce(full, params.url, opts);
+    } catch (err) {
+      // REQUEST_TIMEOUT is not retried: the API keeps working and may still charge.
+      if (n >= retries || !(err instanceof ToolkitError) || err.code !== "BACKEND_UNAVAILABLE") throw err;
+      const delayMs = fullJitterMs(n, opts.randomImpl);
+      if (now() - startedAt + delayMs > RETRY_BUDGET_MS) throw err;
+      log.dim(`Network error; retry ${n + 1}/${retries} in ${formatMs(delayMs)}`);
+      await sleep(delayMs);
+      continue;
+    }
+    const body = sent.raw.toString("utf8");
+    if (n < retries && isRetryable(sent.res.status, body)) {
+      const delayMs = retryAfterMs(sent.res.headers.get("retry-after")) ?? fullJitterMs(n, opts.randomImpl);
+      if (now() - startedAt + delayMs <= RETRY_BUDGET_MS) {
+        const code = zrErrorCode(body);
+        log.dim(`HTTP ${sent.res.status}${code ? ` ${code}` : ""}; retry ${n + 1}/${retries} in ${formatMs(delayMs)}`);
+        await sleep(delayMs);
+        continue;
+      }
+    }
+    return interpret(sent.res, sent.raw, params, redacted, n);
+  }
+}
+
+/**
+ * True for a status worth another attempt. A 429 that says the account is out
+ * of credits is excluded: it answers the same until the account changes.
+ */
+function isRetryable(status: number, body: string): boolean {
+  if (!RETRY_STATUSES.has(status)) return false;
+  return !(status === 429 && isQuotaError(body));
+}
+
+/** One HTTP attempt with its own timeout; the body is read inside it. */
+async function sendOnce(
+  full: string,
+  targetUrl: string,
+  opts: ScrapeOptions,
+): Promise<{ res: Response; raw: Buffer }> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const controller = new AbortController();
   // Our own timer is the only thing that aborts this controller, so this flag —
@@ -103,7 +182,7 @@ export async function scrape(
 
   let res: Response;
   try {
-    res = await fetch(full, {
+    res = await (opts.fetchImpl ?? fetch)(full, {
       method: "GET",
       headers: { "User-Agent": CLI_USER_AGENT, "Accept-Encoding": "gzip, deflate", ...agentClientHeader({ projectRoot: opts.projectRoot }) },
       signal: controller.signal,
@@ -111,7 +190,7 @@ export async function scrape(
   } catch (err) {
     clearTimeout(timeout);
     const elapsedMs = Date.now() - startedAt;
-    if (timedOut) throw requestTimeout(params.url, timeoutMs, elapsedMs);
+    if (timedOut) throw requestTimeout(targetUrl, timeoutMs, elapsedMs);
     const cause = err instanceof Error ? err.message : String(err);
     throw new ToolkitError({
       code: "BACKEND_UNAVAILABLE",
@@ -127,6 +206,17 @@ export async function scrape(
   // output; `raw` preserves the exact bytes so binary responses (screenshot /
   // PDF) can be written without the UTF-8 round-trip that corrupts them.
   const raw = Buffer.from(await res.arrayBuffer());
+  return { res, raw };
+}
+
+/** Turn one final response into a result, or a normalized error. */
+function interpret(
+  res: Response,
+  raw: Buffer,
+  params: ScraperParams,
+  redacted: string,
+  retriesUsed: number,
+): ScraperResult {
   const body = raw.toString("utf8");
   // A binary body is only ever produced by a successful screenshot/PDF request.
   // Zenrows error responses are always a JSON envelope (text), so exclude those.
@@ -295,6 +385,7 @@ export async function scrape(
         : "Verify the URL. Rendering or premium proxies will not turn a 404 into content — do not retry; it will fail identically and still cost credits.",
     });
   }
+  if (res.status === 503 && zrErrorCode(body) === "RESP009") throw serviceBusy(params, body, res.headers.get("retry-after"), retriesUsed);
   if (res.status === 422 || res.status >= 500 || (res.status >= 400 && !looksLikeContent(result))) {
     throw new ToolkitError({
       code: "FETCH_FAILED",
@@ -318,10 +409,37 @@ export async function scrape(
 }
 
 /**
+ * 503 RESP009: Zenrows had no capacity for this request yet. It is temporary
+ * and not charged, so the fix is to wait and send the same request, not to
+ * escalate to --js-render / --premium-proxy (which costs more and helps nothing).
+ */
+function serviceBusy(params: ScraperParams, body: string, retryAfter: string | null, retriesUsed: number): ToolkitError {
+  const isExtract = params.extract !== undefined;
+  const command = `zenrows ${isExtract ? "extract" : "fetch"} ${params.url}`;
+  const detail = zrErrorDetail(body);
+  const tried = retriesUsed > 0 ? ` after ${retriesUsed} ${retriesUsed === 1 ? "retry" : "retries"}` : "";
+  const waitSeconds = retryAfterMs(retryAfter);
+  return new ToolkitError({
+    code: "SERVICE_BUSY",
+    message: `Zenrows could not take this request yet (HTTP 503 RESP009${tried}). It was not charged.`,
+    likely_cause:
+      (isExtract
+        ? "The extraction service is still preparing this layout; the request was not charged."
+        : "Zenrows scraping capacity is busy right now; the request was not charged.") +
+      (detail ? ` Server said: ${detail}.` : ""),
+    next_action:
+      "Retry the same command shortly (in about a minute). Do not add --js-render or --premium-proxy: they cost more and do not help here.",
+    suggested_commands: [command],
+    server_code: "RESP009",
+    retry_after: waitSeconds !== undefined ? waitSeconds / 1000 : undefined,
+  });
+}
+
+/**
  * The CLI gave up waiting before the API answered. This is NOT unreachability:
  * the connection was established and the gateway was still working, so telling
  * the operator to check connectivity would send them at the wrong problem. The
- * elapsed time is included so the 90s server budget is visible in the output.
+ * elapsed time is included so the server budget is visible in the output.
  */
 export function requestTimeout(url: string, timeoutMs: number, elapsedMs: number): ToolkitError {
   const suggestedMs = Math.max(timeoutMs + 60_000, SERVER_BUDGET_MS + 60_000);
@@ -333,7 +451,7 @@ export function requestTimeout(url: string, timeoutMs: number, elapsedMs: number
       `The request was aborted client-side after ${formatMs(elapsedMs)}. The API was reached — this is not a ` +
       (atBudget
         ? `connectivity problem. The request also passed the API's own ${formatMs(SERVER_BUDGET_MS)} budget, so the target is very likely rendering slowly or a wait condition never matched.`
-        : `connectivity problem, and the API's own ${formatMs(SERVER_BUDGET_MS)} budget had not run out yet.`),
+        : `connectivity problem, and the API's own ${formatMs(SERVER_BUDGET_MS)} budget had not run out yet, so the API may still finish this request and charge it.`),
     next_action:
       `Retry with a longer client timeout (\`--timeout ${suggestedMs}\`). If the target needs a long render, drop ` +
       "`--wait-for` so the request finishes inside the API's budget and the API can return its own error instead.",
