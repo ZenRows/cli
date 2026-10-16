@@ -10,7 +10,7 @@
  * Crawl SDKs do (see `retryStatuses`). `fetchImpl` / `sleepImpl` are injectable
  * for tests.
  *
- * `output_format` takes `html` only (absent = URLs only). Response fields we do
+ * `output_format` takes `html` or `markdown` (absent = URLs only). Response fields we do
  * not model pass through untouched.
  */
 import { Readable } from "node:stream";
@@ -66,6 +66,8 @@ export interface Crawl {
   include_patterns?: string[];
   exclude_patterns?: string[];
   output_format?: string;
+  /** The strategies the crawl finds URLs with; `["links"]` when the create left it out. */
+  discovery?: string[];
   duplicates_removed?: number;
   finished_at?: string;
   [k: string]: unknown;
@@ -114,7 +116,9 @@ export interface CreateCrawlParams {
   include_patterns?: string[];
   exclude_patterns?: string[];
   /** `html` returns each kept URL's page; absent = URLs only. */
-  output_format?: "html";
+  output_format?: CrawlOutputFormat;
+  /** How the crawl finds the URLs it follows on each page it walks. */
+  discovery?: CrawlDiscoveryStrategy[];
 }
 
 /** RFC 9457 problem body. */
@@ -128,6 +132,12 @@ interface ProblemJson {
 
 /** The API's "Crawl is not enabled for this account" code (403). */
 export const CRAWL_NOT_ENABLED_CODE = "REQS008";
+
+/** The formats a crawl can store each kept URL's page in. */
+export type CrawlOutputFormat = "html" | "markdown";
+/** How a crawl finds the URLs it follows on each page it walks. */
+export type CrawlDiscoveryStrategy = "links";
+
 
 /** A crawl stops progressing once its status is anything but `running`. */
 export function isTerminal(status: string | undefined): boolean {
@@ -437,6 +447,7 @@ export function createCrawl(params: CreateCrawlParams, opts: CallOpts & { idempo
   if (params.include_patterns?.length) body.include_patterns = params.include_patterns;
   if (params.exclude_patterns?.length) body.exclude_patterns = params.exclude_patterns;
   if (params.output_format !== undefined) body.output_format = params.output_format;
+  if (params.discovery?.length) body.discovery = params.discovery;
   return crawlJson<Crawl>("POST", "/crawls", {
     ...opts,
     body,
@@ -463,7 +474,7 @@ export function stopCrawl(id: string, opts: CallOpts): Promise<CrawlStop> {
   return crawlJson<CrawlStop>("POST", `/crawls/${encodeURIComponent(id)}/stop`, { ...opts, crawlId: id, retryStop: true });
 }
 
-/** The page of one kept URL (HTML for `output_format: html`). */
+/** The page of one kept URL, in the crawl's `output_format`. */
 export async function getCrawlContent(
   id: string,
   contentId: string,
@@ -545,9 +556,9 @@ export async function listAllResults(
     const rows = page.results ?? [];
     results.push(...rows);
     if (!rows.length || !page.next_cursor || page.next_cursor === cursor) {
-      // Every page was read. An ended crawl keeps no new URLs, even while pages in flight after
-      // a stop keep next_cursor set, so only a running crawl's results are partial.
-      return { crawl: page, results, partial: !isTerminal(page.status) };
+      // Every page was read. The API keeps next_cursor set while URLs can still come: on a
+      // running crawl, and for up to 10 minutes after a stop, from the pages still in flight.
+      return { crawl: page, results, partial: page.next_cursor != null };
     }
     cursor = page.next_cursor;
   }

@@ -86,7 +86,7 @@ test("crawl create rejects flags it does not declare, before any network call", 
   await withCrawlWorkspace(
     () => json(crawlBody, 202),
     async (calls) => {
-      for (const flag of ["--pagination", "--discovery", "--json-output", "--wait", "--html", "--include", "--exclude"]) {
+      for (const flag of ["--pagination", "--json-output", "--wait", "--html", "--include", "--exclude"]) {
         const { code, out } = await run(["create", "https://example.com/products/", "--depth", "1", flag, "x"]);
         assert.equal(code, 1, flag);
         assert.equal(out.error.code, "UNKNOWN_FLAG", flag);
@@ -387,6 +387,23 @@ test("crawl results on a running crawl returns what is kept with partial: true",
   );
 });
 
+test("crawl results on a stopped crawl is partial, with a note, while the API keeps next_cursor set", async () => {
+  const pages: Record<string, unknown> = {
+    "": { ...crawlBody, status: "stopped", results: [{ url: "https://example.com/product/1" }], next_cursor: "p2" },
+    p2: { ...crawlBody, status: "stopped", results: [], next_cursor: "p2" },
+  };
+  await withCrawlWorkspace(
+    (url) => json(pages[url.searchParams.get("cursor") ?? ""]),
+    async () => {
+      const { code, out } = await run(["results", "c_1"]);
+      assert.equal(code, 0);
+      assert.equal(out.partial, true);
+      assert.match(out.note, /read the results again later/);
+      assert.equal(out.count, 1);
+    },
+  );
+});
+
 test("crawl get --cursor reads one page and returns next_cursor while running", async () => {
   await withCrawlWorkspace(
     () => json({ ...crawlBody, results: [{ url: "https://example.com/product/3" }], next_cursor: "p4" }),
@@ -417,6 +434,44 @@ test("crawl download writes the NDJSON export to <id>.jsonl", async () => {
       assert.equal(calls[0]!.url.pathname, "/v1/crawls/c_1/download");
       assert.ok(existsSync(join(process.cwd(), "c_1.jsonl")));
       assert.ok(!existsSync(join(process.cwd(), "c_1.jsonl.part")));
+    },
+  );
+});
+
+test("crawl download on a stopped crawl is partial, with a note, while the API keeps next_cursor set", async () => {
+  await withCrawlWorkspace(
+    (url) =>
+      url.pathname.endsWith("/download")
+        ? new Response('{"url":"https://example.com/product/1"}\n', {
+            status: 200,
+            headers: { "content-type": "application/x-ndjson", "x-crawl-status": "stopped" },
+          })
+        : json({ ...crawlBody, status: "stopped", results: [], next_cursor: "p2" }),
+    async (calls) => {
+      const { code, out } = await run(["download", "c_1"]);
+      assert.equal(code, 0);
+      assert.equal(out.status, "stopped");
+      assert.equal(out.partial, true);
+      assert.match(out.note, /download again later/);
+      assert.equal(calls[1]!.url.pathname, "/v1/crawls/c_1");
+    },
+  );
+});
+
+test("crawl download on a stopped crawl is final once the API's next_cursor is null", async () => {
+  await withCrawlWorkspace(
+    (url) =>
+      url.pathname.endsWith("/download")
+        ? new Response('{"url":"https://example.com/product/1"}\n', {
+            status: 200,
+            headers: { "content-type": "application/x-ndjson", "x-crawl-status": "stopped" },
+          })
+        : json({ ...crawlBody, status: "stopped", results: [{ url: "https://example.com/product/1" }], next_cursor: null }),
+    async () => {
+      const { code, out } = await run(["download", "c_1"]);
+      assert.equal(code, 0);
+      assert.equal(out.partial, false);
+      assert.equal(out.note, undefined);
     },
   );
 });
@@ -590,4 +645,21 @@ test("unknown crawl subcommand is INVALID_USAGE", async () => {
   const { code, out } = await run(["discover"]);
   assert.equal(code, 1);
   assert.equal(out.error.code, "INVALID_USAGE");
+});
+
+test("crawl create sends --discovery links, and refuses any other strategy before any network call", async () => {
+  await withCrawlWorkspace(
+    () => json(crawlBody, 202),
+    async (calls) => {
+      for (const value of ["pagination", "json"]) {
+        const { code, out } = await run(["create", "https://example.com/products/", "--discovery", value]);
+        assert.equal(code, 1, value);
+        assert.equal(out.error.code, "INVALID_USAGE", value);
+      }
+      assert.equal(calls.length, 0);
+      const { code } = await run(["create", "https://example.com/products/", "--discovery", "links"]);
+      assert.equal(code, 0);
+      assert.deepEqual(JSON.parse(String(calls[0]!.init?.body)).discovery, ["links"]);
+    },
+  );
 });
