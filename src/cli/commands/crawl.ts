@@ -30,7 +30,8 @@ import {
   type CreateCrawlParams,
 } from "../../core/crawl-api.ts";
 import { asNumber, asString, parse, type Command, type RunContext } from "../command.ts";
-import { ToolkitError } from "../../core/errors.ts";
+import { ToolkitError, isKeyCapReached, keyCapReached, quotaExhausted } from "../../core/errors.ts";
+import { readAccount } from "../../core/agent-account.ts";
 import { printError, writeOut, writeOutStream } from "../output.ts";
 
 /** The API's default for `max_pages` (and `max_items`) when the flag is unset. */
@@ -79,7 +80,8 @@ export const crawl: Command = {
     "                                    a crawl still running then is printed, not stopped",
     "  --json                            print structured output: create/get/wait/stop print",
     "                                    {ok, crawl_id, status, crawl}; get adds results and next_cursor;",
-    "                                    a wait that runs out adds note",
+    "                                    a wait that runs out, or a completed crawl with patterns",
+    "                                    and 0 results, adds note",
   ].join("\n"),
   async run(argv: string[], ctx: RunContext): Promise<number> {
     const [sub, ...rest] = argv;
@@ -439,7 +441,9 @@ async function stopCmd(rest: string[], ctx: RunContext): Promise<number> {
   assertUsable("crawl");
   const apiKey = requireApiKey();
   const s = await stopCrawl(id, { apiKey });
-  const headline = s.status === "stopped" ? `Stopped crawl ${id}` : `Nothing to stop: crawl ${id} had already ended`;
+  // A crawl stopped on credits carries `error`: it had already ended, this call did not stop it.
+  const headline =
+    s.status === "stopped" && !s.error ? `Stopped crawl ${id}` : `Nothing to stop: crawl ${id} had already ended`;
   return printCrawl(s, ctx.json || values.json === true, headline);
 }
 
@@ -462,34 +466,64 @@ async function waitUntilEnd(id: string, opts: { apiKey: string; timeoutMs?: numb
 }
 
 /**
- * The error for a crawl that ended `failed`, or null for any other state. The
- * crawl's own `error.code` picks the next action.
+ * The error for a crawl that ended `failed`, or `stopped` with an `error` (the
+ * account ran out of credits or the API key hit a credit cap), or null for any
+ * other state. A crawl the credits ended gets the code and advice a create
+ * refused with 402 gets (`CRAWL_INSUFFICIENT_CREDITS`, `CRAWL_KEY_CAP_REACHED`),
+ * whether the API reports it `stopped` or, as older deployments do, `failed`.
+ * Any other `error.code` picks the next action of a `CRAWL_FAILED`.
  */
 export function crawlFailure(c: Crawl | CrawlStop): ToolkitError | null {
-  if (c.status !== "failed") return null;
+  const creditStop = c.status === "stopped" && !!c.error;
+  if (c.status !== "failed" && !creditStop) return null;
   const code = c.error?.code;
+  const ids = { server_code: code, crawl_id: c.crawl_id };
+  const where = `crawl ${c.crawl_id}`;
+  const detail = c.error?.detail || undefined;
+  const getCmd = `zenrows crawl get ${c.crawl_id}`;
+  if (code && isKeyCapReached(code)) {
+    const cap = keyCapReached(where, { status: null, detail }).toJSON();
+    return new ToolkitError({ ...cap, ...ids, code: "CRAWL_KEY_CAP_REACHED", suggested_commands: [...(cap.suggested_commands ?? []), getCmd] });
+  }
+  if (code === "insufficient_credits") {
+    const acct = readAccount();
+    const quota = quotaExhausted(where, acct?.unclaimed ? acct.claimUrl : undefined, { status: null, detail }).toJSON();
+    return new ToolkitError({ ...quota, ...ids, code: "CRAWL_INSUFFICIENT_CREDITS", suggested_commands: [...(quota.suggested_commands ?? []), getCmd] });
+  }
   const why = [code, c.error?.detail].filter(Boolean).join(": ");
   const next: Record<string, string> = {
-    insufficient_credits: "The account ran out of credits. Check `zenrows usage`, add credits, then start a new crawl.",
-    seed_unreachable: "The start URL could not be fetched (the site may be blocking it). Check it with `zenrows fetch <url>`.",
+    seed_unreachable:
+      "The start URL could not be fetched or returned an empty page (the site may be blocking it). Check it with `zenrows fetch <url>`.",
     no_items_found:
-      "Nothing matched. Loosen --include-patterns / --exclude-patterns, raise or drop --depth, or check the start page with `zenrows fetch <url>`.",
+      "The crawl read the start page but found no data it could use, so it had nothing to follow. Start from a listing or product page.",
   };
   return new ToolkitError({
     code: "CRAWL_FAILED",
-    message: `Crawl ${c.crawl_id} failed.`,
+    message: creditStop ? `Crawl ${c.crawl_id} stopped before it finished.` : `Crawl ${c.crawl_id} failed.`,
     likely_cause: why || "The crawl ended in status failed without a reason.",
     next_action: (code && next[code]) || "Read the error, fix the cause, then start a new crawl.",
-    suggested_commands: [`zenrows crawl get ${c.crawl_id}`],
-    server_code: code,
-    crawl_id: c.crawl_id,
+    suggested_commands: [getCmd],
+    ...ids,
   });
 }
 
 /**
+ * Set only when a crawl with patterns completed and kept nothing. The API ends a
+ * crawl whose pages held nothing new to follow `completed`, and does not count
+ * the links the patterns rejected, so the patterns are the first thing to check.
+ */
+function noMatchNote(c: Crawl | CrawlStop): string | undefined {
+  const crawl = c as Crawl;
+  const patterns = [...(crawl.include_patterns ?? []), ...(crawl.exclude_patterns ?? [])];
+  if (crawl.status !== "completed" || crawl.coverage?.items_found !== 0 || !patterns.length) return undefined;
+  return "The crawl completed with no results. Check --include-patterns / --exclude-patterns against the URLs the start page links to.";
+}
+
+/**
  * Print a crawl (or a stop answer), structured under --json, and return the exit
- * code: 1 when it ended `failed`, else 0. `stopped` is a deliberate outcome, so
- * it exits 0 but prints as a warning. `extra` carries the results a `get` read,
+ * code: 1 when it ended `failed`, or `stopped` because credits ran out or the
+ * API key hit a credit cap, else 0. A `stopped` crawl the caller stopped is a
+ * deliberate outcome, so it exits 0 but prints as a warning. `extra` carries the results a `get` read,
  * or the note of a wait that ran out.
  */
 function printCrawl(
@@ -499,6 +533,7 @@ function printCrawl(
   extra: { results?: CrawlResult[]; next_cursor?: string | null; note?: string } = {},
 ): number {
   const err = crawlFailure(c);
+  const note = extra.note ?? noMatchNote(c);
   const crawlFields = { ...c } as Record<string, unknown>;
   // A wait polls with one result to stay cheap; that page is not "the results".
   delete crawlFields.results;
@@ -512,6 +547,7 @@ function printCrawl(
           status: c.status,
           crawl: crawlFields,
           ...extra,
+          note,
           ...(err ? { error: err.toJSON() } : {}),
         },
         null,
@@ -529,6 +565,7 @@ function printCrawl(
     log.info(`  ${cov.items_found} item(s) found · ${cov.pages_fetched} page(s) fetched · ${cov.pages_failed} failed`);
   }
   if (extra.note) log.dim(`  next: zenrows crawl wait ${c.crawl_id}`);
+  else if (note) log.warn(`  ${note}`);
   if (err) printError(err, false);
   return err ? 1 : 0;
 }

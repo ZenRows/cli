@@ -64,12 +64,16 @@ zenrows trace export <run-id>     # JSON for sharing
   enabled for this account. Do not retry; ask Zenrows support for access.
 - `CRAWL_INSUFFICIENT_CREDITS` / `CRAWL_KEY_CAP_REACHED` → Crawl's 402: the
   account is out of credits, or this key reached its credit cap (`AUTH014`).
+  The same codes come back for a crawl that credits ended (`stopped`, or
+  `failed` on older deployments; `server_code` `insufficient_credits` /
+  `api_key_cap_reached`); its fetched pages stay readable.
   Same advice as `POLICY_MAX_CREDITS_EXCEEDED` / `KEY_CREDIT_CAP_REACHED`.
 - `CRAWL_TOO_MANY_CRAWLS` → 429 `too_many_crawls`: the account has reached
   its limit of active jobs (3 by default), shared with its Batch jobs.
   Nothing was created; retry after `retry_after` seconds (see
   `zenrows crawl list`).
-- `CRAWL_FAILED` → the crawl ended `failed`; `error.code` in
+- `CRAWL_FAILED` → the crawl ended `failed`, or `stopped` with an error
+  other than credits; `error.code` in
   `zenrows crawl get <id> --json` says why, with `error.detail`. See
   [[crawl]].
 - `PARAM_CONFLICT_AUTO_MANUAL` → drop the managed flags or add `--manual`.

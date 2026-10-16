@@ -242,7 +242,10 @@ to open. `--max-items` and `--max-pages` cap the crawl (API default 100 each),
 and `--max-pages` bounds the cost, since each page is one fetch. The local policy `max_pages_per_run` caps `--max-pages` (default
 10000). `--output-format html` uses up the page budget: each kept page is one
 more fetch, and `--max-pages` counts it. `--include-patterns` /
-`--exclude-patterns` are repeatable substring filters on the URL. `get` and
+`--exclude-patterns` are repeatable substring filters on the URL. A crawl whose
+pages held nothing new to follow ends `completed` with no results and exits 0.
+When patterns were set, it prints a note (under `--json`, in `note`) to check
+them against the URLs the start page links to. `get` and
 `list` read one page and take `--cursor` and `--limit`. `results` follows every
 page (`--limit` is the page size); on a running crawl it returns the URLs kept
 so far, with `partial: true`. `download` reports the crawl's `status` (`null`
@@ -258,7 +261,12 @@ run out (default 600). When the time runs out, the command exits 0 and prints
 the crawl with status `running` and the hint `zenrows crawl wait <crawl-id>`
 (under `--json`, in `note`); the crawl keeps running. Ctrl-C stops the wait, not the crawl, and exits 130;
 resume with `zenrows crawl wait <crawl-id>`. A crawl that ends `failed` exits 1
-with `CRAWL_FAILED`.
+with `CRAWL_FAILED`. A crawl that ends `stopped` because the account ran out of
+credits or the API key hit a credit cap also exits 1, with the code a refused
+create gets: `CRAWL_INSUFFICIENT_CREDITS` or `CRAWL_KEY_CAP_REACHED`, and the
+API's `insufficient_credits` or `api_key_cap_reached` as `server_code`. Older
+deployments end such a crawl `failed`; it gets the same codes. Its fetched pages
+stay readable.
 
 Errors carry the API's code as `server_code`, `crawl_id` on any call about one
 crawl, and `retry_after` on a 429. When the account has reached its limit of
