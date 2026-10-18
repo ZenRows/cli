@@ -4,7 +4,7 @@
  * Resolution order: explicit secrets file → ZENROWS_API_KEY env var.
  * The key is never printed in full and never written into run artifacts.
  */
-import { chmodSync, existsSync } from "node:fs";
+import { existsSync } from "node:fs";
 import type { AuthState, Secrets } from "../types/index.ts";
 import { ToolkitError } from "./errors.ts";
 import { registerSecret } from "./logger.ts";
@@ -56,11 +56,6 @@ export function saveApiKey(apiKey: string, projectRoot?: string): void {
   }
   const file = secretsPath(projectRoot);
   writePrivateJson(file, { apiKey: trimmed } satisfies Secrets);
-  try {
-    chmodSync(file, 0o600);
-  } catch {
-    // best-effort on platforms without POSIX permissions
-  }
   registerSecret(trimmed);
 }
 

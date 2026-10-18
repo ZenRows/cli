@@ -8,7 +8,8 @@
  * `zenrows account claim`", or nothing because the account is already claimed.
  */
 import type { AgentAccount } from "../types/index.ts";
-import { statSync, unlinkSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { linkSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { accountPath, fetchAccountStatus, isZenrowsHttpsUrl, readAccount, requestClaimLink, writeAccount } from "./agent-account.ts";
 import { resolveApiKey } from "./auth.ts";
 import { CLAIM_LINK_REFRESH, CLAIM_NEXT_ACTION_PREFIX, ToolkitError, quotaNextAction, type ClaimHint } from "./errors.ts";
@@ -112,7 +113,7 @@ async function refreshLocked(key: string, opts: RefreshOptions, now: Date): Prom
     base(url, { ...init, signal: AbortSignal.timeout(CLAIM_REQUEST_TIMEOUT_MS) })) as typeof fetch;
 
   try {
-    const remote = await fetchAccountStatus(key, { url: opts.accountUrl, fetchImpl });
+    const remote = await fetchAccountStatus(key, { url: opts.accountUrl, fetchImpl, projectRoot });
     if (remote.claimed === true) return markClaimed(acct, projectRoot);
   } catch {
     // Status unknown: carry on and judge the held link on its own.
@@ -125,7 +126,7 @@ async function refreshLocked(key: string, opts: RefreshOptions, now: Date): Prom
 
   let fresh;
   try {
-    fresh = await requestClaimLink(key, { url: opts.claimUrl, fetchImpl });
+    fresh = await requestClaimLink(key, { url: opts.claimUrl, fetchImpl, projectRoot });
   } catch (err) {
     if (opts.force && !usableClaimUrl(acct, now)) {
       if (err instanceof ToolkitError) throw err;
@@ -176,31 +177,54 @@ function offlineState(acct: AgentAccount, now: Date): ClaimState {
 const CLAIM_LOCK_STALE_MS = 60 * 1000;
 
 /**
- * Create `account.json.lock` exclusively. Returns a release function, or null
- * when another live process holds the lock.
+ * Create `account.json.lock` exclusively, holding a random token. Returns a
+ * release function, or null when another live process holds the lock.
+ *
+ * A lock older than CLAIM_LOCK_STALE_MS is taken over by renaming it aside
+ * first (only one process can rename it away). If what was renamed turns out
+ * to be live, it is put back and this process gives up. Release deletes the
+ * lock only while it still holds this process's token.
  */
 function acquireClaimLock(projectRoot: string | undefined): (() => void) | null {
   const lock = `${accountPath(projectRoot)}.lock`;
+  const token = randomBytes(16).toString("hex");
+  const release = () => {
+    try {
+      if (readFileSync(lock, "utf8") === token) unlinkSync(lock);
+    } catch {
+    }
+  };
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      writeFileSync(lock, String(process.pid), { flag: "wx", mode: 0o600 });
-      return () => {
-        try {
-          unlinkSync(lock);
-        } catch {
-        }
-      };
+      writeFileSync(lock, token, { flag: "wx", mode: 0o600 });
+      return readFileSync(lock, "utf8") === token ? release : null;
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "EEXIST") return null;
       try {
         if (Date.now() - statSync(lock).mtimeMs < CLAIM_LOCK_STALE_MS) return null;
-        unlinkSync(lock);
+        const aside = `${lock}.${token}.stale`;
+        renameSync(lock, aside);
+        if (Date.now() - statSync(aside).mtimeMs < CLAIM_LOCK_STALE_MS) {
+          // Another process replaced the stale lock between our checks: restore it.
+          try {
+            linkSync(aside, lock);
+          } catch {
+          }
+          unlinkSync(aside);
+          return null;
+        }
+        unlinkSync(aside);
       } catch {
         return null;
       }
     }
   }
   return null;
+}
+
+/** Test-only: the lock path, so tests can simulate other processes. */
+export function _claimLockPath(projectRoot?: string): string {
+  return `${accountPath(projectRoot)}.lock`;
 }
 
 function markClaimed(acct: AgentAccount, projectRoot?: string): ClaimState {

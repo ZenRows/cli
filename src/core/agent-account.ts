@@ -245,8 +245,32 @@ export async function resolveAccountUrl(
  */
 export function siblingOfSignup(signupUrl: string, name: "account" | "claim"): string {
   const re = /\/signup\/?$/;
-  const base = re.test(signupUrl) ? signupUrl : AGENT_SIGNUP_API_URL;
+  // These two endpoints receive the API key. A signup URL from the environment
+  // or a project's config (which a cloned repository could ship) is only
+  // trusted when it is Zenrows or this machine; anything else gets the
+  // built-in endpoint.
+  const base = re.test(signupUrl) && isAgentKeyDestination(signupUrl) ? signupUrl : AGENT_SIGNUP_API_URL;
   return base.replace(re, `/${name}`);
+}
+
+/**
+ * Where the CLI may send the API key for the agent account endpoints: a
+ * Zenrows https URL, or http(s) on loopback (local testing). No userinfo.
+ */
+export function isAgentKeyDestination(value: string): boolean {
+  if (isZenrowsHttpsUrl(value)) return true;
+  try {
+    const u = new URL(value);
+    const host = u.hostname.toLowerCase();
+    return (
+      (u.protocol === "https:" || u.protocol === "http:") &&
+      u.username === "" &&
+      u.password === "" &&
+      (host === "127.0.0.1" || host === "localhost" || host === "[::1]")
+    );
+  } catch {
+    return false;
+  }
 }
 
 /** True for an https URL on zenrows.com or a subdomain, with no userinfo. */
@@ -289,9 +313,9 @@ export type ClaimLinkResponse =
  */
 export async function requestClaimLink(
   apiKey: string,
-  opts: { url?: string; fetchImpl?: typeof fetch } = {},
+  opts: { url?: string; fetchImpl?: typeof fetch; projectRoot?: string } = {},
 ): Promise<ClaimLinkResponse> {
-  const url = opts.url ?? (await resolveClaimUrl());
+  const url = opts.url ?? (await resolveClaimUrl(opts.projectRoot, { fetchImpl: opts.fetchImpl }));
   const doFetch = opts.fetchImpl ?? fetch;
   const res = await doFetch(url, {
     method: "POST",
@@ -336,9 +360,9 @@ export async function requestClaimLink(
  */
 export async function fetchAccountStatus(
   apiKey: string,
-  opts: { url?: string; fetchImpl?: typeof fetch } = {},
+  opts: { url?: string; fetchImpl?: typeof fetch; projectRoot?: string } = {},
 ): Promise<AccountStatus> {
-  const url = opts.url ?? (await resolveAccountUrl());
+  const url = opts.url ?? (await resolveAccountUrl(opts.projectRoot, { fetchImpl: opts.fetchImpl }));
   const doFetch = opts.fetchImpl ?? fetch;
   const res = await doFetch(url, {
     method: "GET",

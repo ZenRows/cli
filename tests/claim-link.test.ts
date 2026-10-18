@@ -1,11 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tempRoot } from "./helpers.ts";
 import { createWorkspace, workspacePaths } from "../src/core/workspace.ts";
 import { saveApiKey } from "../src/core/auth.ts";
 import { readAccount, writeAccount, requestClaimLink } from "../src/core/agent-account.ts";
 import {
+  _claimLockPath,
   isTrustedClaimUrl,
   refreshClaimAdvice,
   refreshClaimState,
@@ -263,4 +264,17 @@ test("refreshClaimState: a live lock held elsewhere means no network; a stale on
     utimesSync(lock, old, old);
     await refreshClaimState({ projectRoot: root, fetchImpl: s.fetchImpl, ...endpoints });
     assert.equal(s.calls.filter((c) => c.method === "POST").length, 1);
+  }));
+
+test("claim lock: release never deletes a lock another process now holds", () =>
+  withWorkspace(acct({ createdAt: daysAgo(40) }), async (root) => {
+    const lock = _claimLockPath(root);
+    const s = stub({ account: { claimed: false }, claim: { claimUrl: NEW_LINK } });
+    const stealing = (async (url: string, init?: RequestInit) => {
+      // Simulate our lock being taken over (we looked stale) by another process.
+      if (url === ACCOUNT_URL) writeFileSync(lock, "someone-else");
+      return s.fetchImpl(url, init);
+    }) as unknown as typeof fetch;
+    await refreshClaimState({ projectRoot: root, force: true, fetchImpl: stealing, ...endpoints });
+    assert.equal(readFileSync(lock, "utf8"), "someone-else");
   }));
