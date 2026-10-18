@@ -9,7 +9,7 @@ import type { AuthState, Secrets } from "../types/index.ts";
 import { ToolkitError } from "./errors.ts";
 import { registerSecret } from "./logger.ts";
 import { mask } from "./redact.ts";
-import { findWorkspace, readJson, workspacePaths, writeJson } from "./workspace.ts";
+import { findWorkspace, readJson, workspacePaths, writePrivateJson } from "./workspace.ts";
 
 export const ENV_KEY = "ZENROWS_API_KEY";
 
@@ -55,7 +55,7 @@ export function saveApiKey(apiKey: string, projectRoot?: string): void {
     });
   }
   const file = secretsPath(projectRoot);
-  writeJson(file, { apiKey: trimmed } satisfies Secrets);
+  writePrivateJson(file, { apiKey: trimmed } satisfies Secrets);
   try {
     chmodSync(file, 0o600);
   } catch {
@@ -67,7 +67,7 @@ export function saveApiKey(apiKey: string, projectRoot?: string): void {
 export function clearApiKey(projectRoot?: string): boolean {
   const file = secretsPath(projectRoot);
   if (!existsSync(file)) return false;
-  writeJson(file, {} satisfies Secrets);
+  writePrivateJson(file, {} satisfies Secrets);
   return true;
 }
 

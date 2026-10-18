@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { statSync } from "node:fs";
+import { existsSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { tempRoot } from "./helpers.ts";
 import { createWorkspace, workspacePaths } from "../src/core/workspace.ts";
 import { saveApiKey } from "../src/core/auth.ts";
@@ -204,4 +204,63 @@ test("refreshClaimAdvice: swaps in a fresh link; leaves unrelated errors alone",
     assert.ok(after.next_action.includes(NEW_LINK));
     const other = new ToolkitError({ code: "FETCH_FAILED", message: "m", likely_cause: "c", next_action: "n" });
     assert.equal(await refreshClaimAdvice(other, { projectRoot: root, fetchImpl: s.fetchImpl, ...endpoints }), other);
+  }));
+
+test("isTrustedClaimUrl: a URL with userinfo is rejected", () => {
+  assert.equal(isTrustedClaimUrl("https://user:pw@app.zenrows.com/claim/t"), false);
+  assert.equal(isTrustedClaimUrl("https://user@app.zenrows.com/claim/t"), false);
+});
+
+test("refreshClaimState: 409 not_agent_account is final (marked claimed, no retry)", () =>
+  withWorkspace(acct({ createdAt: daysAgo(40) }), async (root) => {
+    const s = stub({ account: "throw", claim: 409 });
+    // the stub's 409 says already_claimed; swap in not_agent_account
+    const fetchImpl = (async (url: string, init?: RequestInit) =>
+      url === CLAIM_ENDPOINT
+        ? new Response(JSON.stringify({ error: "not_agent_account" }), { status: 409 })
+        : s.fetchImpl(url, init)) as unknown as typeof fetch;
+    assert.deepEqual(await refreshClaimState({ projectRoot: root, force: true, fetchImpl, ...endpoints }), { status: "claimed" });
+    assert.equal(readAccount(root)?.unclaimed, false);
+  }));
+
+test("refreshClaimState: parallel refreshes mint one link, not one each", () =>
+  withWorkspace(acct({ createdAt: daysAgo(40) }), async (root) => {
+    const s = stub({ account: { claimed: false }, claim: { claimUrl: NEW_LINK } });
+    const slow = (async (url: string, init?: RequestInit) => {
+      await new Promise((r) => setTimeout(r, 30));
+      return s.fetchImpl(url, init);
+    }) as unknown as typeof fetch;
+    const results = await Promise.all(
+      [0, 1, 2, 3].map(() => refreshClaimState({ projectRoot: root, fetchImpl: slow, ...endpoints })),
+    );
+    assert.equal(s.calls.filter((c) => c.method === "POST").length, 1);
+    assert.equal(results.filter((r) => r.status === "unclaimed" && r.refreshed).length, 1);
+    assert.equal(readAccount(root)?.claimUrl, NEW_LINK);
+    assert.equal(existsSync(workspacePaths(root).account + ".lock"), false, "lock released");
+  }));
+
+test("refreshClaimState: skips the POST when another process stored a fresh link meanwhile", () =>
+  withWorkspace(acct({ createdAt: daysAgo(40) }), async (root) => {
+    const s = stub({ account: { claimed: false }, claim: { claimUrl: NEW_LINK } });
+    const racing = (async (url: string, init?: RequestInit) => {
+      // While our status check is in flight, another process writes a fresh link.
+      if (url === ACCOUNT_URL) writeAccount(acct({ createdAt: daysAgo(40), claimUrl: "https://app.zenrows.com/claim/other", claimUrlIssuedAt: daysAgo(0) }), root);
+      return s.fetchImpl(url, init);
+    }) as unknown as typeof fetch;
+    const st = await refreshClaimState({ projectRoot: root, force: true, fetchImpl: racing, ...endpoints });
+    assert.deepEqual(st, { status: "unclaimed", claimUrl: "https://app.zenrows.com/claim/other", refreshed: false });
+    assert.equal(s.calls.filter((c) => c.method === "POST").length, 0);
+  }));
+
+test("refreshClaimState: a live lock held elsewhere means no network; a stale one is taken over", () =>
+  withWorkspace(acct({ createdAt: daysAgo(40) }), async (root) => {
+    const lock = workspacePaths(root).account + ".lock";
+    writeFileSync(lock, "99999");
+    const s = stub({ account: { claimed: false }, claim: { claimUrl: NEW_LINK } });
+    await refreshClaimState({ projectRoot: root, fetchImpl: s.fetchImpl, ...endpoints });
+    assert.equal(s.calls.length, 0);
+    const old = new Date(Date.now() - 5 * 60_000);
+    utimesSync(lock, old, old);
+    await refreshClaimState({ projectRoot: root, fetchImpl: s.fetchImpl, ...endpoints });
+    assert.equal(s.calls.filter((c) => c.method === "POST").length, 1);
   }));

@@ -8,7 +8,8 @@
  * `zenrows account claim`", or nothing because the account is already claimed.
  */
 import type { AgentAccount } from "../types/index.ts";
-import { fetchAccountStatus, readAccount, requestClaimLink, writeAccount } from "./agent-account.ts";
+import { statSync, unlinkSync, writeFileSync } from "node:fs";
+import { accountPath, fetchAccountStatus, isZenrowsHttpsUrl, readAccount, requestClaimLink, writeAccount } from "./agent-account.ts";
 import { resolveApiKey } from "./auth.ts";
 import { CLAIM_LINK_REFRESH, CLAIM_NEXT_ACTION_PREFIX, ToolkitError, quotaNextAction, type ClaimHint } from "./errors.ts";
 
@@ -22,16 +23,9 @@ export const CLAIM_CHECK_THROTTLE_MS = 6 * 60 * 60 * 1000;
 /** Each claim request gives up after this long, so an error is never held up for long. */
 const CLAIM_REQUEST_TIMEOUT_MS = 5000;
 
-/** Only an https link on zenrows.com (or a subdomain) is shown or opened. */
+/** Only an https link on zenrows.com (or a subdomain), with no userinfo, is shown or opened. */
 export function isTrustedClaimUrl(value: unknown): value is string {
-  if (typeof value !== "string") return false;
-  try {
-    const u = new URL(value);
-    const host = u.hostname.toLowerCase();
-    return u.protocol === "https:" && (host === "zenrows.com" || host.endsWith(".zenrows.com"));
-  } catch {
-    return false;
-  }
+  return isZenrowsHttpsUrl(value);
 }
 
 /** Age of the held link in ms, or Infinity when its issue time is unknown. */
@@ -81,27 +75,41 @@ export interface RefreshOptions {
 export async function refreshClaimState(opts: RefreshOptions = {}): Promise<ClaimState> {
   const { projectRoot } = opts;
   const now = opts.now ?? new Date();
+  const first = readAccount(projectRoot);
+  if (!first) return { status: "none" };
+  if (!first.unclaimed) return { status: "claimed" };
+  if (!opts.force && throttled(first, now)) return offlineState(first, now);
+
+  const key = opts.apiKey ?? resolveApiKey(projectRoot).key;
+  if (!key) return offlineState(first, now);
+
+  // Several `zenrows` processes can hit a 402 at once. Only the one holding the
+  // lock talks to the claim endpoints; the others use what is stored.
+  const release = acquireClaimLock(projectRoot);
+  if (!release) return offlineState(readAccount(projectRoot) ?? first, now);
+  try {
+    return await refreshLocked(key, opts, now);
+  } finally {
+    release();
+  }
+}
+
+async function refreshLocked(key: string, opts: RefreshOptions, now: Date): Promise<ClaimState> {
+  const { projectRoot } = opts;
+  // Re-read under the lock: another process may have just finished a refresh.
   let acct = readAccount(projectRoot);
   if (!acct) return { status: "none" };
   if (!acct.unclaimed) return { status: "claimed" };
+  if (!opts.force && throttled(acct, now)) return offlineState(acct, now);
 
-  const offline = (): ClaimState => ({ status: "unclaimed", claimUrl: usableClaimUrl(acct!, now), refreshed: false });
-
-  if (!opts.force && acct.lastClaimCheckAt) {
-    const last = new Date(acct.lastClaimCheckAt).getTime();
-    if (!Number.isNaN(last) && now.getTime() - last < CLAIM_CHECK_THROTTLE_MS) return offline();
-  }
-
-  const key = opts.apiKey ?? resolveApiKey(projectRoot).key;
-  if (!key) return offline();
+  // Take the 6-hour slot before any network call, so a failing backend is not
+  // retried by every command that follows.
+  acct = { ...acct, lastClaimCheckAt: now.toISOString() };
+  writeAccount(acct, projectRoot);
 
   const base = opts.fetchImpl ?? fetch;
   const fetchImpl = ((url: string, init?: RequestInit) =>
     base(url, { ...init, signal: AbortSignal.timeout(CLAIM_REQUEST_TIMEOUT_MS) })) as typeof fetch;
-
-  // Record the attempt first, so a run of failing calls does not retry each time.
-  acct = { ...acct, lastClaimCheckAt: now.toISOString() };
-  writeAccount(acct, projectRoot);
 
   try {
     const remote = await fetchAccountStatus(key, { url: opts.accountUrl, fetchImpl });
@@ -110,8 +118,10 @@ export async function refreshClaimState(opts: RefreshOptions = {}): Promise<Clai
     // Status unknown: carry on and judge the held link on its own.
   }
 
-  const needsNew = !isTrustedClaimUrl(acct.claimUrl) || linkAgeMs(acct, now) >= CLAIM_LINK_REFRESH_AGE_MS;
-  if (!needsNew) return offline();
+  // Re-read before minting: minting replaces the link everyone else holds.
+  acct = readAccount(projectRoot) ?? acct;
+  if (!acct.unclaimed) return { status: "claimed" };
+  if (!needsNewLink(acct, now)) return offlineState(acct, now);
 
   let fresh;
   try {
@@ -127,9 +137,10 @@ export async function refreshClaimState(opts: RefreshOptions = {}): Promise<Clai
         suggested_commands: ["zenrows account claim"],
       });
     }
-    return offline();
+    return offlineState(acct, now);
   }
-  if (fresh.status === "claimed") return markClaimed(acct, projectRoot);
+  // Both 409s are final: a person owns the account, so there is nothing to claim.
+  if (fresh.status === "claimed" || fresh.status === "not_agent") return markClaimed(acct, projectRoot);
   if (!isTrustedClaimUrl(fresh.claimUrl)) {
     if (opts.force && !usableClaimUrl(acct, now)) {
       throw new ToolkitError({
@@ -139,11 +150,57 @@ export async function refreshClaimState(opts: RefreshOptions = {}): Promise<Clai
         next_action: "Check ZENROWS_AGENT_SIGNUP_URL / `signupUrl` in the zenrows config, then retry.",
       });
     }
-    return offline();
+    return offlineState(acct, now);
   }
-  acct = { ...acct, claimUrl: fresh.claimUrl, claimUrlIssuedAt: now.toISOString() };
-  writeAccount(acct, projectRoot);
+  const latest = readAccount(projectRoot) ?? acct;
+  writeAccount({ ...latest, claimUrl: fresh.claimUrl, claimUrlIssuedAt: now.toISOString() }, projectRoot);
   return { status: "unclaimed", claimUrl: fresh.claimUrl, refreshed: true };
+}
+
+function throttled(acct: AgentAccount, now: Date): boolean {
+  if (!acct.lastClaimCheckAt) return false;
+  const last = new Date(acct.lastClaimCheckAt).getTime();
+  return !Number.isNaN(last) && now.getTime() - last < CLAIM_CHECK_THROTTLE_MS;
+}
+
+function needsNewLink(acct: AgentAccount, now: Date): boolean {
+  return !isTrustedClaimUrl(acct.claimUrl) || linkAgeMs(acct, now) >= CLAIM_LINK_REFRESH_AGE_MS;
+}
+
+function offlineState(acct: AgentAccount, now: Date): ClaimState {
+  if (!acct.unclaimed) return { status: "claimed" };
+  return { status: "unclaimed", claimUrl: usableClaimUrl(acct, now), refreshed: false };
+}
+
+/** A lock older than this is from a process that died mid-refresh. */
+const CLAIM_LOCK_STALE_MS = 60 * 1000;
+
+/**
+ * Create `account.json.lock` exclusively. Returns a release function, or null
+ * when another live process holds the lock.
+ */
+function acquireClaimLock(projectRoot: string | undefined): (() => void) | null {
+  const lock = `${accountPath(projectRoot)}.lock`;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      writeFileSync(lock, String(process.pid), { flag: "wx", mode: 0o600 });
+      return () => {
+        try {
+          unlinkSync(lock);
+        } catch {
+        }
+      };
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== "EEXIST") return null;
+      try {
+        if (Date.now() - statSync(lock).mtimeMs < CLAIM_LOCK_STALE_MS) return null;
+        unlinkSync(lock);
+      } catch {
+        return null;
+      }
+    }
+  }
+  return null;
 }
 
 function markClaimed(acct: AgentAccount, projectRoot?: string): ClaimState {
