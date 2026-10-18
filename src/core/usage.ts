@@ -7,6 +7,7 @@
  * safe to poll. The API key is registered as a secret so it is redacted in logs.
  */
 import { ToolkitError, quotaExhausted } from "./errors.ts";
+import { storedClaimHint } from "./claim-link.ts";
 import { isQuotaError, zrErrorDetail } from "./http.ts";
 import { readAccount } from "./agent-account.ts";
 import { ENV_KEY, resolveApiKey } from "./auth.ts";
@@ -131,7 +132,7 @@ export async function fetchUsage(
     // scraper 402. Surface it as a credits error (claim link for an unclaimed
     // Free plan account, dashboard/upgrade otherwise) instead of a generic "retry".
     const acct = readAccount();
-    throw quotaExhausted(url, acct?.unclaimed ? acct.claimUrl : undefined, {
+    throw quotaExhausted(url, storedClaimHint(acct), {
       status: res.status,
       detail: zrErrorDetail(body) ?? undefined,
     });

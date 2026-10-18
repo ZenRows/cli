@@ -20,6 +20,7 @@ import { createJob, downloadResults, getJob, listResults, rerunJob, stopJob, wai
 import { asNumber, asString, parse, type Command, type RunContext } from "../command.ts";
 import { ToolkitError, isKeyCapReached, keyCapReached } from "../../core/errors.ts";
 import { printError, writeOut } from "../output.ts";
+import { refreshClaimAdvice } from "../../core/claim-link.ts";
 
 export const batch: Command = {
   name: "batch",
@@ -74,7 +75,9 @@ export const batch: Command = {
             next_action: "Use estimate | create <file.jsonl> | status <id> | results <id> | cancel <id> | wait <id> | retry-failed <id>.",
           });
       }
-    } catch (err) {
+    } catch (caught) {
+      // A quota error's claim advice is built from local state; check it is still current.
+      const err = await refreshClaimAdvice(caught);
       printError(err, ctx.json);
       return 1;
     }

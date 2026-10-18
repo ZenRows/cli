@@ -9,6 +9,7 @@
 import type { AgentAccount, ToolkitConfig } from "../types/index.ts";
 import { readAccount, writeAccount } from "./agent-account.ts";
 import { resolveApiKey } from "./auth.ts";
+import { usableClaimUrl } from "./claim-link.ts";
 import { log } from "./logger.ts";
 import { fetchUsage } from "./usage.ts";
 
@@ -29,7 +30,8 @@ export function nudgeMessage(
 ): string | null {
   if (!account.unclaimed) return null;
   if (typeof usagePercent === "number" && usagePercent >= USAGE_NUDGE_PERCENT) {
-    return `You've used ${usagePercent}% of your Zenrows Free plan — claim your account to keep your usage & history: ${account.claimUrl}`;
+    const link = usableClaimUrl(account, _now) ?? "run `zenrows account claim` for a claim link";
+    return `You've used ${usagePercent}% of your Zenrows Free plan — claim your account to keep your usage & history: ${link}`;
   }
   return null;
 }

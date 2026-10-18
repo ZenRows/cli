@@ -5,7 +5,7 @@
  * assets, traces, and logs. Secrets live in `.zenrows/secrets.json`, which is
  * gitignored and never written into run artifacts.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
 export const WORKSPACE_DIRNAME = ".zenrows";
@@ -109,4 +109,30 @@ export function readJson<T>(file: string): T | null {
 export function writeJson(file: string, value: unknown): void {
   mkdirSync(dirname(file), { recursive: true });
   writeFileSync(file, JSON.stringify(value, null, 2) + "\n");
+}
+
+/**
+ * Write a file only its owner may read (secrets, account metadata). The data
+ * goes to a temp file created 0600 and is renamed into place, so the target is
+ * never readable by others, not even for a moment, and a reader never sees a
+ * half-written file. A directory this creates is 0700.
+ */
+export function writePrivateJson(file: string, value: unknown): void {
+  mkdirSync(dirname(file), { recursive: true, mode: 0o700 });
+  const tmp = `${file}.${process.pid}.${Date.now()}.tmp`;
+  try {
+    writeFileSync(tmp, JSON.stringify(value, null, 2) + "\n", { mode: 0o600, flag: "wx" });
+    try {
+      chmodSync(tmp, 0o600); // the umask can only remove bits, but be explicit
+    } catch {
+      // best-effort on platforms without POSIX permissions
+    }
+    renameSync(tmp, file);
+  } catch (err) {
+    try {
+      unlinkSync(tmp);
+    } catch {
+    }
+    throw err;
+  }
 }

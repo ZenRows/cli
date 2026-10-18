@@ -23,6 +23,7 @@ import { newRunId, writeRun } from "../../core/artifacts.ts";
 import { ToolkitError } from "../../core/errors.ts";
 import { parse, asString, asNumber, type Command, type RunContext } from "../command.ts";
 import { printError, writeOut } from "../output.ts";
+import { refreshClaimAdvice } from "../../core/claim-link.ts";
 import {
   createSession,
   sessionCall,
@@ -180,7 +181,9 @@ export const browser: Command = {
             next_action: "Run `zenrows browser --help` to see the available subcommands.",
           });
       }
-    } catch (err) {
+    } catch (caught) {
+      // A quota error's claim advice is built from local state; check it is still current.
+      const err = await refreshClaimAdvice(caught);
       printError(err, ctx.json);
       return err instanceof ToolkitError && err.code === "POLICY_BROWSER_DISABLED" ? 2 : 1;
     }

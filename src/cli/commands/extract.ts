@@ -17,6 +17,7 @@ import { runExtract, type ExtractMethod, type ExtractOptions } from "../../adapt
 import { formatRequestCost } from "../../core/http.ts";
 import { parse, asString, asNumber, type Command, type RunContext } from "../command.ts";
 import { printError, writeOut } from "../output.ts";
+import { refreshClaimAdvice } from "../../core/claim-link.ts";
 
 export const extract: Command = {
   name: "extract",
@@ -200,7 +201,9 @@ export const extract: Command = {
       }
       await maybeNudgeClaim(config, {});
       return 0;
-    } catch (err) {
+    } catch (caught) {
+      // A quota error's claim advice is built from local state; check it is still current.
+      const err = await refreshClaimAdvice(caught);
       writeRun({
         runId,
         command: "zenrows extract",

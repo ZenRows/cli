@@ -5,14 +5,14 @@
  * It never holds the API key (that lives in secrets.json, 0600) — only the
  * accountId, the human-facing claim URL, and claim metadata.
  */
-import { chmodSync, existsSync, unlinkSync } from "node:fs";
+import { existsSync, unlinkSync } from "node:fs";
 import type { AgentAccount } from "../types/index.ts";
 import { attributionEnabled, getOrCreateTelemetryId, loadConfig, CLI_USER_AGENT, CLI_VERSION } from "./config.ts";
 import { agentClientHeader } from "./agent-client.ts";
 import { ToolkitError } from "./errors.ts";
 import { AGENT_SIGNUP_API_URL, WELL_KNOWN_PROTECTED_RESOURCE } from "./open-url.ts";
 import { detectClient } from "./provenance.ts";
-import { findWorkspace, readJson, workspacePaths, writeJson } from "./workspace.ts";
+import { findWorkspace, readJson, workspacePaths, writePrivateJson } from "./workspace.ts";
 
 /** Env var to override the signup endpoint (highest priority; for local testing). */
 export const SIGNUP_URL_ENV = "ZENROWS_AGENT_SIGNUP_URL";
@@ -57,7 +57,9 @@ export async function discoverSignupUrl(
     if (!res.ok) return null;
     const json = (await res.json()) as { agent_auth?: { signup_endpoint?: unknown } };
     const endpoint = json?.agent_auth?.signup_endpoint;
-    if (typeof endpoint === "string" && endpoint.trim()) return endpoint.trim();
+    // The key is later sent to URLs derived from this one, so only a Zenrows
+    // https endpoint is accepted from a document fetched over the network.
+    if (typeof endpoint === "string" && isZenrowsHttpsUrl(endpoint.trim())) return endpoint.trim();
     return null;
   } catch {
     return null;
@@ -101,7 +103,7 @@ export async function resolveSignupUrl(
   return (await signupCandidates(projectRoot, opts))[0]!;
 }
 
-function accountPath(projectRoot?: string): string {
+export function accountPath(projectRoot?: string): string {
   const ws = projectRoot ? workspacePaths(projectRoot) : (findWorkspace() ?? workspacePaths());
   return ws.account;
 }
@@ -112,13 +114,8 @@ export function readAccount(projectRoot?: string): AgentAccount | null {
 
 export function writeAccount(acct: AgentAccount, projectRoot?: string): void {
   const file = accountPath(projectRoot);
-  writeJson(file, acct);
-  try {
-    // account.json holds the single-use claim token — restrict to owner-only.
-    chmodSync(file, 0o600);
-  } catch {
-    // best-effort on platforms without POSIX permissions
-  }
+  // account.json holds the single-use claim token: owner-only from creation.
+  writePrivateJson(file, acct);
 }
 
 /** Remove local agent account metadata (used by `zenrows logout`). */
@@ -238,7 +235,122 @@ export async function resolveAccountUrl(
   projectRoot?: string,
   opts: { fetchImpl?: typeof fetch } = {},
 ): Promise<string> {
-  return (await resolveSignupUrl(projectRoot, opts)).replace(/\/signup\/?$/, "/account");
+  return siblingOfSignup(await resolveSignupUrl(projectRoot, opts), "account");
+}
+
+/**
+ * `…/agent/signup` → `…/agent/<name>`. A signup URL that does not end in
+ * `/signup` gives no safe sibling, so the built-in endpoint's sibling is used
+ * rather than sending the key somewhere unexpected.
+ */
+export function siblingOfSignup(signupUrl: string, name: "account" | "claim"): string {
+  const re = /\/signup\/?$/;
+  // These two endpoints receive the API key. A signup URL from the environment
+  // or a project's config (which a cloned repository could ship) is only
+  // trusted when it is Zenrows or this machine; anything else gets the
+  // built-in endpoint.
+  const base = re.test(signupUrl) && isAgentKeyDestination(signupUrl) ? signupUrl : AGENT_SIGNUP_API_URL;
+  return base.replace(re, `/${name}`);
+}
+
+/**
+ * Where the CLI may send the API key for the agent account endpoints: a
+ * Zenrows https URL, or http(s) on loopback (local testing). No userinfo.
+ */
+export function isAgentKeyDestination(value: string): boolean {
+  if (isZenrowsHttpsUrl(value)) return true;
+  try {
+    const u = new URL(value);
+    const host = u.hostname.toLowerCase();
+    return (
+      (u.protocol === "https:" || u.protocol === "http:") &&
+      u.username === "" &&
+      u.password === "" &&
+      (host === "127.0.0.1" || host === "localhost" || host === "[::1]")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** True for an https URL on zenrows.com or a subdomain, with no userinfo. */
+export function isZenrowsHttpsUrl(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  try {
+    const u = new URL(value);
+    const host = u.hostname.toLowerCase();
+    return (
+      u.protocol === "https:" &&
+      u.username === "" &&
+      u.password === "" &&
+      (host === "zenrows.com" || host.endsWith(".zenrows.com"))
+    );
+  } catch {
+    return false;
+  }
+}
+
+/** The fresh-claim-link endpoint, derived from the signup URL like the status one. */
+export async function resolveClaimUrl(
+  projectRoot?: string,
+  opts: { fetchImpl?: typeof fetch } = {},
+): Promise<string> {
+  return siblingOfSignup(await resolveSignupUrl(projectRoot, opts), "claim");
+}
+
+export type ClaimLinkResponse =
+  | { status: "unclaimed"; claimUrl: string; expiresAt?: string }
+  | { status: "claimed" }
+  /** 409 not_agent_account: never an agent signup, so it already has an owner. Final. */
+  | { status: "not_agent" };
+
+/**
+ * Mint a fresh claim link for the account behind `apiKey`. Each call
+ * invalidates the previous link and the endpoint is rate-limited per key, so
+ * callers only ask when the link they hold is missing or near expiry.
+ * A 409 `already_claimed` means a person owns the account. Throws ToolkitError
+ * on any other failure.
+ */
+export async function requestClaimLink(
+  apiKey: string,
+  opts: { url?: string; fetchImpl?: typeof fetch; projectRoot?: string } = {},
+): Promise<ClaimLinkResponse> {
+  const url = opts.url ?? (await resolveClaimUrl(opts.projectRoot, { fetchImpl: opts.fetchImpl }));
+  const doFetch = opts.fetchImpl ?? fetch;
+  const res = await doFetch(url, {
+    method: "POST",
+    headers: { "X-API-Key": apiKey, Accept: "application/json", "User-Agent": CLI_USER_AGENT, ...agentClientHeader() },
+  });
+  const body = await res.text();
+  if (res.status === 200) {
+    let json: { claimUrl?: unknown; expiresAt?: unknown } | null = null;
+    try {
+      json = JSON.parse(body) as { claimUrl?: unknown; expiresAt?: unknown };
+    } catch {
+      // not JSON: reported below
+    }
+    if (!json || typeof json.claimUrl !== "string") {
+      throw new ToolkitError({
+        code: "FETCH_FAILED",
+        message: "The claim-link endpoint answered HTTP 200 without a claim link (unexpected response body).",
+        likely_cause: body.slice(0, 240),
+        next_action: "Retry later.",
+      });
+    }
+    return {
+      status: "unclaimed",
+      claimUrl: json.claimUrl,
+      ...(typeof json.expiresAt === "string" ? { expiresAt: json.expiresAt } : {}),
+    };
+  }
+  if (res.status === 409 && /already_claimed/.test(body)) return { status: "claimed" };
+  if (res.status === 409 && /not_agent_account/.test(body)) return { status: "not_agent" };
+  throw new ToolkitError({
+    code: res.status === 401 || res.status === 403 ? "AUTH_INVALID" : "FETCH_FAILED",
+    message: `Claim link request failed (HTTP ${res.status}).`,
+    likely_cause: body.slice(0, 240),
+    next_action: res.status === 429 ? "Too many claim links requested for this key; retry in an hour." : "Retry later.",
+  });
 }
 
 /**
@@ -248,9 +360,9 @@ export async function resolveAccountUrl(
  */
 export async function fetchAccountStatus(
   apiKey: string,
-  opts: { url?: string; fetchImpl?: typeof fetch } = {},
+  opts: { url?: string; fetchImpl?: typeof fetch; projectRoot?: string } = {},
 ): Promise<AccountStatus> {
-  const url = opts.url ?? (await resolveAccountUrl());
+  const url = opts.url ?? (await resolveAccountUrl(opts.projectRoot, { fetchImpl: opts.fetchImpl }));
   const doFetch = opts.fetchImpl ?? fetch;
   const res = await doFetch(url, {
     method: "GET",
