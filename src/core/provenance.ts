@@ -34,7 +34,11 @@ export function detectClient(env: Env = process.env): Provenance {
     client = "claude-code";
   } else if (env.CURSOR_TRACE_ID || hasPrefix(env, "CURSOR_") || term === "cursor") {
     client = "cursor";
-  } else if (hasPrefix(env, "OPENAI_") || hasPrefix(env, "CODEX_")) {
+  } else if (hasPrefix(env, "CODEX_")) {
+    // Codex CLI sets CODEX_SANDBOX / CODEX_SANDBOX_NETWORK_DISABLED / CODEX_THREAD_ID
+    // in the shells it runs commands in, and CODEX_HOME / CODEX_MANAGED_BY_NPM come
+    // from its install. OPENAI_* is not a signal: OPENAI_API_KEY is in many
+    // shells that have nothing to do with Codex.
     client = "openai-codex";
   } else if (hasPrefix(env, "WINDSURF")) {
     client = "windsurf";

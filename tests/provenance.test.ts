@@ -18,9 +18,16 @@ test("detectClient: cursor from TERM_PROGRAM", () => {
   assert.equal(detectClient({ TERM_PROGRAM: "cursor" }).client, "cursor");
 });
 
-test("detectClient: openai-codex from OPENAI_/CODEX_", () => {
-  assert.equal(detectClient({ OPENAI_API_KEY: "x" }).client, "openai-codex");
+test("detectClient: openai-codex from Codex's own variables", () => {
   assert.equal(detectClient({ CODEX_HOME: "x" }).client, "openai-codex");
+  assert.equal(detectClient({ CODEX_SANDBOX: "seatbelt" }).client, "openai-codex");
+  assert.equal(detectClient({ CODEX_SANDBOX_NETWORK_DISABLED: "1" }).client, "openai-codex");
+  assert.equal(detectClient({ CODEX_THREAD_ID: "t" }).client, "openai-codex");
+});
+
+test("detectClient: OPENAI_API_KEY alone is unknown, not openai-codex", () => {
+  assert.equal(detectClient({ OPENAI_API_KEY: "x" }).client, "unknown");
+  assert.equal(detectClient({ OPENAI_API_KEY: "x", OPENAI_BASE_URL: "y", OPENAI_ORG_ID: "z" }).client, "unknown");
 });
 
 test("detectClient: windsurf", () => {
