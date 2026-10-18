@@ -241,6 +241,61 @@ export async function resolveAccountUrl(
   return (await resolveSignupUrl(projectRoot, opts)).replace(/\/signup\/?$/, "/account");
 }
 
+/** The fresh-claim-link endpoint, derived from the signup URL like the status one. */
+export async function resolveClaimUrl(
+  projectRoot?: string,
+  opts: { fetchImpl?: typeof fetch } = {},
+): Promise<string> {
+  return (await resolveSignupUrl(projectRoot, opts)).replace(/\/signup\/?$/, "/claim");
+}
+
+export type ClaimLinkResponse =
+  | { status: "unclaimed"; claimUrl: string; expiresAt?: string }
+  | { status: "claimed" };
+
+/**
+ * Mint a fresh claim link for the account behind `apiKey`. Each call
+ * invalidates the previous link and the endpoint is rate-limited per key, so
+ * callers only ask when the link they hold is missing or near expiry.
+ * A 409 `already_claimed` means a person owns the account. Throws ToolkitError
+ * on any other failure.
+ */
+export async function requestClaimLink(
+  apiKey: string,
+  opts: { url?: string; fetchImpl?: typeof fetch } = {},
+): Promise<ClaimLinkResponse> {
+  const url = opts.url ?? (await resolveClaimUrl());
+  const doFetch = opts.fetchImpl ?? fetch;
+  const res = await doFetch(url, {
+    method: "POST",
+    headers: { "X-API-Key": apiKey, Accept: "application/json", "User-Agent": CLI_USER_AGENT, ...agentClientHeader() },
+  });
+  const body = await res.text();
+  if (res.status === 200) {
+    const json = JSON.parse(body) as { claimUrl?: unknown; expiresAt?: unknown };
+    if (typeof json.claimUrl !== "string") {
+      throw new ToolkitError({
+        code: "FETCH_FAILED",
+        message: "The claim-link response had no claimUrl.",
+        likely_cause: body.slice(0, 240),
+        next_action: "Retry later.",
+      });
+    }
+    return {
+      status: "unclaimed",
+      claimUrl: json.claimUrl,
+      ...(typeof json.expiresAt === "string" ? { expiresAt: json.expiresAt } : {}),
+    };
+  }
+  if (res.status === 409 && /already_claimed/.test(body)) return { status: "claimed" };
+  throw new ToolkitError({
+    code: res.status === 401 || res.status === 403 ? "AUTH_INVALID" : "FETCH_FAILED",
+    message: `Claim link request failed (HTTP ${res.status}).`,
+    likely_cause: body.slice(0, 240),
+    next_action: res.status === 429 ? "Too many claim links requested for this key; retry in an hour." : "Retry later.",
+  });
+}
+
 /**
  * Ask the backend whether the account behind `apiKey` has been claimed
  * (claiming happens in the browser, out-of-band from the CLI). Auth via the

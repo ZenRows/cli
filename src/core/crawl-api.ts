@@ -15,6 +15,7 @@
  */
 import { Readable } from "node:stream";
 import { ToolkitError, isKeyCapReached, keyCapReached, quotaExhausted } from "./errors.ts";
+import { storedClaimHint } from "./claim-link.ts";
 import { readAccount } from "./agent-account.ts";
 import { registerSecret } from "./logger.ts";
 import { CLI_USER_AGENT, loadConfig } from "./config.ts";
@@ -398,7 +399,7 @@ function classifyProblem(
       return new ToolkitError({ ...keyCapReached(request, { status, detail }).toJSON(), code: "CRAWL_KEY_CAP_REACHED" });
     }
     const acct = readAccount();
-    const quota = quotaExhausted(request, acct?.unclaimed ? acct.claimUrl : undefined, { status, detail });
+    const quota = quotaExhausted(request, storedClaimHint(acct), { status, detail });
     return new ToolkitError({ ...quota.toJSON(), code: "CRAWL_INSUFFICIENT_CREDITS" });
   }
   if (status === 409) {

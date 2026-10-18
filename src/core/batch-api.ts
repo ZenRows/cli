@@ -17,6 +17,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { ToolkitError, isKeyCapReached, keyCapReached, quotaExhausted } from "./errors.ts";
+import { storedClaimHint } from "./claim-link.ts";
 import { readAccount } from "./agent-account.ts";
 import { registerSecret } from "./logger.ts";
 import { CLI_USER_AGENT } from "./config.ts";
@@ -224,7 +225,7 @@ function problemToError(status: number, body: string, method: string, path: stri
     // a claim link (unclaimed Free plan) or dashboard/upgrade pointer, not a
     // generic "fix the problem and retry".
     const acct = readAccount();
-    return quotaExhausted(`${method} ${path}`, acct?.unclaimed ? acct.claimUrl : undefined, {
+    return quotaExhausted(`${method} ${path}`, storedClaimHint(acct), {
       status: 402,
       detail: problem.detail || problem.title || undefined,
     });

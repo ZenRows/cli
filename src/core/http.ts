@@ -6,6 +6,7 @@
  * from any logged URL.
  */
 import { ToolkitError, isKeyCapReached, keyCapReached, quotaExhausted } from "./errors.ts";
+import { storedClaimHint, usableClaimUrl } from "./claim-link.ts";
 import { readAccount } from "./agent-account.ts";
 import { ENV_KEY, resolveApiKey } from "./auth.ts";
 import { registerSecret } from "./logger.ts";
@@ -193,7 +194,7 @@ export async function scrape(
           likely_cause: `${cause}. The signup endpoint issued this key, but the scraping API did not accept it.`,
           next_action:
             "If you are testing against a local/staging backend, ensure `apiBase` (zenrows config) points at the same environment that issued the key. Otherwise re-provision with `zenrows signup --agent`, or claim the account: " +
-            acct.claimUrl,
+            (usableClaimUrl(acct) ?? "run `zenrows account claim` for a link"),
           suggested_commands: ["zenrows status", "zenrows signup --agent"],
         });
       }
@@ -237,7 +238,7 @@ export async function scrape(
     // out of credits. This is NOT scraped content — surface it as a credits
     // error (claim link for an unclaimed Free plan, dashboard/upgrade otherwise).
     const acct = readAccount();
-    throw quotaExhausted(redacted, acct?.unclaimed ? acct.claimUrl : undefined, {
+    throw quotaExhausted(redacted, storedClaimHint(acct), {
       status: 402,
       detail: zrErrorDetail(body) ?? undefined,
     });
@@ -249,7 +250,7 @@ export async function scrape(
     // limit; otherwise advise a brief retry.
     if (isQuotaError(body)) {
       const acct = readAccount();
-      throw quotaExhausted(redacted, acct?.unclaimed ? acct.claimUrl : undefined);
+      throw quotaExhausted(redacted, storedClaimHint(acct));
     }
     const detail = zrErrorDetail(body) ?? snippet(body);
     throw new ToolkitError({

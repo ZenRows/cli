@@ -31,6 +31,7 @@ export async function ensureApiKey(
     claimUrl: res.claimUrl,
     createdAt: new Date().toISOString(),
   };
+  account.claimUrlIssuedAt = account.createdAt;
   writeAccount(account, opts.projectRoot);
   opts.onProvision?.(account);
   return res.apiKey;
