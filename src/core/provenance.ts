@@ -25,20 +25,25 @@ function hasPrefix(env: Env, prefix: string): boolean {
   return Object.keys(env).some((k) => k.startsWith(prefix));
 }
 
+/**
+ * Variables the agent itself sets in the shells it runs commands in, so they
+ * mean the agent is driving this command (the same signals as agent-client.ts).
+ * Variables that only show the agent is installed or configured (CODEX_HOME,
+ * ANTHROPIC_API_KEY, OPENAI_API_KEY, other CLAUDE_* settings) are not used.
+ */
+const CLAUDE_VARS = ["CLAUDECODE", "CLAUDE_CODE_ENTRYPOINT", "CLAUDE_CODE_CHILD_SESSION"] as const;
+const CODEX_VARS = ["CODEX_SANDBOX", "CODEX_SANDBOX_NETWORK_DISABLED", "CODEX_THREAD_ID"] as const;
+
 /** Detect the host agent brand + runtime, best-effort, from env vars. */
 export function detectClient(env: Env = process.env): Provenance {
   const term = env.TERM_PROGRAM;
 
   let client = "unknown";
-  if (env.CLAUDECODE || hasPrefix(env, "CLAUDE_CODE") || hasPrefix(env, "CLAUDE_")) {
+  if (CLAUDE_VARS.some((v) => env[v])) {
     client = "claude-code";
   } else if (env.CURSOR_TRACE_ID || hasPrefix(env, "CURSOR_") || term === "cursor") {
     client = "cursor";
-  } else if (hasPrefix(env, "CODEX_")) {
-    // Codex CLI sets CODEX_SANDBOX / CODEX_SANDBOX_NETWORK_DISABLED / CODEX_THREAD_ID
-    // in the shells it runs commands in, and CODEX_HOME / CODEX_MANAGED_BY_NPM come
-    // from its install. OPENAI_* is not a signal: OPENAI_API_KEY is in many
-    // shells that have nothing to do with Codex.
+  } else if (CODEX_VARS.some((v) => env[v])) {
     client = "openai-codex";
   } else if (hasPrefix(env, "WINDSURF")) {
     client = "windsurf";
