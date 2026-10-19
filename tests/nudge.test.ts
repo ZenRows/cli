@@ -9,7 +9,7 @@ import { nudgeMessage, maybeNudgeClaim } from "../src/core/nudge.ts";
 import { log } from "../src/core/logger.ts";
 import type { AgentAccount } from "../src/types/index.ts";
 
-const CLAIM_URL = "https://x/claim/tok";
+const CLAIM_URL = "https://app.zenrows.com/claim/tok";
 
 function acct(over: Partial<AgentAccount> = {}): AgentAccount {
   return {

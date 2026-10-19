@@ -10,7 +10,8 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { batch, runFailure, shellQuote, timeoutFlag } from "../src/cli/commands/batch.ts";
+import { batch, refreshQuotaAdvice, runFailure, shellQuote, timeoutFlag } from "../src/cli/commands/batch.ts";
+import { writeAccount } from "../src/core/agent-account.ts";
 import { estimateCredits, toJobBody, validateJsonl, withAdaptiveStealth } from "../src/adapters/batch.ts";
 import { createJob, waitForJob } from "../src/core/batch-api.ts";
 import { ToolkitError } from "../src/core/errors.ts";
@@ -758,4 +759,27 @@ test("url and metadata limits count UTF-8 bytes, as the API does", () => {
   ]);
   const v = validateJsonl(file);
   assert.deepEqual(v.errors.map((e) => e.line), [2, 3]);
+});
+
+test("refreshing a quota error's claim advice keeps what batch adds after it", async () => {
+  const { root, cleanup } = tempRoot();
+  try {
+    createWorkspace(root);
+    saveApiKey("zr-key", root);
+    writeAccount({ accountId: "u1", unclaimed: true, claimUrl: "https://app.zenrows.com/claim/old", createdAt: new Date().toISOString() }, root);
+    // The account turns out claimed in the browser, so the claim advice is replaced.
+    const fetchImpl = (async () =>
+      new Response(JSON.stringify({ accountId: "u1", claimed: true, isAgent: true }), { headers: { "content-type": "application/json" } })) as unknown as typeof fetch;
+    const failed = runFailure(job({ status: "failed", failure_reason: "insufficient_credits" }) as never)!;
+    const err = new ToolkitError({
+      ...failed.toJSON(),
+      next_action: failed.next_action.replace(/^.*?(?= Then run the unfinished tasks)/, "You are on the Zenrows Free plan. Claim your account to keep your usage and add credits: https://app.zenrows.com/claim/old."),
+    });
+    const out = (await refreshQuotaAdvice(err, { projectRoot: root, fetchImpl, accountUrl: "https://stub.test/account", now: new Date() } as never)) as ToolkitError;
+    assert.match(out.next_action, /^You are out of Zenrows credits/);
+    assert.match(out.next_action, /Then run the unfinished tasks: `zenrows batch rerun j1 --status failed,pending,processing`\.$/);
+    assert.equal(out.job_id, "j1");
+  } finally {
+    cleanup();
+  }
 });

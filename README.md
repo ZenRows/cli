@@ -84,11 +84,12 @@ unclaimed Zenrows Free plan account**, stores the key in `.zenrows/secrets.json`
 (no secret — just the accountId, Free-period info, and a claim link).
 
 When you (or your agent) want to keep the usage and history, **claim** the
-account — this sets an email + password; the same key keeps working:
+account — this confirms an email (Google, GitHub or a 6-digit code); the same
+key keeps working:
 
 ```bash
 zenrows account status # show account + Free period + claim link
-zenrows account claim  # open the claim URL in the browser
+zenrows account claim  # open the claim URL (fresh one if the stored link is near its 30-day expiry)
 zenrows usage          # plan usage, credits & concurrency (does not count against your limit)
 ```
 

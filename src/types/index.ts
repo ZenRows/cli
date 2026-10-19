@@ -115,6 +115,14 @@ export interface AgentAccount {
   createdAt: string;
   /** ISO-8601 timestamp of the last usage check (throttles the claim nudge). */
   lastUsageCheckAt?: string;
+  /**
+   * ISO-8601 time `claimUrl` was issued. Claim links expire 30 days after
+   * issue; absent on accounts written before this field existed, where
+   * `createdAt` (the signup that issued the first link) stands in.
+   */
+  claimUrlIssuedAt?: string;
+  /** ISO-8601 timestamp of the last claim-status check (throttles it on errors). */
+  lastClaimCheckAt?: string;
 }
 
 export interface Secrets {

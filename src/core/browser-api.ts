@@ -12,6 +12,7 @@
  * them (`closeSession`) — the `browser run` command does so in a `finally`.
  */
 import { ToolkitError, isKeyCapReached, keyCapReached, quotaExhausted } from "./errors.ts";
+import { storedClaimHint } from "./claim-link.ts";
 import { readAccount } from "./agent-account.ts";
 import { registerSecret } from "./logger.ts";
 import { CLI_USER_AGENT } from "./config.ts";
@@ -139,7 +140,7 @@ export function browserProblemToError(status: number, body: string, method: stri
   if (status === 402) {
     // Out of credits — same exhausted state as the scraper/batch 402.
     const acct = readAccount();
-    return quotaExhausted(`${method} ${path}`, acct?.unclaimed ? acct.claimUrl : undefined, {
+    return quotaExhausted(`${method} ${path}`, storedClaimHint(acct), {
       status: 402,
       detail: parsed.error || parsed.detail || parsed.title || undefined,
     });

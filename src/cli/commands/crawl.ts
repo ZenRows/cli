@@ -33,6 +33,7 @@ import { asNumber, asString, parse, type Command, type RunContext } from "../com
 import { ToolkitError, isKeyCapReached, keyCapReached, quotaExhausted } from "../../core/errors.ts";
 import { readAccount } from "../../core/agent-account.ts";
 import { printError, writeOut, writeOutStream } from "../output.ts";
+import { refreshClaimAdvice, storedClaimHint } from "../../core/claim-link.ts";
 
 /** The API's default for `max_pages` (and `max_items`) when the flag is unset. */
 const DEFAULT_MAX_PAGES = 100;
@@ -113,7 +114,9 @@ export const crawl: Command = {
             suggested_commands: ["zenrows crawl --help"],
           });
       }
-    } catch (err) {
+    } catch (caught) {
+      // A quota error's claim advice is built from local state; check it is still current.
+      const err = await refreshClaimAdvice(caught);
       printError(err, ctx.json);
       return 1;
     }
@@ -487,7 +490,7 @@ export function crawlFailure(c: Crawl | CrawlStop): ToolkitError | null {
   }
   if (code === "insufficient_credits") {
     const acct = readAccount();
-    const quota = quotaExhausted(where, acct?.unclaimed ? acct.claimUrl : undefined, { status: null, detail }).toJSON();
+    const quota = quotaExhausted(where, storedClaimHint(acct), { status: null, detail }).toJSON();
     return new ToolkitError({ ...quota, ...ids, code: "CRAWL_INSUFFICIENT_CREDITS", suggested_commands: [...(quota.suggested_commands ?? []), getCmd] });
   }
   const why = [code, c.error?.detail].filter(Boolean).join(": ");

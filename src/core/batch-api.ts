@@ -26,6 +26,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { ToolkitError, isKeyCapReached, keyCapReached, quotaExhausted, type ErrorCode } from "./errors.ts";
+import { storedClaimHint } from "./claim-link.ts";
 import { readAccount } from "./agent-account.ts";
 import { registerSecret } from "./logger.ts";
 import { CLI_USER_AGENT } from "./config.ts";
@@ -467,7 +468,7 @@ function classifyProblem(
     // exhausted state as the scraper/usage 402, with a claim link (unclaimed
     // Free plan) or dashboard/upgrade pointer.
     const acct = readAccount();
-    return quotaExhausted(`${method} ${path}`, acct?.unclaimed ? acct.claimUrl : undefined, {
+    return quotaExhausted(`${method} ${path}`, storedClaimHint(acct), {
       status: 402,
       detail: problem.detail || problem.title || undefined,
     });

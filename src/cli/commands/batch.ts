@@ -54,6 +54,7 @@ import { readAccount } from "../../core/agent-account.ts";
 import { asNumber, asString, parse, type Command, type RunContext } from "../command.ts";
 import { ToolkitError, isKeyCapReached, keyCapReached, quotaExhausted } from "../../core/errors.ts";
 import { printError, writeOut } from "../output.ts";
+import { refreshClaimAdvice, storedClaimHint, type RefreshOptions } from "../../core/claim-link.ts";
 
 /** What `rerun` selects with no --status: the unfinished tasks, never the successful ones. */
 const DEFAULT_RERUN = "failed,pending";
@@ -161,7 +162,9 @@ export const batch: Command = {
             suggested_commands: ["zenrows batch --help"],
           });
       }
-    } catch (err) {
+    } catch (caught) {
+      // A quota error's claim advice is built from local state; check it is still current.
+      const err = await refreshQuotaAdvice(caught);
       printError(err, ctx.json);
       return 1;
     }
@@ -803,7 +806,7 @@ export function runFailure(job: Job): ToolkitError | null {
   }
   if (failure_reason === "insufficient_credits") {
     const acct = readAccount();
-    const quota = quotaExhausted(where, acct?.unclaimed ? acct.claimUrl : undefined, { detail: failure_detail }).toJSON();
+    const quota = quotaExhausted(where, storedClaimHint(acct), { detail: failure_detail }).toJSON();
     return new ToolkitError({
       ...quota,
       ...ids,
@@ -830,6 +833,26 @@ export function runFailure(job: Job): ToolkitError | null {
     suggested_commands: [`zenrows batch status ${id}`, rerun],
     ...ids,
   });
+}
+
+/** Where batch advice continues after a quota error's own `next_action`. */
+const ADVICE_SUFFIX = / (An earlier attempt of this request|Then run the unfinished tasks)/;
+
+/**
+ * `refreshClaimAdvice` for a batch error: it rewrites a quota error's claim
+ * advice from the current claim state, which would drop what batch adds after
+ * that advice (the safe-repeat steps of an unknown submit, or the rerun of a
+ * failed run's unfinished tasks). Refresh the quota part and keep the rest.
+ */
+export async function refreshQuotaAdvice(err: unknown, opts: RefreshOptions = {}): Promise<unknown> {
+  if (!(err instanceof ToolkitError)) return refreshClaimAdvice(err, opts);
+  const m = ADVICE_SUFFIX.exec(err.next_action);
+  if (!m) return refreshClaimAdvice(err, opts);
+  const head = err.next_action.slice(0, m.index);
+  const fresh = await refreshClaimAdvice(new ToolkitError({ ...err.toJSON(), next_action: head }), opts);
+  if (!(fresh instanceof ToolkitError) || fresh.next_action === head) return err;
+  const next = `${fresh.next_action.replace(/[.\s]*$/, ".")}${err.next_action.slice(m.index)}`;
+  return new ToolkitError({ ...err.toJSON(), next_action: next });
 }
 
 /** `next` followed by the command that runs the tasks a failure left unfinished. */

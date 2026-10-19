@@ -8,6 +8,7 @@
  */
 import { CLI_VERSION } from "../core/config.ts";
 import { ToolkitError } from "../core/errors.ts";
+import { refreshClaimAdvice } from "../core/claim-link.ts";
 import { log, ANSI, c } from "../core/logger.ts";
 import { makeAssetCommand } from "./asset-command.ts";
 import { printError } from "./output.ts";
@@ -94,7 +95,7 @@ export async function main(rawArgv: string[]): Promise<number> {
   try {
     return await cmd.run(argv, ctx);
   } catch (err) {
-    printError(err, json);
+    printError(await refreshClaimAdvice(err), json);
     // Any error exits 1 — the exit code doesn't encode error kind. Machine
     // consumers read the precise `error.code` from the --json output instead.
     return 1;

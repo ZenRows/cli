@@ -137,27 +137,47 @@ export class ToolkitError extends Error {
  */
 export function quotaExhausted(
   url: string,
-  claimUrl?: string,
+  claim?: ClaimHint,
   opts: { status?: number | null; detail?: string } = {},
 ): ToolkitError {
-  // Say that the allowance comes back. Without it this reads as a permanent paywall,
-  // which is how the API's own AUTH004 text reads ("Purchase a new subscription to
-  // continue") and why exhausted clients retry-loop instead of waiting or upgrading —
-  // one account spent seven days at ~3 req/s against this wall. `zenrows usage` prints
-  // the exact `period_ends_at`, so the date is one command away rather than guessed here.
-  const renewLine = "Credits renew at the end of the billing period — run `zenrows usage` for the date.";
-  const claimLine = claimUrl
-    ? `You are on the Zenrows Free plan. Claim your account to keep your usage and add credits: ${claimUrl}. ${renewLine}`
-    : `You are out of Zenrows credits. ${renewLine} To carry on now, add a credit pack (${BILLING_TOPUP_URL} opens the purchase directly) or upgrade your plan: ${PLANS_URL}`;
   const detail = opts.detail ? `${opts.detail.replace(/\.\s*$/, "")}. ` : "";
   const where = opts.status === null ? `Stopped ${url}` : `HTTP ${opts.status ?? 429} for ${url}`;
   return new ToolkitError({
     code: "POLICY_MAX_CREDITS_EXCEEDED",
     message: "Zenrows request quota exhausted.",
     likely_cause: `${detail}${where}`,
-    next_action: claimLine,
+    next_action: quotaNextAction(claim),
     suggested_commands: ["zenrows usage"],
   });
+}
+
+/**
+ * What the CLI knows about claiming, for an error that has to say it:
+ * a claim URL that is still valid; `CLAIM_LINK_REFRESH` when the account is
+ * unclaimed but no usable link is held (missing or expired); or `undefined`
+ * when there is nothing to claim (claimed, or not an agent-created account).
+ */
+export type ClaimHint = string | typeof CLAIM_LINK_REFRESH | undefined;
+export const CLAIM_LINK_REFRESH = Symbol("claim-link-refresh");
+
+/** Start of `next_action` on a quota error for an unclaimed account. */
+export const CLAIM_NEXT_ACTION_PREFIX = "You are on the Zenrows Free plan.";
+
+/** The `next_action` of a quota error for the given claim state. */
+export function quotaNextAction(claim: ClaimHint): string {
+  // Say that the allowance comes back. Without it this reads as a permanent paywall,
+  // which is how the API's own AUTH004 text reads ("Purchase a new subscription to
+  // continue") and why exhausted clients retry-loop instead of waiting or upgrading.
+  // `zenrows usage` prints the exact `period_ends_at`, so the date is one command away
+  // rather than guessed here.
+  const renewLine = "Credits renew at the end of the billing period — run `zenrows usage` for the date.";
+  if (claim === CLAIM_LINK_REFRESH) {
+    return `${CLAIM_NEXT_ACTION_PREFIX} Claim your account to keep your usage and add credits: run \`zenrows account claim\` for a fresh claim link. ${renewLine}`;
+  }
+  if (claim) {
+    return `${CLAIM_NEXT_ACTION_PREFIX} Claim your account to keep your usage and add credits: ${claim}. ${renewLine}`;
+  }
+  return `You are out of Zenrows credits. ${renewLine} To carry on now, add a credit pack (${BILLING_TOPUP_URL} opens the purchase directly) or upgrade your plan: ${PLANS_URL}`;
 }
 
 /** Where an account manages its API keys and their credit caps. */
