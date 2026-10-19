@@ -42,13 +42,22 @@ function withFetchImpl(impl: typeof fetch, fn: () => Promise<void>): Promise<voi
   });
 }
 
-// The gateway's budget covers the whole request (auth, fetch, parse) and is
-// 180s. The client default stays at 120s, so a timeout can abort a request the
-// API is still working on; the timeout must suggest a value above the budget.
-test("REQUEST_TIMEOUT suggests a client timeout above the API's own 180s budget", () => {
+// Encodes: "Client timeout raised above the server budget." The public docs
+// tell clients to keep the timeout at 180 s or more: a client that gives up
+// first abandons a request the API keeps working on and may still charge.
+test("the default client timeout is above the API's own request budget", () => {
   assert.equal(SERVER_BUDGET_MS, 180_000);
-  assert.equal(DEFAULT_TIMEOUT_MS, 120_000);
-  const err = requestTimeout("https://x", DEFAULT_TIMEOUT_MS, DEFAULT_TIMEOUT_MS);
+  assert.ok(
+    DEFAULT_TIMEOUT_MS > SERVER_BUDGET_MS,
+    `client default (${DEFAULT_TIMEOUT_MS}ms) must outlive the server budget (${SERVER_BUDGET_MS}ms), ` +
+      "otherwise the abort races the API's own error envelope",
+  );
+});
+
+// A shorter --timeout can still abort a request the API is working on; the
+// error must say so and suggest a value above the budget.
+test("REQUEST_TIMEOUT under a short --timeout suggests a client timeout above the API's own 180s budget", () => {
+  const err = requestTimeout("https://x", 120_000, 120_000);
   const suggested = Number(/--timeout (\d+)/.exec(err.next_action)?.[1]);
   assert.ok(suggested > SERVER_BUDGET_MS, `suggested ${suggested}ms must outlive the ${SERVER_BUDGET_MS}ms budget`);
   assert.match(err.likely_cause, /may still finish this request and charge it/);

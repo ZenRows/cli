@@ -115,12 +115,29 @@ zenrows fetch <url> --proxy-country us --wait-for ".price"
 zenrows fetch <url> --retries 0 # send once; the default is 2 retries
 ```
 
-`fetch` and `extract` retry a 429, 502, 503 or 504 answer and a network error
-up to `--retries` times (default 2). Each wait honours `Retry-After` (at most
-30 s) or is a random delay that grows with each retry, and no retry starts
-after 90 s in total. None of these statuses is charged. A client timeout
-(`--timeout`) is never retried, because the API may still finish and charge
-that request.
+`fetch` and `extract` retry a 429, 502, 503 or 504 answer up to `--retries`
+times (default 2; `--retries 0` sends once). They also retry a network error
+that happened before the request reached the API: a refused connection, a name
+that did not resolve, a connect timeout or an unreachable network. Each wait
+honours `Retry-After` in whole seconds (at least 0.25 s, at most 30 s) or is a
+random delay that grows with each retry. No retry starts after 90 s, counted
+from the command's first request; Extract's fallback to Autoparse shares that
+clock. A running request is not cut short, so a command can take longer than
+90 s. None of the retried statuses is charged. The CLI has no cancel option of
+its own; Ctrl-C ends the command, including a wait between retries.
+
+The CLI does not retry:
+
+1. A client timeout (`--timeout`, default 200000 ms, above the API's own 180 s
+   budget). The API may still finish and charge that request.
+2. A connection that closed after the request was sent, for the same reason.
+3. A 429 whose code says the account or the API key is out of credits
+   (`AUTH004`, `AUTH014`).
+4. A status the target site sent, under `--original-status`.
+
+With `--json`, `attempts` in the result says how many HTTP requests the command
+sent (1 means no retry). When the retries run out, the error suggests the same
+command again rather than a costlier configuration.
 
 ## 8. Extract
 

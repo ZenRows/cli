@@ -26,17 +26,28 @@ zenrows trace export <run-id>     # JSON for sharing
   `--manual --js-render` run; auto mode may ignore it. Each step
   multiplies the cost of the request, and both together are the most expensive
   configuration available ([[cost-control]]).
+- `FETCH_FAILED` after HTTP 429, 502, 503 or 504 → a temporary answer the CLI
+  already retried (`--retries`, default 2). Wait a minute and run the suggested
+  command, which is the same command. Do not escalate: a costlier fetch
+  configuration does not fix it. Under `--original-status` the status may be the
+  target site's own, and the CLI sends it once.
 - `REQUEST_TIMEOUT` → the CLI stopped waiting; the API was reached. Raise
-  `--timeout` (default 120000ms; the API's own budget is 180s), or drop
+  `--timeout` (default 200000ms, above the API's own 180s budget), or drop
   `--wait-for` so the request finishes inside that budget and the API returns
   its own error. Not a connectivity problem — do not chase the network. The CLI
   never retries a timeout on its own: the API may still finish and charge it.
-- `SERVICE_BUSY` → HTTP 503 `RESP009`: Zenrows had no capacity for the request
-  yet, or Extract is still preparing this layout. Not charged. The CLI already
-  retried it (`--retries`, default 2); run the same command again in about a
-  minute. Do not escalate to `--js-render` / `--premium-proxy`.
+- `SERVICE_BUSY` → HTTP 503 `RESP009`: Zenrows could not take the request now.
+  Not charged. On Extract, `likely_cause` quotes the API's title, which says
+  either that Extract could not finish this page right now (retry in about a
+  minute) or that it is at capacity for pages it has not seen before (retry
+  later). The CLI already retried it (`--retries`, default 2); wait, then run
+  the suggested command, which is the command that ran. Do not escalate to
+  `--js-render` / `--premium-proxy`.
 - `BACKEND_UNAVAILABLE` → a genuine transport failure (DNS/TCP/TLS). Check
-  connectivity and `zenrows config show`.
+  connectivity and `zenrows config show`. The CLI retries it only when the
+  request never reached the API (refused connection, DNS, connect timeout). A
+  connection that closed after the request was sent is not retried, because the
+  API may still finish and charge that request.
 - `AUTH_INVALID` → re-check the key, `zenrows login --api-key …`.
 - `KEY_CREDIT_CAP_REACHED` → this API key hit one of its own credit caps (HTTP
   402, gateway code `AUTH014`, Batch `api_key_cap_reached`). The account still

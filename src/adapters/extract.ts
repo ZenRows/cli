@@ -16,6 +16,7 @@
 import type { Policy, ToolkitConfig } from "../types/index.ts";
 import { ToolkitError } from "../core/errors.ts";
 import { runFetch, type FetchOptions, type FetchOutcome } from "./protected-fetch.ts";
+import { newRetryBudget } from "../core/http.ts";
 
 export type ExtractMethod = "extract" | "autoparse" | "css" | "outputs" | "markdown" | "plaintext";
 
@@ -91,11 +92,13 @@ export async function runExtract(
   }
 
   if (method === "extract" && opts.fallbackAutoparse !== false) {
+    // One budget for the call: the fallback does not restart the 90 s clock.
+    const budget = opts.budget ?? newRetryBudget();
     try {
-      return await runExtractOnce({ ...opts, method: "extract" }, config, policy, apiKey);
+      return await runExtractOnce({ ...opts, budget, method: "extract" }, config, policy, apiKey);
     } catch (err) {
       if (err instanceof ToolkitError && err.code === "EXTRACT_DOMAIN_NOT_ENABLED") {
-        const outcome = await runExtractOnce({ ...opts, method: "autoparse" }, config, policy, apiKey);
+        const outcome = await runExtractOnce({ ...opts, budget, method: "autoparse" }, config, policy, apiKey);
         return { ...outcome, fellBackToAutoparse: true };
       }
       throw err;

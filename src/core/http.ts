@@ -12,7 +12,7 @@ import { ENV_KEY, resolveApiKey } from "./auth.ts";
 import { log, registerSecret } from "./logger.ts";
 import { CLI_USER_AGENT } from "./config.ts";
 import { agentClientHeader } from "./agent-client.ts";
-import { defaultSleep, fullJitterMs, retryAfterMs } from "./backoff.ts";
+import { defaultSleep, fullJitterMs, retryAfterDelayMs, retryAfterMs } from "./backoff.ts";
 
 export interface ScraperResult {
   status: number;
@@ -45,6 +45,12 @@ export interface ScraperResult {
    * The request is not charged, and the same request returns the same answer.
    */
   noDataExtracted?: boolean;
+  /**
+   * HTTP requests sent for this logical call, the first one included (1 means
+   * no retry). With a shared `RetryBudget` it counts every request in it, such
+   * as Extract's request plus its Autoparse fallback.
+   */
+  attempts?: number;
 }
 
 export interface ScraperParams {
@@ -55,15 +61,15 @@ export interface ScraperParams {
 /**
  * Client-side timeout for one Fetch and Extract HTTP attempt.
  *
- * It was raised from 90s when the gateway's budget was believed to be 90s, so
- * that our abort would not race the API's own error envelope. The gateway's
- * real budget is `SERVER_BUDGET_MS` (180s), so a request that runs longer than
- * this can still be aborted while the API is working on it. That is why a
- * timeout is never retried: the API keeps running and may still charge a 200.
+ * It sits above the API's own budget (`SERVER_BUDGET_MS`, 180 s), as the public
+ * docs advise, so the API normally answers with its own error before the CLI
+ * gives up. Giving up earlier would abandon a request the API keeps working on
+ * and may still charge, while it holds a concurrency slot. A timeout is still
+ * never retried, for the same reason.
  */
-export const DEFAULT_TIMEOUT_MS = 120_000;
+export const DEFAULT_TIMEOUT_MS = 200_000;
 
-/** The gateway's budget for the whole request: auth, fetch and parse. */
+/** The API's budget for the whole request: auth, fetch and parse. */
 export const SERVER_BUDGET_MS = 180_000;
 
 /** Retries for a retryable failure (`--retries`). 0 sends the request once. */
@@ -73,10 +79,47 @@ export const DEFAULT_RETRIES = 2;
 export const RETRY_BUDGET_MS = 90_000;
 
 /**
- * Statuses that can succeed on the next attempt. The gateway charges only
- * 2xx, 304, 404 and 410, so none of these is charged.
+ * Statuses that can succeed on the next attempt. Zenrows charges only
+ * successful answers, so none of these is charged.
  */
 const RETRY_STATUSES: ReadonlySet<number> = new Set([429, 502, 503, 504]);
+
+/**
+ * Error codes that say the account or key is out of credits (402/429 `AUTH004`,
+ * `AUTH014`, per docs.zenrows.com/api-error-codes). A 429 with one of these
+ * answers the same until the account changes, so it is not retried.
+ */
+const QUOTA_CODES: ReadonlySet<string> = new Set(["AUTH004", "AUTH014"]);
+
+/**
+ * `error.cause.code` values that mean the request was never written to the
+ * API: the connection was refused, the name did not resolve, the connect timed
+ * out or the network was unreachable. Only these network errors are retried.
+ * A reset or close after the request was sent (`UND_ERR_SOCKET`, `ECONNRESET`)
+ * is not: the API may still be working on it and may charge it.
+ */
+const NEVER_SENT_CODES: ReadonlySet<string> = new Set([
+  "ECONNREFUSED",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ENETUNREACH",
+  "EHOSTUNREACH",
+  "UND_ERR_CONNECT_TIMEOUT",
+]);
+
+/**
+ * The start time and request count of one logical call. Extract's Autoparse
+ * fallback shares the first request's budget, so its retries cannot restart
+ * the 90 s clock.
+ */
+export interface RetryBudget {
+  startedAt: number;
+  attempts: number;
+}
+
+export function newRetryBudget(now: () => number = Date.now): RetryBudget {
+  return { startedAt: now(), attempts: 0 };
+}
 
 export interface ScrapeOptions {
   /** Per HTTP attempt. */
@@ -90,6 +133,13 @@ export interface ScrapeOptions {
   nowImpl?: () => number;
   /** Source of the jitter. */
   randomImpl?: () => number;
+  /** A budget shared with an earlier request of the same call; unset starts a new one. */
+  budget?: RetryBudget;
+  /**
+   * The command the user ran, ready to paste. Errors that say "run the same
+   * command again" suggest it. Unset means `zenrows fetch|extract <url>`.
+   */
+  rerunCommand?: string;
 }
 
 function buildUrl(apiBase: string, apiKey: string, params: ScraperParams): { full: string; redacted: string } {
@@ -108,10 +158,12 @@ function buildUrl(apiBase: string, apiKey: string, params: ScraperParams): { ful
 /**
  * Perform a Fetch and Extract API request. Throws ToolkitError on failure.
  *
- * Retries 429, 502, 503 and 504 and network errors that came before any
- * response, up to `retries` times, with full jitter or the server's
- * Retry-After. A retry never starts past `RETRY_BUDGET_MS`. Our own timeout is
- * never retried, and neither is any other status.
+ * Retries 429, 502, 503 and 504, and network errors that happened before the
+ * request was written, up to `retries` times, with full jitter or the server's
+ * Retry-After. No retry starts after `RETRY_BUDGET_MS` from the first request
+ * of the call. Our own timeout is never retried, and neither is any other
+ * status, a 429 out-of-credits code, or a status that belongs to the target
+ * site (`original_status`, `allowed_status_codes`).
  */
 export async function scrape(
   apiBase: string,
@@ -124,50 +176,99 @@ export async function scrape(
   const retries = opts.retries ?? DEFAULT_RETRIES;
   const sleep = opts.sleepImpl ?? defaultSleep;
   const now = opts.nowImpl ?? Date.now;
-  const startedAt = now();
+  const budget = opts.budget ?? newRetryBudget(now);
 
   for (let n = 0; ; n++) {
-    let sent: { res: Response; raw: Buffer };
-    try {
-      sent = await sendOnce(full, params.url, opts);
-    } catch (err) {
-      // REQUEST_TIMEOUT is not retried: the API keeps working and may still charge.
-      if (n >= retries || !(err instanceof ToolkitError) || err.code !== "BACKEND_UNAVAILABLE") throw err;
+    budget.attempts++;
+    const sent = await sendOnce(full, params.url, opts);
+    if (!sent.ok) {
+      // A timeout, or a failure after the request was written, is not retried:
+      // the API may still be working on it and may charge it.
+      if (n >= retries || !sent.neverSent) throw sent.error;
       const delayMs = fullJitterMs(n, opts.randomImpl);
-      if (now() - startedAt + delayMs > RETRY_BUDGET_MS) throw err;
-      log.dim(`Network error; retry ${n + 1}/${retries} in ${formatMs(delayMs)}`);
+      if (now() - budget.startedAt + delayMs > RETRY_BUDGET_MS) throw sent.error;
+      log.dim(`Network error before the request was sent; retry ${n + 1}/${retries} in ${formatMs(delayMs)}`);
       await sleep(delayMs);
       continue;
     }
     const body = sent.raw.toString("utf8");
-    if (n < retries && isRetryable(sent.res.status, body)) {
-      const delayMs = retryAfterMs(sent.res.headers.get("retry-after")) ?? fullJitterMs(n, opts.randomImpl);
-      if (now() - startedAt + delayMs <= RETRY_BUDGET_MS) {
+    if (n < retries && isRetryable(sent.res.status, body, params)) {
+      const delayMs = retryAfterDelayMs(sent.res.headers.get("retry-after")) ?? fullJitterMs(n, opts.randomImpl);
+      if (now() - budget.startedAt + delayMs <= RETRY_BUDGET_MS) {
         const code = zrErrorCode(body);
         log.dim(`HTTP ${sent.res.status}${code ? ` ${code}` : ""}; retry ${n + 1}/${retries} in ${formatMs(delayMs)}`);
         await sleep(delayMs);
         continue;
       }
     }
-    return interpret(sent.res, sent.raw, params, redacted, n);
+    return interpret(sent.res, sent.raw, params, redacted, {
+      retriesUsed: n,
+      attempts: budget.attempts,
+      rerunCommand: opts.rerunCommand ?? defaultRerunCommand(params),
+    });
   }
 }
 
 /**
- * True for a status worth another attempt. A 429 that says the account is out
- * of credits is excluded: it answers the same until the account changes.
+ * True for a status worth another attempt. Not retried: a 429 whose code says
+ * the account or key is out of credits, and any status the target site sent.
  */
-function isRetryable(status: number, body: string): boolean {
+function isRetryable(status: number, body: string, params: ScraperParams): boolean {
   if (!RETRY_STATUSES.has(status)) return false;
-  return !(status === 429 && isQuotaError(body));
+  if (isTargetStatus(status, params)) return false;
+  return !(status === 429 && QUOTA_CODES.has(zrErrorCode(body) ?? ""));
 }
 
+/**
+ * True when `status` may be the target site's own answer, passed through by
+ * `original_status` or `allowed_status_codes`. Retrying it would hit the
+ * target again, and the API may charge a request that reached the target.
+ */
+function isTargetStatus(status: number, params: ScraperParams): boolean {
+  if (params.original_status === true || params.original_status === "true") return true;
+  const allowed = params.allowed_status_codes;
+  if (allowed === undefined || allowed === false) return false;
+  return String(allowed)
+    .split(",")
+    .some((code) => code.trim() === String(status));
+}
+
+/**
+ * True when a fetch() rejection means the request never reached the API.
+ * undici wraps every failure as `TypeError("fetch failed")` with the real
+ * error in `cause`; a refused connection to a host with several addresses
+ * arrives as an AggregateError whose `errors` all carry a code.
+ */
+export function failedBeforeSend(err: unknown): boolean {
+  return neverSentCause(err instanceof Error ? err.cause : undefined);
+}
+
+function neverSentCause(cause: unknown): boolean {
+  if (!cause || typeof cause !== "object") return false;
+  const code = (cause as { code?: unknown }).code;
+  if (typeof code === "string") return NEVER_SENT_CODES.has(code);
+  const errors = (cause as { errors?: unknown }).errors;
+  return Array.isArray(errors) && errors.length > 0 && errors.every(neverSentCause);
+}
+
+/** Shell-safe form of one argument for a suggested command. */
+export function shellQuote(arg: string): string {
+  return /^[A-Za-z0-9_@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, `'\\''`)}'`;
+}
+
+/** `zenrows fetch|extract <url>` for a caller that did not pass the command it ran. */
+function defaultRerunCommand(params: ScraperParams): string {
+  const isExtract =
+    params.extract !== undefined || params.autoparse !== undefined || params.css_extractor !== undefined || params.outputs !== undefined;
+  return `zenrows ${isExtract ? "extract" : "fetch"} ${shellQuote(params.url)}`;
+}
+
+type SendResult =
+  | { ok: true; res: Response; raw: Buffer }
+  | { ok: false; error: ToolkitError; neverSent: boolean };
+
 /** One HTTP attempt with its own timeout; the body is read inside it. */
-async function sendOnce(
-  full: string,
-  targetUrl: string,
-  opts: ScrapeOptions,
-): Promise<{ res: Response; raw: Buffer }> {
+async function sendOnce(full: string, targetUrl: string, opts: ScrapeOptions): Promise<SendResult> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const controller = new AbortController();
   // Our own timer is the only thing that aborts this controller, so this flag —
@@ -190,15 +291,20 @@ async function sendOnce(
   } catch (err) {
     clearTimeout(timeout);
     const elapsedMs = Date.now() - startedAt;
-    if (timedOut) throw requestTimeout(targetUrl, timeoutMs, elapsedMs);
+    if (timedOut) return { ok: false, error: requestTimeout(targetUrl, timeoutMs, elapsedMs), neverSent: false };
     const cause = err instanceof Error ? err.message : String(err);
-    throw new ToolkitError({
-      code: "BACKEND_UNAVAILABLE",
-      message: `Could not reach the Zenrows API.`,
-      likely_cause: `Network error after ${formatMs(elapsedMs)}: ${cause}`,
-      next_action: "Check connectivity and retry. Verify api base in `zenrows config show`.",
-      suggested_commands: ["zenrows status", "zenrows config show"],
-    });
+    const causeCode = err instanceof Error ? (err.cause as { code?: unknown } | undefined)?.code : undefined;
+    return {
+      ok: false,
+      neverSent: failedBeforeSend(err),
+      error: new ToolkitError({
+        code: "BACKEND_UNAVAILABLE",
+        message: `Could not reach the Zenrows API.`,
+        likely_cause: `Network error after ${formatMs(elapsedMs)}: ${cause}${typeof causeCode === "string" ? ` (${causeCode})` : ""}`,
+        next_action: "Check connectivity and retry. Verify api base in `zenrows config show`.",
+        suggested_commands: ["zenrows status", "zenrows config show"],
+      }),
+    };
   }
   clearTimeout(timeout);
 
@@ -206,7 +312,17 @@ async function sendOnce(
   // output; `raw` preserves the exact bytes so binary responses (screenshot /
   // PDF) can be written without the UTF-8 round-trip that corrupts them.
   const raw = Buffer.from(await res.arrayBuffer());
-  return { res, raw };
+  return { ok: true, res, raw };
+}
+
+/** What `interpret` needs to know about the attempts behind a final response. */
+interface AttemptContext {
+  /** Retries this request made before the final response. */
+  retriesUsed: number;
+  /** Requests sent for the whole call (see `ScraperResult.attempts`). */
+  attempts: number;
+  /** The command to suggest when the advice is "run the same command again". */
+  rerunCommand: string;
 }
 
 /** Turn one final response into a result, or a normalized error. */
@@ -215,7 +331,7 @@ function interpret(
   raw: Buffer,
   params: ScraperParams,
   redacted: string,
-  retriesUsed: number,
+  attempt: AttemptContext,
 ): ScraperResult {
   const body = raw.toString("utf8");
   // A binary body is only ever produced by a successful screenshot/PDF request.
@@ -234,6 +350,7 @@ function interpret(
     finalUrl: res.headers.get("zr-final-url"),
     concurrencyRemaining: numOrNull(res.headers.get("concurrency-remaining")),
     redactedUrl: redacted,
+    attempts: attempt.attempts,
   };
 
   // REQS007 on extract=auto: the domain hasn't been prepared for Extract yet.
@@ -345,12 +462,12 @@ function interpret(
     const detail = zrErrorDetail(body) ?? snippet(body);
     throw new ToolkitError({
       code: "FETCH_FAILED",
-      message: "Rate limited (HTTP 429).",
+      message: `Rate limited (HTTP 429${triedText(attempt.retriesUsed)}).`,
       likely_cause: detail
         ? `${detail}. This looks like a concurrency cap or a target-site rate limit, not Free-plan credit exhaustion.`
         : "A concurrency cap or a target-site rate limit was hit, not Free-plan credit exhaustion.",
       next_action: "Wait a few seconds and retry. If it persists, lower concurrency / parallel requests.",
-      suggested_commands: [`zenrows fetch ${params.url}`],
+      suggested_commands: [attempt.rerunCommand],
     });
   }
   if (isForbiddenDomain(body)) {
@@ -385,7 +502,19 @@ function interpret(
         : "Verify the URL. Rendering or premium proxies will not turn a 404 into content — do not retry; it will fail identically and still cost credits.",
     });
   }
-  if (res.status === 503 && zrErrorCode(body) === "RESP009") throw serviceBusy(params, body, res.headers.get("retry-after"), retriesUsed);
+  if (res.status === 503 && zrErrorCode(body) === "RESP009") throw serviceBusy(params, body, res.headers.get("retry-after"), attempt);
+  if (RETRY_STATUSES.has(res.status) && !isTargetStatus(res.status, params)) {
+    // A temporary answer from the API side that outlasted the retries. A
+    // stronger (and up to 25x dearer) fetch configuration does not fix it.
+    throw new ToolkitError({
+      code: "FETCH_FAILED",
+      message: `The Zenrows API answered HTTP ${res.status}${triedText(attempt.retriesUsed)}. It was not charged.`,
+      likely_cause: `${snippet(body) || `HTTP ${res.status}`}. The Zenrows API gave a temporary answer, and the CLI already retried it.`,
+      next_action:
+        "Wait a minute, then run the same command again. Do not add --js-render or --premium-proxy: they cost more and do not help here.",
+      suggested_commands: [attempt.rerunCommand],
+    });
+  }
   if (res.status === 422 || res.status >= 500 || (res.status >= 400 && !looksLikeContent(result))) {
     throw new ToolkitError({
       code: "FETCH_FAILED",
@@ -408,28 +537,42 @@ function interpret(
   return result;
 }
 
+/** ` after 2 retries`, or nothing when the request was sent once. */
+function triedText(retriesUsed: number): string {
+  return retriesUsed > 0 ? ` after ${retriesUsed} ${retriesUsed === 1 ? "retry" : "retries"}` : "";
+}
+
 /**
- * 503 RESP009: Zenrows had no capacity for this request yet. It is temporary
- * and not charged, so the fix is to wait and send the same request, not to
+ * 503 RESP009: Zenrows could not take this request now. It is temporary and
+ * not charged, so the fix is to wait and send the same command, not to
  * escalate to --js-render / --premium-proxy (which costs more and helps nothing).
+ *
+ * On Extract the docs give RESP009 two meanings, and the answer's `title` says
+ * which: Extract could not finish this page right now (retry in a minute), or
+ * Extract is at capacity for pages it has not seen before (retry later). The
+ * cause therefore quotes the API's own words instead of guessing.
  */
-function serviceBusy(params: ScraperParams, body: string, retryAfter: string | null, retriesUsed: number): ToolkitError {
+function serviceBusy(params: ScraperParams, body: string, retryAfter: string | null, attempt: AttemptContext): ToolkitError {
   const isExtract = params.extract !== undefined;
-  const command = `zenrows ${isExtract ? "extract" : "fetch"} ${params.url}`;
-  const detail = zrErrorDetail(body);
-  const tried = retriesUsed > 0 ? ` after ${retriesUsed} ${retriesUsed === 1 ? "retry" : "retries"}` : "";
+  const said = zrErrorTitleAndDetail(body);
   const waitSeconds = retryAfterMs(retryAfter);
+  const cause = said
+    ? `The API said: ${said}`
+    : isExtract
+      ? "Extract could not take this request now: either it could not finish this page yet, or it is at capacity for pages it has not seen before."
+      : "Zenrows scraping capacity is busy right now.";
+  const when =
+    waitSeconds !== undefined
+      ? `Wait at least ${waitSeconds / 1000} s (the API's Retry-After)`
+      : isExtract
+        ? "Wait: about a minute if the API says it could not finish this page, longer if it says it is at capacity for new pages"
+        : "Wait a short time";
   return new ToolkitError({
     code: "SERVICE_BUSY",
-    message: `Zenrows could not take this request yet (HTTP 503 RESP009${tried}). It was not charged.`,
-    likely_cause:
-      (isExtract
-        ? "The extraction service is still preparing this layout; the request was not charged."
-        : "Zenrows scraping capacity is busy right now; the request was not charged.") +
-      (detail ? ` Server said: ${detail}.` : ""),
-    next_action:
-      "Retry the same command shortly (in about a minute). Do not add --js-render or --premium-proxy: they cost more and do not help here.",
-    suggested_commands: [command],
+    message: `Zenrows could not take this request yet (HTTP 503 RESP009${triedText(attempt.retriesUsed)}). It was not charged.`,
+    likely_cause: `${cause.replace(/\.\s*$/, "")}. The request was not charged.`,
+    next_action: `${when}, then run the same command again. Do not add --js-render or --premium-proxy: they cost more and do not help here.`,
+    suggested_commands: [attempt.rerunCommand],
     server_code: "RESP009",
     retry_after: waitSeconds !== undefined ? waitSeconds / 1000 : undefined,
   });
@@ -567,6 +710,19 @@ export function zrErrorCode(body: string): string | null {
   try {
     const j = JSON.parse(body) as { code?: unknown };
     return typeof j.code === "string" ? j.code.toUpperCase() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** `(CODE) title: detail` from a problem body, or null when it has neither. */
+function zrErrorTitleAndDetail(body: string): string | null {
+  try {
+    const j = JSON.parse(body) as { code?: unknown; title?: unknown; detail?: unknown };
+    const parts = [j.title, j.detail].filter((v): v is string => typeof v === "string" && v.trim() !== "");
+    if (parts.length === 0) return null;
+    const text = parts.map((v) => v.trim().replace(/\.$/, "")).join(": ");
+    return typeof j.code === "string" && !text.includes(j.code) ? `(${j.code}) ${text}` : text;
   } catch {
     return null;
   }
