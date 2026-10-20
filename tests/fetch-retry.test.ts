@@ -258,6 +258,61 @@ test("a refused connection to every address of a host (AggregateError) counts as
   assert.equal(failedBeforeSend(new TypeError("fetch failed")), false);
 });
 
+/** One connect attempt's error, shaped like Node's: `code` and `syscall`. */
+function sysErr(code: string, syscall?: string): Error {
+  return Object.assign(new Error(`${syscall ?? "op"} ${code}`), { code, ...(syscall ? { syscall } : {}) });
+}
+
+/**
+ * undici's rejection for a happy-eyeballs failure. Like Node, the
+ * AggregateError carries the first inner error's `code` as its own.
+ */
+function happyEyeballs(errors: Error[]): TypeError {
+  const agg = Object.assign(new AggregateError(errors, "connect failed"), { code: (errors[0] as { code?: string } | undefined)?.code });
+  return new TypeError("fetch failed", { cause: agg });
+}
+
+// Shared retry policy A4 3.1: a happy-eyeballs AggregateError is never sent
+// only when every inner error is a connect failure.
+const AGGREGATE_VECTORS: Array<[string, Error[], boolean]> = [
+  ["[ECONNREFUSED, ECONNREFUSED]", [sysErr("ECONNREFUSED", "connect"), sysErr("ECONNREFUSED", "connect")], true],
+  ["[ETIMEDOUT/connect x2]", [sysErr("ETIMEDOUT", "connect"), sysErr("ETIMEDOUT", "connect")], true],
+  ["[ECONNREFUSED, ETIMEDOUT/connect]", [sysErr("ECONNREFUSED", "connect"), sysErr("ETIMEDOUT", "connect")], true],
+  ["[ETIMEDOUT/read]", [sysErr("ETIMEDOUT", "read")], false],
+  ["[ECONNREFUSED, ECONNRESET]", [sysErr("ECONNREFUSED", "connect"), sysErr("ECONNRESET", "read")], false],
+  ["[ETIMEDOUT/connect, ETIMEDOUT/read]", [sysErr("ETIMEDOUT", "connect"), sysErr("ETIMEDOUT", "read")], false],
+  ["[] (empty)", [], false],
+];
+
+for (const [name, errors, retried] of AGGREGATE_VECTORS) {
+  test(`happy eyeballs: AggregateError ${name} is ${retried ? "" : "not "}retried`, async () => {
+    assert.equal(failedBeforeSend(happyEyeballs(errors)), retried);
+    let n = 0;
+    const impl = (async () => {
+      if (n++ === 0) throw happyEyeballs(errors);
+      return new Response("<html>ok</html>", { status: 200, headers: { "content-type": "text/html" } });
+    }) as unknown as typeof fetch;
+    const { sleepImpl, waits } = recordSleep();
+    const run = scrape(API, "k", { url: "https://x" }, { fetchImpl: impl, sleepImpl });
+    if (retried) {
+      assert.equal((await run).status, 200);
+      assert.equal(n, 2);
+      assert.equal(waits.length, 1);
+    } else {
+      await assert.rejects(run, (err: unknown) => (err as ToolkitError).code === "BACKEND_UNAVAILABLE");
+      assert.equal(n, 1);
+      assert.deepEqual(waits, []);
+    }
+  });
+}
+
+test("a single ETIMEDOUT counts as never sent only when its syscall is connect", () => {
+  const single = (e: Error) => new TypeError("fetch failed", { cause: e });
+  assert.equal(failedBeforeSend(single(sysErr("ETIMEDOUT", "connect"))), true);
+  assert.equal(failedBeforeSend(single(sysErr("ETIMEDOUT", "read"))), false);
+  assert.equal(failedBeforeSend(single(sysErr("ETIMEDOUT"))), false);
+});
+
 /** Start a real HTTP server on a free port; resolves with its base URL. */
 async function listen(handler: Parameters<typeof createServer>[1]): Promise<{ server: Server; base: string }> {
   const server = createServer(handler);
@@ -286,6 +341,19 @@ test("real socket: a refused port is retried, because the request was never sent
       assert.match(e.likely_cause, /ECONNREFUSED/);
       return true;
     },
+  );
+  assert.equal(calls(), 3);
+  assert.equal(waits.length, 2);
+});
+
+test("real socket: a refused port on localhost (one connect per address) is retried", async () => {
+  const { server, base } = await listen(() => {});
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  const { impl, calls } = countingFetch();
+  const { sleepImpl, waits } = recordSleep();
+  await assert.rejects(
+    () => scrape(base.replace("127.0.0.1", "localhost"), "k", { url: "https://x" }, { fetchImpl: impl, sleepImpl }),
+    (err: unknown) => (err as ToolkitError).code === "BACKEND_UNAVAILABLE",
   );
   assert.equal(calls(), 3);
   assert.equal(waits.length, 2);

@@ -84,7 +84,8 @@ const RETRY_STATUSES: ReadonlySet<number> = new Set([429, 502, 503, 504]);
 /**
  * `error.cause.code` values that mean the request was never written to the
  * API: the connection was refused, the name did not resolve, the connect timed
- * out or the network was unreachable. Only these network errors are retried.
+ * out or the network was unreachable. Only these network errors are retried,
+ * plus an `ETIMEDOUT` whose `syscall` is `connect` (see `neverSentCause`).
  * A reset or close after the request was sent (`UND_ERR_SOCKET`, `ECONNRESET`)
  * is not: the API may still be working on it and may charge it.
  */
@@ -207,8 +208,9 @@ function isTargetStatus(status: number, params: ScraperParams): boolean {
 /**
  * True when a fetch() rejection means the request never reached the API.
  * undici wraps every failure as `TypeError("fetch failed")` with the real
- * error in `cause`; a refused connection to a host with several addresses
- * arrives as an AggregateError whose `errors` all carry a code.
+ * error in `cause`. A connect to a host with several addresses (happy
+ * eyeballs) fails as an AggregateError with one error per address; it counts
+ * only when every one of them is a connect failure.
  */
 export function failedBeforeSend(err: unknown): boolean {
   return neverSentCause(err instanceof Error ? err.cause : undefined);
@@ -216,10 +218,14 @@ export function failedBeforeSend(err: unknown): boolean {
 
 function neverSentCause(cause: unknown): boolean {
   if (!cause || typeof cause !== "object") return false;
-  const code = (cause as { code?: unknown }).code;
-  if (typeof code === "string") return NEVER_SENT_CODES.has(code);
+  // Node copies the first inner error's `code` onto the AggregateError, so
+  // the inner errors decide, never that copied code.
   const errors = (cause as { errors?: unknown }).errors;
-  return Array.isArray(errors) && errors.length > 0 && errors.every(neverSentCause);
+  if (Array.isArray(errors)) return errors.length > 0 && errors.every(neverSentCause);
+  const { code, syscall } = cause as { code?: unknown; syscall?: unknown };
+  // The OS connect timeout. ETIMEDOUT on a read is after the request was sent.
+  if (code === "ETIMEDOUT") return syscall === "connect";
+  return typeof code === "string" && NEVER_SENT_CODES.has(code);
 }
 
 /** Shell-safe form of one argument for a suggested command. */
