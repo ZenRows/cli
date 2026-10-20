@@ -28,7 +28,15 @@ mkdirSync(APP, { recursive: true });
 mkdirSync(HOME, { recursive: true });
 
 // Without a key, "invalid" keeps the CLI from creating an account.
-const baseEnv = { ...process.env, HOME, NO_COLOR: "1", ZENROWS_API_KEY: HAS_KEY ? KEY : "invalid" };
+// The CLI reads its own variable, not CRAWL_API_BASE: without it every call
+// would reach production whatever the run targets.
+const baseEnv = {
+  ...process.env,
+  HOME,
+  NO_COLOR: "1",
+  ZENROWS_API_KEY: HAS_KEY ? KEY : "invalid",
+  ZENROWS_CRAWL_API_BASE: H.API_BASE,
+};
 const parse = (s) => {
   try {
     return JSON.parse(s);
@@ -572,7 +580,7 @@ if (HAS_KEY) {
 await liveCheck(
   "20",
   "Results after stop",
-  "crawl results on a crawl stopped with pages in flight: partial false, and no URL lost",
+  "crawl results on a crawl stopped with pages in flight: no URL lost; partial follows the API, and a partial read carries a note to read again",
   async () => {
     if (!B || stopInfo?.error) return { status: FAIL, actual: `setup failed: ${stopInfo?.error}` };
     if (stopInfo.status !== "stopped") {
@@ -593,8 +601,8 @@ await liveCheck(
     const same = urls(j.results) === urls(later);
     const pending = (j.results ?? []).filter((x) => x.content_status === "pending").length;
     return {
-      status: passIf(now.code === 0 && j.partial === false && same),
-      actual: `stopped with ${stopInfo.items} kept; first read: exit ${now.code}, ${j.count} URLs (${pending} pending), partial ${j.partial}; then ${settledNote}: ${later.length} URLs, same set ${same}`,
+      status: passIf(now.code === 0 && same && (!j.partial || Boolean(j.note))),
+      actual: `stopped with ${stopInfo.items} kept; first read: exit ${now.code}, ${j.count} URLs (${pending} pending), partial ${j.partial}, note: ${j.note ?? "none"}; then ${settledNote}: ${later.length} URLs, same set ${same}`,
       evidence: show(now),
     };
   },
@@ -761,11 +769,11 @@ await check(
   },
 );
 
-// ---------- 19-21: a failed crawl, results after a stop, the documented defaults ----------
+// ---------- 19-21: a crawl that matches nothing, results after a stop, the documented defaults ----------
 await liveCheck(
   "19",
-  "Failed crawl",
-  "a crawl that keeps nothing ends failed (no_items_found); crawl wait exits 1 with ok: false and CRAWL_FAILED",
+  "No match",
+  "a crawl whose pattern matches nothing ends completed with 0 results and no error; crawl wait exits 0 with ok: true and a note",
   async () => {
     const r = createWith([CRAWL_URL, "--depth", "1", "--include-patterns", H.NO_MATCH]);
     F = r.json;
@@ -773,15 +781,16 @@ await liveCheck(
     const w = z(["crawl", "wait", F.crawl_id, "--json"]);
     const j = w.json ?? {};
     const ok =
-      w.code === 1 &&
-      j.ok === false &&
-      j.status === "failed" &&
-      j.crawl?.error?.code === "no_items_found" &&
-      j.error?.code === "CRAWL_FAILED" &&
-      j.error?.server_code === "no_items_found";
+      w.code === 0 &&
+      j.ok === true &&
+      j.status === "completed" &&
+      j.crawl?.coverage?.items_found === 0 &&
+      j.crawl?.error === undefined &&
+      j.error === undefined &&
+      typeof j.note === "string";
     return {
       status: passIf(ok),
-      actual: `${F.crawl_id}: exit ${w.code}, status ${j.status}, ok ${j.ok}, error ${j.error?.code}/${j.error?.server_code}`,
+      actual: `${F.crawl_id}: exit ${w.code}, status ${j.status}, ok ${j.ok}, items ${j.crawl?.coverage?.items_found}, error ${j.crawl?.error?.code ?? "none"}, note ${j.note ? "yes" : "no"}`,
       evidence: show(w),
     };
   },
@@ -840,6 +849,49 @@ await liveCheck(
   },
 );
 
+await liveCheck(
+  "22",
+  "Markdown output",
+  'crawl create --output-format markdown is accepted and the crawl echoes it',
+  async () => {
+    const r = create(["--output-format", "markdown", "--max-items", "1", "--max-pages", "1"]);
+    if (r.code !== 0 || !r.json?.crawl_id) {
+      return { status: FAIL, actual: H.trim(show(r), 400) };
+    }
+    z(["crawl", "stop", r.json.crawl_id, "--json"]);
+    const got = r.json.output_format ?? r.json.crawl?.output_format;
+    return { status: passIf(got === "markdown"), actual: `${r.json.crawl_id}: output_format ${got}` };
+  },
+);
+await liveCheck(
+  "23",
+  "Rejected output format",
+  "crawl create --output-format pdf is refused locally, before any network call",
+  async () => {
+    const r = create(["--output-format", "pdf"]);
+    const code = r.json?.error?.code;
+    return {
+      status: passIf(r.code === 1 && code === "INVALID_USAGE"),
+      actual: `exit ${r.code}, code ${code}`,
+    };
+  },
+);
+
+await liveCheck(
+  "24",
+  "Discovery",
+  "crawl create --discovery links is echoed back, and --discovery pagination is refused before any network call",
+  async () => {
+    const r = create(["--discovery", "links", "--max-items", "1", "--max-pages", "1"]);
+    if (r.code !== 0 || !r.json?.crawl_id) return { status: FAIL, actual: H.trim(show(r), 400) };
+    z(["crawl", "stop", r.json.crawl_id, "--json"]);
+    const got = r.json.crawl?.discovery ?? r.json.discovery;
+    const refused = create(["--discovery", "pagination"]);
+    const ok = JSON.stringify(got) === JSON.stringify(["links"]) && refused.code === 1 && refused.json?.error?.code === "INVALID_USAGE";
+    return { status: passIf(ok), actual: `discovery ${JSON.stringify(got)}; pagination exit ${refused.code} ${refused.json?.error?.code}` };
+  },
+);
+
 H.naming({
   operations: {
     create: "crawl create",
@@ -859,6 +911,7 @@ H.naming({
     include_patterns: "--include-patterns",
     exclude_patterns: "--exclude-patterns",
     output_format: "--output-format",
+    discovery: "--discovery",
     idempotency_key: "--idempotency-key",
     cursor: "--cursor",
     limit: "--limit",

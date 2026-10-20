@@ -1,6 +1,6 @@
 {
   "name": "@zenrows/cli",
-  "version": "1.5.3",
+  "version": "1.8.0",
   "description": "Open-source CLI, MCP, skills, templates, workflows, recipes, and evals layer for giving AI agents reliable access to protected web data through Zenrows cloud infrastructure.",
   "type": "module",
   "license": "MIT",
@@ -8,10 +8,10 @@
   "homepage": "https://www.zenrows.com",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/zenrows/cli.git"
+    "url": "git+https://github.com/ZenRows/cli.git"
   },
   "bugs": {
-    "url": "https://github.com/zenrows/cli/issues"
+    "url": "https://github.com/ZenRows/cli/issues"
   },
   "keywords": [
     "zenrows",

@@ -78,8 +78,8 @@ and signal checks.
 | 16 | Errors carry the server code | SDKs: `code` holds it, empty when the body has none; MCP, CLI: `server_code` |
 | 17 | Naming | the API's operation and parameter names, in this surface's casing |
 | 18 | Copy | Crawl is "new", never "beta"; one "still evolving" line; the 429 limit reads as the account's active jobs, shared with Batch |
-| 19 | Failed crawl | an include pattern that matches nothing ends `failed` with `no_items_found`; SDKs return it, not raise it; MCP and CLI say `ok: false` (CLI: exit 1, `CRAWL_FAILED`) |
-| 20 | Results after stop | the html crawl is stopped while its pages are still being fetched: reading its results ends at once (MCP and CLI: `partial: false`, no note to call again), and the same URLs come back once the pages in flight finish |
+| 19 | No match | an include pattern that matches nothing ends `completed` with 0 results and no `error`; SDKs return it; MCP and CLI say `ok: true` (CLI: exit 0, with a `note` about the patterns) |
+| 20 | Results after stop | the html crawl is stopped while its pages are still being fetched: reading its results loses no URL (MCP and CLI: `partial` follows the API's `next_cursor`, with a note to read again while it is set), and the same URLs come back once the pages in flight finish |
 | 21 | Documented defaults | a create without `max_pages` and `max_items` gets the default the docs state (100) |
 
 Extra checks for this surface: every subcommand prints JSON with `--json` (`create`, `get`, `wait` and `stop` print `{ok, crawl_id, status, crawl, note?}`), Ctrl-C during `crawl wait` prints the resume hint and exits 130, and `--wait` and `--html` are rejected as unknown flags.

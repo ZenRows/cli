@@ -84,11 +84,12 @@ unclaimed Zenrows Free plan account**, stores the key in `.zenrows/secrets.json`
 (no secret — just the accountId, Free-period info, and a claim link).
 
 When you (or your agent) want to keep the usage and history, **claim** the
-account — this sets an email + password; the same key keeps working:
+account — this confirms an email (Google, GitHub or a 6-digit code); the same
+key keeps working:
 
 ```bash
 zenrows account status # show account + Free period + claim link
-zenrows account claim  # open the claim URL in the browser
+zenrows account claim  # open the claim URL (fresh one if the stored link is near its 30-day expiry)
 zenrows usage          # plan usage, credits & concurrency (does not count against your limit)
 ```
 
@@ -143,20 +144,75 @@ zenrows extract https://example.com/p/1      # then extract again
 
 Zenrows **Batch** (`https://async.api.zenrows.com/v1`) fans a
 protected fetch/extract out over many URLs. The cloud subcommands work
-with any active API key and spend the same credits as Fetch. Local spec
-validation + credit estimation always work (no key needed).
+with any active API key and cost the same credits as Fetch: Batch is the
+reliable path at scale, at Fetch's prices. Local spec validation + credit
+estimation always work (no key needed).
 
 ```bash
-zenrows batch estimate jobs.jsonl                    # validate the spec + estimate credits (local)
-zenrows batch create jobs.jsonl --wait               # submit a job and wait for it to finish
-zenrows batch status <job-id>                        # run status + progress stats
-zenrows batch results <job-id> --out results.jsonl   # collect results (paginated)
-zenrows batch cancel <job-id>                        # stop an in-flight run
+zenrows batch estimate jobs.jsonl                     # validate the spec + estimate credits (local)
+zenrows batch create jobs.jsonl --follow              # submit a job and wait for it to finish
+zenrows batch list                                    # your jobs, newest first
+zenrows batch status <job-id>                         # run status, progress stats, pause state
+zenrows batch wait <job-id> --timeout 30m             # wait for the run to end
+zenrows batch results <job-id> --out results.jsonl    # collect results (paginated)
+zenrows batch content <job-id> <task-id>              # one task's result body
+zenrows batch pause <job-id>                          # pause the run (resume <job-id> continues it)
+zenrows batch cancel <job-id>                         # stop an in-flight run
+zenrows batch retry-failed <job-id> --include-pending # rerun every task that did not succeed
+zenrows batch rerun <job-id>                          # rerun failed + pending tasks (--all: every task)
+zenrows batch delete <job-id> --yes                   # delete the job, its runs and results
 ```
 
 `jobs.jsonl` is one JSON object per line, each with a `url` (plus optional
 per-line overrides like `js_render`, `premium_proxy`, `proxy_country`,
-`extract`). Validate and estimate locally first, then submit with `create`.
+`extract`, nested `zenrows_params`, an `external_id`, string `metadata`, and
+`"method": "POST"` with a `body` of up to 16 KiB). `estimate` and `create`
+check every line against the API's limits before anything is sent: `url` up
+to 2048 bytes, `external_id` up to 128 letters, digits, `.`, `_` or `-`,
+and `metadata` up to 20 string entries (4 KiB). Validate and estimate locally
+first, then submit with `create`. `estimate` takes `create`'s
+`--manual` / `--js-render` / `--premium-proxy` / `--proxy-country` flags and
+prices the same request, as a range (Adaptive Stealth Mode costs 1 to 25).
+
+`create` also takes `--name`, `--external-id` and `--metadata key=value`
+(repeatable) for the job itself. It sends an `Idempotency-Key` (generated, or
+`--idempotency-key`) and retries network errors and 502/503/504 under it; an
+outcome that stays unknown prints the command that repeats the request with
+that key, which cannot create a second job.
+
+The local policy caps a run at 10,000 URLs and 250,000 estimated credits by
+default (an Adaptive Stealth Mode task counts 25), so a default run of up to
+10,000 URLs passes in any mode. Raise them for larger jobs (the API takes up to
+100,000 tasks per job): `zenrows policy set max_pages_per_run 100000` and
+`zenrows policy set max_credits_per_run 2500000`. A workspace created by an
+earlier version keeps its caps (1,000 and 10,000) in `policy.json`.
+
+`wait`, `create --follow` and `rerun --follow` poll until the run ends, the run
+is paused, or `--timeout` runs out (default 10 minutes; `30s`, `5m`, `1h`; a
+bare number is milliseconds, as before). When the time runs out, or the run is
+paused, the command exits 0 and prints the run with a `note` and the next
+command; the job keeps running. Ctrl-C stops the wait, not the job, and exits
+130. A run that ends `failed` exits 1: out of credits is
+`POLICY_MAX_CREDITS_EXCEEDED`, an inactive subscription `AUTH_INVALID`, a key
+cap `KEY_CREDIT_CAP_REACHED` (the same codes a refused request gets), anything
+else `BATCH_FAILED`, each with the run's `failure_reason` as `server_code` and
+the `job_id`. Then run the unfinished tasks with
+`zenrows batch rerun <job-id> --status failed,pending,processing`. With no
+flag, `rerun` reruns the `failed` and `pending` tasks, so successful tasks are
+never billed again by surprise; `--status <list>` picks the statuses and
+`--all` reruns every task (not with `--status`). A partial rerun works for 10
+days after the run started; `--all` always does.
+
+With `--json`, `create`, `status`, `wait`, `cancel`, `pause`, `resume` and
+`rerun` print `{ok, job_id, run_id, status, stats, job}` (`jobId` is kept for
+older scripts), plus `paused`, `ingest_status`, `accepted_tasks`, `rerun_of`,
+`retried_tasks` and `inherited_tasks` when the API sends them. Results are
+kept 14 days by default and then read `expired`; a `result_url` is valid 2
+hours. Lifecycle errors get their own codes (`BATCH_RUN_IN_PROGRESS`,
+`BATCH_NO_MATCHING_TASKS`, `BATCH_RERUN_WINDOW_EXPIRED`,
+`BATCH_REQUEST_IN_FLIGHT`, `BATCH_RESULT_EXPIRED`, ...) and carry the API's code
+as `server_code`. Schedules, webhooks, ZIP exports, CSV inputs and open jobs
+are available through the Batch API and the SDKs, not this CLI.
 
 **Extract in Batch.** Set `"extract": "auto"` on a line to run that URL through
 Extract — structured data instead of raw HTML:
@@ -201,9 +257,12 @@ zenrows crawl stop <crawl-id>                           # stop a running crawl
 follows links until `--max-items` or `--max-pages` stops it, or nothing is left
 to open. `--max-items` and `--max-pages` cap the crawl (API default 100 each),
 and `--max-pages` bounds the cost, since each page is one fetch. The local policy `max_pages_per_run` caps `--max-pages` (default
-1000). `--output-format html` uses up the page budget: each kept page is one
+10000). `--output-format html` uses up the page budget: each kept page is one
 more fetch, and `--max-pages` counts it. `--include-patterns` /
-`--exclude-patterns` are repeatable substring filters on the URL. `get` and
+`--exclude-patterns` are repeatable substring filters on the URL. A crawl whose
+pages held nothing new to follow ends `completed` with no results and exits 0.
+When patterns were set, it prints a note (under `--json`, in `note`) to check
+them against the URLs the start page links to. `get` and
 `list` read one page and take `--cursor` and `--limit`. `results` follows every
 page (`--limit` is the page size); on a running crawl it returns the URLs kept
 so far, with `partial: true`. `download` reports the crawl's `status` (`null`
@@ -219,7 +278,12 @@ run out (default 600). When the time runs out, the command exits 0 and prints
 the crawl with status `running` and the hint `zenrows crawl wait <crawl-id>`
 (under `--json`, in `note`); the crawl keeps running. Ctrl-C stops the wait, not the crawl, and exits 130;
 resume with `zenrows crawl wait <crawl-id>`. A crawl that ends `failed` exits 1
-with `CRAWL_FAILED`.
+with `CRAWL_FAILED`. A crawl that ends `stopped` because the account ran out of
+credits or the API key hit a credit cap also exits 1, with the code a refused
+create gets: `CRAWL_INSUFFICIENT_CREDITS` or `CRAWL_KEY_CAP_REACHED`, and the
+API's `insufficient_credits` or `api_key_cap_reached` as `server_code`. Older
+deployments end such a crawl `failed`; it gets the same codes. Its fetched pages
+stay readable.
 
 Errors carry the API's code as `server_code`, `crawl_id` on any call about one
 crawl, and `retry_after` on a 429. When the account has reached its limit of

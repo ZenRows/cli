@@ -62,9 +62,9 @@ test("getJob parses latest_run stats", async () => {
     latest_run: { status: "completed", stats: { total: 10, completed: 10, successful: 8, failed: 2 } },
   });
   const job = await getJob("job_1", { apiKey: "k", fetchImpl: impl });
-  assert.equal(job.latest_run.status, "completed");
-  assert.equal(job.latest_run.stats.successful, 8);
-  assert.equal(job.latest_run.stats.failed, 2);
+  assert.equal(job.latest_run?.status, "completed");
+  assert.equal(job.latest_run?.stats.successful, 8);
+  assert.equal(job.latest_run?.stats.failed, 2);
   assert.match(calls[0]!.url, /\/jobs\/job_1$/);
 });
 
@@ -90,13 +90,17 @@ test("listResults paginates across >=2 cursor pages until next_cursor is null", 
   assert.deepEqual(seenCursors, [null, "c1", "c2"]);
 });
 
-test("stopJob posts /jobs/{id}/stop", async () => {
+test("stopJob posts /jobs/{id}/stop and reads the Run it answers with", async () => {
+  // The API answers /stop with the refreshed Run, not the Job.
   const { impl, calls } = jsonFetch(200, {
+    run_id: "run_1",
     job_id: "job_1",
-    latest_run: { status: "stopped", stats: { total: 5, completed: 3, successful: 3, failed: 0 } },
+    status: "stopped",
+    stats: { total: 5, completed: 3, successful: 3, failed: 0 },
   });
-  const job = await stopJob("job_1", { apiKey: "k", fetchImpl: impl });
-  assert.equal(job.latest_run.status, "stopped");
+  const run = await stopJob("job_1", { apiKey: "k", fetchImpl: impl });
+  assert.equal(run.status, "stopped");
+  assert.equal(run.stats.completed, 3);
   assert.equal(calls[0]!.init?.method, "POST");
   assert.match(calls[0]!.url, /\/jobs\/job_1\/stop$/);
 });
@@ -146,6 +150,45 @@ test("problem+json 402 api_key_cap_reached maps to KEY_CREDIT_CAP_REACHED", asyn
   await assert.rejects(
     () => createJob({ type: "regular", status: "closed", tasks: [] }, { apiKey: "k", fetchImpl: impl }),
     (e: unknown) => e instanceof ToolkitError && e.code === "KEY_CREDIT_CAP_REACHED" && /daily cap of 200/.test(e.likely_cause),
+  );
+});
+
+test("problem+json 401 unauthenticated keeps AUTH_INVALID and the re-login guidance", async () => {
+  const { impl } = jsonFetch(
+    401,
+    { title: "Unauthenticated (unauthenticated)", status: 401, code: "unauthenticated", detail: "Invalid API key." },
+    "application/problem+json",
+  );
+  await assert.rejects(
+    () => getJob("job_1", { apiKey: "k", fetchImpl: impl }),
+    (e: unknown) =>
+      e instanceof ToolkitError &&
+      e.code === "AUTH_INVALID" &&
+      /Re-check your key/.test(e.next_action) &&
+      (e.suggested_commands ?? []).some((c) => c.startsWith("zenrows login")),
+  );
+});
+
+test("problem+json 401 subscription_inactive keeps AUTH_INVALID but points to Billing", async () => {
+  const { impl } = jsonFetch(
+    401,
+    {
+      title: "Subscription not active (subscription_inactive)",
+      status: 401,
+      code: "subscription_inactive",
+      detail: "Subscription is not active.",
+    },
+    "application/problem+json",
+  );
+  await assert.rejects(
+    () => getJob("job_1", { apiKey: "k", fetchImpl: impl }),
+    (e: unknown) =>
+      e instanceof ToolkitError &&
+      e.code === "AUTH_INVALID" &&
+      /subscription is not active/.test(e.message) &&
+      /app\.zenrows\.com\/billing/.test(e.next_action) &&
+      /Subscription is not active\./.test(e.likely_cause) &&
+      !(e.suggested_commands ?? []).some((c) => c.startsWith("zenrows login")),
   );
 });
 
@@ -212,7 +255,7 @@ test("waitForJob polls until a terminal status", async () => {
   }) as unknown as typeof fetch;
 
   const job = await waitForJob("j", { apiKey: "k", fetchImpl: impl, sleepImpl: async () => {} });
-  assert.equal(job.latest_run.status, "completed");
+  assert.equal(job.latest_run?.status, "completed");
   assert.equal(i, 3);
 });
 
@@ -228,6 +271,6 @@ test("waitForJob treats failed as terminal", async () => {
   }) as unknown as typeof fetch;
 
   const job = await waitForJob("j", { apiKey: "k", fetchImpl: impl, sleepImpl: async () => {} });
-  assert.equal(job.latest_run.status, "failed");
+  assert.equal(job.latest_run?.status, "failed");
   assert.equal(i, 2);
 });

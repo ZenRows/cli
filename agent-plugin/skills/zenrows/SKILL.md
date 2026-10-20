@@ -21,7 +21,8 @@ You do **not** need an API key in the plugin package.
 - **stdio** (`npx -y @zenrows/mcp`): on first cloud call the server can
   auto-create a **free, unclaimed** Zenrows Free plan account and persist the
   key locally. When the Free plan nears its limit (or the user asks), surface
-  the **claim URL** so a human can claim the account (email + password). The
+  the **claim URL** so a human can claim the account (confirming an email
+  with Google, GitHub or a 6-digit code). Claim links expire after 30 days. The
   same key keeps working after claim. Never handle payment or upgrades —
   only show the claim link.
 - **Remote** (`https://mcp.zenrows.com/mcp`): the client runs **OAuth**

@@ -16,6 +16,7 @@ import { runFetch, type FetchOptions, type ResponseFormat } from "../../adapters
 import { formatRequestCost } from "../../core/http.ts";
 import { parse, asString, asNumber, type Command, type RunContext } from "../command.ts";
 import { printError, writeOut } from "../output.ts";
+import { refreshClaimAdvice } from "../../core/claim-link.ts";
 
 export const fetch_: Command = {
   name: "fetch",
@@ -166,7 +167,9 @@ export const fetch_: Command = {
       }
       await maybeNudgeClaim(config, {});
       return 0;
-    } catch (err) {
+    } catch (caught) {
+      // A quota error's claim advice is built from local state; check it is still current.
+      const err = await refreshClaimAdvice(caught);
       writeRun({
         runId,
         command: "zenrows fetch",

@@ -6,8 +6,15 @@ test("detectClient: claude-code from CLAUDECODE", () => {
   assert.equal(detectClient({ CLAUDECODE: "1" }).client, "claude-code");
 });
 
-test("detectClient: claude-code from a CLAUDE_ prefixed var", () => {
-  assert.equal(detectClient({ CLAUDE_SESSION: "x" }).client, "claude-code");
+test("detectClient: claude-code from Claude Code's own variables", () => {
+  assert.equal(detectClient({ CLAUDE_CODE_ENTRYPOINT: "cli" }).client, "claude-code");
+  assert.equal(detectClient({ CLAUDE_CODE_CHILD_SESSION: "1" }).client, "claude-code");
+});
+
+test("detectClient: unrelated CLAUDE_*/ANTHROPIC_* variables are unknown", () => {
+  assert.equal(detectClient({ CLAUDE_SESSION: "x" }).client, "unknown");
+  assert.equal(detectClient({ CLAUDE_CONFIG_DIR: "x" }).client, "unknown");
+  assert.equal(detectClient({ ANTHROPIC_API_KEY: "x" }).client, "unknown");
 });
 
 test("detectClient: cursor from CURSOR_TRACE_ID", () => {
@@ -18,9 +25,19 @@ test("detectClient: cursor from TERM_PROGRAM", () => {
   assert.equal(detectClient({ TERM_PROGRAM: "cursor" }).client, "cursor");
 });
 
-test("detectClient: openai-codex from OPENAI_/CODEX_", () => {
-  assert.equal(detectClient({ OPENAI_API_KEY: "x" }).client, "openai-codex");
-  assert.equal(detectClient({ CODEX_HOME: "x" }).client, "openai-codex");
+test("detectClient: openai-codex from Codex's own variables", () => {
+  assert.equal(detectClient({ CODEX_SANDBOX: "seatbelt" }).client, "openai-codex");
+  assert.equal(detectClient({ CODEX_SANDBOX_NETWORK_DISABLED: "1" }).client, "openai-codex");
+  assert.equal(detectClient({ CODEX_THREAD_ID: "t" }).client, "openai-codex");
+});
+
+test("detectClient: CODEX_HOME alone (Codex installed, not running) is unknown", () => {
+  assert.equal(detectClient({ CODEX_HOME: "x" }).client, "unknown");
+});
+
+test("detectClient: OPENAI_API_KEY alone is unknown, not openai-codex", () => {
+  assert.equal(detectClient({ OPENAI_API_KEY: "x" }).client, "unknown");
+  assert.equal(detectClient({ OPENAI_API_KEY: "x", OPENAI_BASE_URL: "y", OPENAI_ORG_ID: "z" }).client, "unknown");
 });
 
 test("detectClient: windsurf", () => {

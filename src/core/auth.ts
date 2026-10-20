@@ -4,12 +4,12 @@
  * Resolution order: explicit secrets file → ZENROWS_API_KEY env var.
  * The key is never printed in full and never written into run artifacts.
  */
-import { chmodSync, existsSync } from "node:fs";
+import { existsSync } from "node:fs";
 import type { AuthState, Secrets } from "../types/index.ts";
 import { ToolkitError } from "./errors.ts";
 import { registerSecret } from "./logger.ts";
 import { mask } from "./redact.ts";
-import { findWorkspace, readJson, workspacePaths, writeJson } from "./workspace.ts";
+import { findWorkspace, readJson, workspacePaths, writePrivateJson } from "./workspace.ts";
 
 export const ENV_KEY = "ZENROWS_API_KEY";
 
@@ -55,19 +55,14 @@ export function saveApiKey(apiKey: string, projectRoot?: string): void {
     });
   }
   const file = secretsPath(projectRoot);
-  writeJson(file, { apiKey: trimmed } satisfies Secrets);
-  try {
-    chmodSync(file, 0o600);
-  } catch {
-    // best-effort on platforms without POSIX permissions
-  }
+  writePrivateJson(file, { apiKey: trimmed } satisfies Secrets);
   registerSecret(trimmed);
 }
 
 export function clearApiKey(projectRoot?: string): boolean {
   const file = secretsPath(projectRoot);
   if (!existsSync(file)) return false;
-  writeJson(file, {} satisfies Secrets);
+  writePrivateJson(file, {} satisfies Secrets);
   return true;
 }
 

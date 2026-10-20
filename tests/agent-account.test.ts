@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { tempRoot } from "./helpers.ts";
 import { createWorkspace } from "../src/core/workspace.ts";
-import { readAccount, writeAccount, clearAccount, signupAgent, resolveSignupUrl, SIGNUP_URL_ENV, DISCOVERY_URL_ENV, resolveAccountUrl, fetchAccountStatus, _resetDiscoveryCache } from "../src/core/agent-account.ts";
+import { discoverSignupUrl, siblingOfSignup, requestClaimLink, readAccount, writeAccount, clearAccount, signupAgent, resolveSignupUrl, SIGNUP_URL_ENV, DISCOVERY_URL_ENV, resolveAccountUrl, fetchAccountStatus, _resetDiscoveryCache } from "../src/core/agent-account.ts";
 import { saveConfig } from "../src/core/config.ts";
 import { AGENT_SIGNUP_API_URL } from "../src/core/open-url.ts";
 import { ToolkitError } from "../src/core/errors.ts";
@@ -66,7 +66,7 @@ test("signupAgent falls back to the built-in default when a discovered endpoint 
   process.env.ZENROWS_TELEMETRY = "off"; // skip provenance/telemetry-id side effects
   _resetDiscoveryCache();
 
-  const BLOCKED = "https://www.blocked.example/api/agent/signup";
+  const BLOCKED = "https://blocked.zenrows.com/api/agent/signup";
   const calls: Array<{ method: string; url: string }> = [];
   const fakeFetch = (async (url: string, init?: RequestInit) => {
     const method = init?.method ?? "GET";
@@ -161,16 +161,16 @@ test("resolveSignupUrl: discovers via .well-known when no env/config", async () 
   const fakeFetch = (async (url: string) => {
     calledUrl = url;
     return new Response(
-      JSON.stringify({ agent_auth: { signup_endpoint: "https://disco.example/api/agent/signup" } }),
+      JSON.stringify({ agent_auth: { signup_endpoint: "https://disco.zenrows.com/api/agent/signup" } }),
       { status: 200, headers: { "content-type": "application/json" } },
     );
   }) as unknown as typeof fetch;
   try {
     createWorkspace(root);
-    assert.equal(await resolveSignupUrl(root, { fetchImpl: fakeFetch }), "https://disco.example/api/agent/signup");
+    assert.equal(await resolveSignupUrl(root, { fetchImpl: fakeFetch }), "https://disco.zenrows.com/api/agent/signup");
     assert.ok(calledUrl?.endsWith("/.well-known/oauth-protected-resource"));
     // resolveAccountUrl derives /account from the discovered (cached) signup URL.
-    assert.equal(await resolveAccountUrl(root), "https://disco.example/api/agent/account");
+    assert.equal(await resolveAccountUrl(root), "https://disco.zenrows.com/api/agent/account");
   } finally {
     if (prevSignup !== undefined) process.env[SIGNUP_URL_ENV] = prevSignup;
     else delete process.env[SIGNUP_URL_ENV];
@@ -184,10 +184,10 @@ test("resolveSignupUrl: discovers via .well-known when no env/config", async () 
 test("resolveAccountUrl derives /account from the signup URL", async () => {
   const { root, cleanup } = tempRoot();
   const prev = process.env[SIGNUP_URL_ENV];
-  process.env[SIGNUP_URL_ENV] = "http://localhost.com:8000/api/agent/signup";
+  process.env[SIGNUP_URL_ENV] = "http://localhost:8000/api/agent/signup";
   try {
     createWorkspace(root);
-    assert.equal(await resolveAccountUrl(root), "http://localhost.com:8000/api/agent/account");
+    assert.equal(await resolveAccountUrl(root), "http://localhost:8000/api/agent/account");
   } finally {
     if (prev !== undefined) process.env[SIGNUP_URL_ENV] = prev;
     else delete process.env[SIGNUP_URL_ENV];
@@ -216,4 +216,84 @@ test("signupAgent throws SIGNUP_RATE_LIMITED on 429", async () => {
     () => signupAgent({ fetchImpl: fakeFetch }),
     (e: unknown) => e instanceof ToolkitError && e.code === "SIGNUP_RATE_LIMITED",
   );
+});
+
+test("discoverSignupUrl: a non-Zenrows or non-https endpoint is ignored, so the key never goes there", async () => {
+  for (const endpoint of [
+    "https://evil.example/api/agent/signup",
+    "http://app.zenrows.com/api/agent/signup",
+    "https://zenrows.com.evil.example/api/agent/signup",
+    "https://user:pw@app.zenrows.com/api/agent/signup",
+  ]) {
+    const fakeFetch = (async () =>
+      new Response(JSON.stringify({ agent_auth: { signup_endpoint: endpoint } }), { status: 200 })) as unknown as typeof fetch;
+    assert.equal(await discoverSignupUrl(undefined, { fetchImpl: fakeFetch }), null, endpoint);
+  }
+  const ok = (async () =>
+    new Response(JSON.stringify({ agent_auth: { signup_endpoint: "https://api.zenrows.com/api/agent/signup" } }), { status: 200 })) as unknown as typeof fetch;
+  assert.equal(await discoverSignupUrl(undefined, { fetchImpl: ok }), "https://api.zenrows.com/api/agent/signup");
+});
+
+test("siblingOfSignup: derives /account and /claim, else falls back to the built-in endpoint", () => {
+  assert.equal(siblingOfSignup("http://127.0.0.1:9/api/agent/signup", "claim"), "http://127.0.0.1:9/api/agent/claim");
+  assert.equal(siblingOfSignup("https://x.zenrows.com/api/agent/signup/", "account"), "https://x.zenrows.com/api/agent/account");
+  assert.equal(siblingOfSignup("https://x.zenrows.com/api/agent/register", "claim"), AGENT_SIGNUP_API_URL.replace(/\/signup$/, "/claim"));
+});
+
+test("requestClaimLink: a non-JSON 200 is reported as an unexpected response, not a network failure", async () => {
+  const fakeFetch = (async () => new Response("<html>oops</html>", { status: 200 })) as unknown as typeof fetch;
+  await assert.rejects(requestClaimLink("k", { url: "https://x.zenrows.com/api/agent/claim", fetchImpl: fakeFetch }), (e: unknown) =>
+    e instanceof ToolkitError && e.code === "FETCH_FAILED" && /without a claim link/.test(e.message));
+});
+
+test("requestClaimLink: 409 not_agent_account is final", async () => {
+  const fakeFetch = (async () => new Response(JSON.stringify({ error: "not_agent_account" }), { status: 409 })) as unknown as typeof fetch;
+  assert.deepEqual(await requestClaimLink("k", { url: "https://x.zenrows.com/api/agent/claim", fetchImpl: fakeFetch }), { status: "not_agent" });
+});
+
+test("siblingOfSignup: an override that is not Zenrows or loopback never receives the key", () => {
+  const builtIn = AGENT_SIGNUP_API_URL.replace(/\/signup$/, "/account");
+  for (const override of [
+    "https://evil.example/api/agent/signup",
+    "http://app.zenrows.com/api/agent/signup",
+    "https://u:p@app.zenrows.com/api/agent/signup",
+    "http://u@127.0.0.1:9/api/agent/signup",
+    "http://10.0.0.5/api/agent/signup",
+  ]) {
+    assert.equal(siblingOfSignup(override, "account"), builtIn, override);
+  }
+  for (const ok of ["http://localhost:8000/api/agent/signup", "https://[::1]:8443/api/agent/signup", "https://staging.zenrows.com/api/agent/signup"]) {
+    assert.equal(siblingOfSignup(ok, "account"), ok.replace(/\/signup$/, "/account"), ok);
+  }
+});
+
+test("fetchAccountStatus: a project config's untrusted signupUrl is not where the key goes; the project root is honoured", async () => {
+  const { root, cleanup } = tempRoot();
+  const prevSignup = process.env[SIGNUP_URL_ENV];
+  delete process.env[SIGNUP_URL_ENV];
+  const calls: string[] = [];
+  const fakeFetch = (async (url: string) => {
+    calls.push(String(url));
+    return new Response(JSON.stringify({ accountId: "u1", claimed: false, isAgent: true }), { status: 200 });
+  }) as unknown as typeof fetch;
+  try {
+    createWorkspace(root);
+    const cfg = { apiBase: "https://api.zenrows.com/v1/", defaultMode: "auto" as const, telemetry: "off" as const, version: "0.1.0" };
+    saveConfig({ ...cfg, signupUrl: "https://attacker.example/api/agent/signup" }, root);
+    await fetchAccountStatus("k", { projectRoot: root, fetchImpl: fakeFetch });
+    assert.deepEqual(calls, [AGENT_SIGNUP_API_URL.replace(/\/signup$/, "/account")]);
+    calls.length = 0;
+    saveConfig({ ...cfg, signupUrl: "http://127.0.0.1:9/api/agent/signup" }, root);
+    await requestClaimLink("k", { projectRoot: root, fetchImpl: (async (url: string) => {
+      calls.push(String(url));
+      return new Response(JSON.stringify({ claimUrl: "https://app.zenrows.com/claim/t" }), { status: 200 });
+    }) as unknown as typeof fetch });
+    assert.deepEqual(calls, ["http://127.0.0.1:9/api/agent/claim"]);
+    calls.length = 0;
+    await fetchAccountStatus("k", { projectRoot: root, fetchImpl: fakeFetch });
+    assert.deepEqual(calls, ["http://127.0.0.1:9/api/agent/account"]);
+  } finally {
+    if (prevSignup !== undefined) process.env[SIGNUP_URL_ENV] = prevSignup;
+    cleanup();
+  }
 });

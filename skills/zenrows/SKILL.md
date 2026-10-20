@@ -22,7 +22,9 @@ key locally — no human step required. To opt out, pass `--no-signup` or set
 
 When the Free plan nears its limit (or the user asks), tell the human they can **claim** the
 account to keep their usage and history: run `zenrows account claim` (or open the claim URL
-shown on quota errors). Claiming sets an email + password; the same key keeps working.
+shown on quota errors). It prints a valid link, requesting a fresh one when the stored link is
+near its 30-day expiry. Claiming confirms an email (Google, GitHub or a 6-digit code); the same
+key keeps working.
 Never attempt to handle payment or upgrades — only surface the claim link.
 
 ## The decision tree (follow this exactly)
@@ -41,7 +43,8 @@ If the user has a start page (listing, index, section) but not the item URLs:
 If the user has many URLs (bulk):
   → Use Batch.                      (validate one page with fetch/extract first,
                                      then `zenrows batch create <jobs.jsonl>`)
-                                     Batch is the cheap path at scale — do NOT
+                                     Batch is the reliable path at scale, at
+                                     Fetch's prices. Do NOT
                                      fan out fetch/extract per URL for bulk work.
 
 If the user needs login, clicks, forms, sessions, or persistent state:
@@ -82,7 +85,7 @@ Run `zenrows status` for the live capability matrix. As of this toolkit:
   (`EXTRACT_DOMAIN_NOT_PREPARED`), run `zenrows extract prepare <domain> --url
   <page> --wait`, then extract again. `EXTRACT_PAGE_NOT_RECOGNISED` means the
   domain is prepared but not this page: do not prepare again; see [[extract]].
-- Batch: the cheapest path at scale (create, status, results). Estimate specs locally with no key.
+- Batch: the reliable path at scale, at Fetch's prices (create, list, status, wait, results, content, pause, resume, rerun, delete). Estimate specs locally with no key.
 - Crawl: collects the URLs behind one start page, optionally with each page's HTML.
 - Browser: escalation-only, for pages Fetch can't handle; same backend as the MCP `browser_*` tools.
 

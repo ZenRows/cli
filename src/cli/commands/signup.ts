@@ -22,10 +22,11 @@ export const signup: Command = {
 
     if (values.agent) {
       const account = readAccount();
-      if (account) { log.info("An agent account already exists. Claim it: " + account.claimUrl); return 0; }
+      if (account) { log.info("An agent account already exists. Claim it with: zenrows account claim"); return 0; }
       const res = await signupAgent();
       saveApiKey(res.apiKey);
-      writeAccount({ accountId: res.accountId, unclaimed: true, claimUrl: res.claimUrl, createdAt: new Date().toISOString() });
+      const now = new Date().toISOString();
+      writeAccount({ accountId: res.accountId, unclaimed: true, claimUrl: res.claimUrl, createdAt: now, claimUrlIssuedAt: now });
       log.success("Created a Zenrows Free plan account.");
       log.dim(`Claim it anytime: ${res.claimUrl}`);
       if (ctx.json) log.out(JSON.stringify({ ok: true, accountId: res.accountId, claimUrl: res.claimUrl }, null, 2));
