@@ -35,6 +35,15 @@ export type ErrorCode =
   | "BATCH_QUOTA_EXCEEDED"
   | "BATCH_NOT_FOUND"
   | "BATCH_FAILED"
+  | "BATCH_RUN_IN_PROGRESS"
+  | "BATCH_RUN_ENDED"
+  | "BATCH_NO_MATCHING_TASKS"
+  | "BATCH_RERUN_WINDOW_EXPIRED"
+  | "BATCH_REQUEST_IN_FLIGHT"
+  | "BATCH_CONFLICT"
+  | "BATCH_TASK_NOT_READY"
+  | "BATCH_TASK_FAILED"
+  | "BATCH_RESULT_EXPIRED"
   | "CRAWL_NOT_ENABLED"
   | "CRAWL_INSUFFICIENT_CREDITS"
   | "CRAWL_KEY_CAP_REACHED"
@@ -63,6 +72,13 @@ export interface ToolkitErrorShape {
   server_code?: string;
   /** The crawl the error is about, once it exists. */
   crawl_id?: string;
+  /** The Batch job the error is about, once it exists. */
+  job_id?: string;
+  /**
+   * The Idempotency-Key a Batch write was sent with, when its outcome is
+   * unknown. Repeating the same request with this key cannot create a duplicate.
+   */
+  idempotency_key?: string;
   /** Seconds to wait before a retry (the `Retry-After` header). */
   retry_after?: number;
 }
@@ -74,6 +90,8 @@ export class ToolkitError extends Error {
   readonly suggested_commands: string[];
   readonly server_code?: string;
   readonly crawl_id?: string;
+  readonly job_id?: string;
+  readonly idempotency_key?: string;
   readonly retry_after?: number;
 
   constructor(shape: ToolkitErrorShape) {
@@ -85,6 +103,8 @@ export class ToolkitError extends Error {
     this.suggested_commands = shape.suggested_commands ?? [];
     this.server_code = shape.server_code;
     this.crawl_id = shape.crawl_id;
+    this.job_id = shape.job_id;
+    this.idempotency_key = shape.idempotency_key;
     this.retry_after = shape.retry_after;
   }
 
@@ -97,6 +117,8 @@ export class ToolkitError extends Error {
       suggested_commands: this.suggested_commands,
       ...(this.server_code ? { server_code: this.server_code } : {}),
       ...(this.crawl_id ? { crawl_id: this.crawl_id } : {}),
+      ...(this.job_id ? { job_id: this.job_id } : {}),
+      ...(this.idempotency_key ? { idempotency_key: this.idempotency_key } : {}),
       ...(this.retry_after !== undefined ? { retry_after: this.retry_after } : {}),
     };
   }

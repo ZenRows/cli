@@ -34,7 +34,7 @@ zenrows crawl results <id> --out urls.jsonl  # same, as JSONL
   a depth has no `depth` field in its output.
 - `--max-items` (kept URLs) and `--max-pages` (fetched pages) cap the crawl;
   both default to 100. `--max-pages` bounds the cost: each page is one fetch.
-  The local policy `max_pages_per_run` caps `--max-pages` (default 1000);
+  The local policy `max_pages_per_run` caps `--max-pages` (default 10000);
   above it the CLI refuses with `POLICY_LIMIT_EXCEEDED` before any request.
 - `--include-patterns` / `--exclude-patterns` are substring matches on the
   normalized URL and repeat:

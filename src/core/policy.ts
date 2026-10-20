@@ -5,10 +5,17 @@ import type { Policy } from "../types/index.ts";
 import { ToolkitError } from "./errors.ts";
 import { findWorkspace, readJson, workspacePaths, writeJson } from "./workspace.ts";
 
+/**
+ * Safe defaults. The per-run caps let a default run submit up to 10,000 URLs
+ * in any mode: an Adaptive Stealth Mode task is estimated at its 25-credit
+ * upper bound, so 10,000 of them estimate at 250,000 credits. Larger runs
+ * (the Batch API takes up to 100,000 tasks per job) need the caps raised
+ * explicitly with `zenrows policy set`.
+ */
 export function defaultPolicy(): Policy {
   return {
-    max_credits_per_run: 10000,
-    max_pages_per_run: 1000,
+    max_credits_per_run: 250_000,
+    max_pages_per_run: 10_000,
     max_concurrency: 20,
     allow_browser: true,
     allow_experimental: false,
@@ -111,8 +118,8 @@ export function assertWithinLimits(
       code: "POLICY_LIMIT_EXCEEDED",
       message: `This ${context} submits ${requested.pages} page(s), over the policy cap of ${policy.max_pages_per_run}.`,
       likely_cause: "policy.max_pages_per_run bounds how many URLs a single run may submit.",
-      next_action: `Split the job into runs of ≤${policy.max_pages_per_run} page(s), or raise max_pages_per_run in policy.json.`,
-      suggested_commands: ["zenrows policy show"],
+      next_action: `Split the job into runs of at most ${policy.max_pages_per_run} page(s), or raise the cap: \`zenrows policy set max_pages_per_run ${requested.pages}\` (default ${defaultPolicy().max_pages_per_run}).`,
+      suggested_commands: [`zenrows policy set max_pages_per_run ${requested.pages}`, "zenrows policy show"],
     });
   }
   if (requested.credits !== undefined && requested.credits > policy.max_credits_per_run) {
@@ -120,8 +127,8 @@ export function assertWithinLimits(
       code: "POLICY_LIMIT_EXCEEDED",
       message: `This ${context} is estimated at ${requested.credits} credit(s), over the policy cap of ${policy.max_credits_per_run}.`,
       likely_cause: "policy.max_credits_per_run bounds the estimated credit cost of a single run.",
-      next_action: "Reduce the job size or per-task cost (e.g. drop premium_proxy/js_render), or raise max_credits_per_run in policy.json.",
-      suggested_commands: ["zenrows policy show"],
+      next_action: `Reduce the job size or per-task cost (e.g. drop premium_proxy/js_render), or raise the cap: \`zenrows policy set max_credits_per_run ${requested.credits}\` (default ${defaultPolicy().max_credits_per_run}). The estimate is an upper bound: an Adaptive Stealth Mode task counts 25 credits, and is billed 1 to 25.`,
+      suggested_commands: [`zenrows policy set max_credits_per_run ${requested.credits}`, "zenrows policy show"],
     });
   }
 }

@@ -43,7 +43,8 @@ If the user has a start page (listing, index, section) but not the item URLs:
 If the user has many URLs (bulk):
   → Use Batch.                      (validate one page with fetch/extract first,
                                      then `zenrows batch create <jobs.jsonl>`)
-                                     Batch is the cheap path at scale — do NOT
+                                     Batch is the reliable path at scale, at
+                                     Fetch's prices. Do NOT
                                      fan out fetch/extract per URL for bulk work.
 
 If the user needs login, clicks, forms, sessions, or persistent state:
@@ -81,7 +82,7 @@ Run `zenrows status` for the live capability matrix. As of this toolkit:
 | MCP | `zenrows mcp` | **available**: `https://mcp.zenrows.com/mcp` |
 
 - Extract: `extract=auto` falls back to Autoparse on a domain not prepared yet.
-- Batch: the cheapest path at scale (create, status, results). Estimate specs locally with no key.
+- Batch: the reliable path at scale, at Fetch's prices (create, list, status, wait, results, content, pause, resume, rerun, delete). Estimate specs locally with no key.
 - Crawl: collects the URLs behind one start page, optionally with each page's HTML.
 - Browser: escalation-only, for pages Fetch can't handle; same backend as the MCP `browser_*` tools.
 
