@@ -52,8 +52,7 @@ zenrows fetch <url> --manual --js-render --premium-proxy   # the most expensive 
   `--retries 0` sends once). No retry starts after 90 s. Do not wrap it in your
   own retry loop. `--json` reports `attempts`, the number of requests sent.
 - The CLI does not retry a timeout, a connection that closed after the request
-  was sent, an out-of-credits 429 (`AUTH004`, `AUTH014`), or a status the target
-  sent under `--original-status`.
+  was sent, or a status the target sent under `--original-status`.
 
 Every run is saved under `.zenrows/runs/<run-id>/` (no secrets). See [[extract]]
 for structured output and [[cost-control]] for the cost model.

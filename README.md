@@ -131,10 +131,8 @@ The CLI does not retry:
 1. A client timeout (`--timeout`, default 200000 ms, above the API's own 180 s
    budget). The API may still finish and charge that request.
 2. A connection that closed after the request was sent, for the same reason.
-3. A 429 whose code says the account or the API key is out of credits
-   (`AUTH004`, `AUTH014`).
-4. A status the target site sent, under `--original-status`.
-5. Any request of `zenrows extract prepare` (section 8). A 429 there means the
+3. A status the target site sent, under `--original-status`.
+4. Any request of `zenrows extract prepare` (section 8). A 429 there means the
    monthly allowance is used up, and a 503 means preparation is unavailable.
    Both are answers, and the error names the next step.
 

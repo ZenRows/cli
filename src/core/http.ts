@@ -82,13 +82,6 @@ export const RETRY_BUDGET_MS = 90_000;
 const RETRY_STATUSES: ReadonlySet<number> = new Set([429, 502, 503, 504]);
 
 /**
- * Error codes that say the account or key is out of credits (402/429 `AUTH004`,
- * `AUTH014`, per docs.zenrows.com/api-error-codes). A 429 with one of these
- * answers the same until the account changes, so it is not retried.
- */
-const QUOTA_CODES: ReadonlySet<string> = new Set(["AUTH004", "AUTH014"]);
-
-/**
  * `error.cause.code` values that mean the request was never written to the
  * API: the connection was refused, the name did not resolve, the connect timed
  * out or the network was unreachable. Only these network errors are retried.
@@ -142,8 +135,8 @@ function buildUrl(apiBase: string, apiKey: string, params: ScraperParams): { ful
  * Retries 429, 502, 503 and 504, and network errors that happened before the
  * request was written, up to `retries` times, with full jitter or the server's
  * Retry-After. No retry starts after `RETRY_BUDGET_MS` from the first request. Our own timeout is never retried, and neither is any other
- * status, a 429 out-of-credits code, or a status that belongs to the target
- * site (`original_status`, `allowed_status_codes`).
+ * status or a status that belongs to the target site (`original_status`,
+ * `allowed_status_codes`).
  */
 export async function scrape(
   apiBase: string,
@@ -171,7 +164,7 @@ export async function scrape(
       continue;
     }
     const body = sent.raw.toString("utf8");
-    if (n < retries && isRetryable(sent.res.status, body, params)) {
+    if (n < retries && isRetryable(sent.res.status, params)) {
       const delayMs = retryAfterDelayMs(sent.res.headers.get("retry-after")) ?? fullJitterMs(n, opts.randomImpl);
       if (now() - startedAt + delayMs <= RETRY_BUDGET_MS) {
         const code = zrErrorCode(body);
@@ -189,13 +182,12 @@ export async function scrape(
 }
 
 /**
- * True for a status worth another attempt. Not retried: a 429 whose code says
- * the account or key is out of credits, and any status the target site sent.
+ * True for a status worth another attempt. Not retried: any status the target
+ * site sent. The out-of-credits codes (`AUTH004`, `AUTH014`) arrive as a 402,
+ * which is not a retried status, so they need no rule here.
  */
-function isRetryable(status: number, body: string, params: ScraperParams): boolean {
-  if (!RETRY_STATUSES.has(status)) return false;
-  if (isTargetStatus(status, params)) return false;
-  return !(status === 429 && QUOTA_CODES.has(zrErrorCode(body) ?? ""));
+function isRetryable(status: number, params: ScraperParams): boolean {
+  return RETRY_STATUSES.has(status) && !isTargetStatus(status, params);
 }
 
 /**

@@ -351,23 +351,30 @@ test("conformance: 422 no_data_extracted and any other 422 are not retried by th
   }
 });
 
-test("a 429 that says the account is out of credits is not retried", async () => {
-  const body = JSON.stringify({ code: "AUTH004", title: "Usage exceeded", detail: "No credit available" });
-  const { impl, calls } = seqFetch([{ status: 429, body }, OK]);
-  const { sleepImpl } = recordSleep();
+// AUTH004 and AUTH014 are 402 answers in the API, and 402 is not retried. A 429
+// never carries them, so the retry decision must not special-case them either.
+test("a 429 is retried even when its body carries an out-of-credits code (AUTH004, AUTH014)", async () => {
+  for (const code of ["AUTH004", "AUTH014"]) {
+    const body = JSON.stringify({ code, title: `Usage exceeded (${code})`, detail: "No credit available" });
+    const { impl, calls } = seqFetch([{ status: 429, body }, OK]);
+    const { sleepImpl, waits } = recordSleep();
+    const r = await scrape(API, "k", { url: "https://x" }, { fetchImpl: impl, sleepImpl });
+    assert.equal(r.status, 200, code);
+    assert.equal(calls(), 2, code);
+    assert.equal(waits.length, 1, code);
+  }
+});
+
+test("a 402 AUTH004 (account out of credits) is sent once and reported as out of credits", async () => {
+  const body = JSON.stringify({ code: "AUTH004", title: "Usage exceeded (AUTH004)", detail: "No credit available", status: 402 });
+  const { impl, calls } = seqFetch([{ status: 402, body }, OK]);
+  const { sleepImpl, waits } = recordSleep();
   await assert.rejects(
     () => scrape(API, "k", { url: "https://x" }, { fetchImpl: impl, sleepImpl }),
     (err: unknown) => (err as ToolkitError).code === "POLICY_MAX_CREDITS_EXCEEDED",
   );
   assert.equal(calls(), 1);
-});
-
-test("a 429 whose code says the key reached its credit cap (AUTH014) is not retried", async () => {
-  const body = JSON.stringify({ code: "AUTH014", title: "API key credit cap reached (AUTH014)" });
-  const { impl, calls } = seqFetch([{ status: 429, body }, OK]);
-  const { sleepImpl } = recordSleep();
-  await assert.rejects(() => scrape(API, "k", { url: "https://x" }, { fetchImpl: impl, sleepImpl }));
-  assert.equal(calls(), 1);
+  assert.deepEqual(waits, []);
 });
 
 test("a 429 is retried by its code, not by keywords: concurrency, rate limit and non-JSON pages all retry", async () => {
