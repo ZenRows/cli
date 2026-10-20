@@ -634,50 +634,18 @@ test("a 503 RESP009 that clears on retry returns the page", async () => {
   assert.equal(r.status, 200);
 });
 
-test("the Extract-not-enabled fallback to autoparse is unchanged and spends no retries", async () => {
+test("an Extract AUTH010 is sent once: it is not retried, and nothing falls back to Autoparse", async () => {
   const seen: string[] = [];
   const impl = (async (input: string | URL | Request) => {
     const u = new URL(String(input));
     seen.push(u.searchParams.get("extract") ? "extract" : u.searchParams.get("autoparse") ? "autoparse" : "other");
-    if (u.searchParams.get("extract")) {
-      return new Response(AUTH010, { status: 402, headers: { "content-type": "application/json" } });
-    }
-    return new Response(JSON.stringify({ title: "ok" }), { status: 200, headers: { "content-type": "application/json" } });
+    return new Response(AUTH010, { status: 402, headers: { "content-type": "application/json" } });
   }) as unknown as typeof fetch;
   await withGlobalFetch(impl, async () => {
-    const outcome = await runExtract({ url: "https://x.com/p" }, defaultConfig(), defaultPolicy(), "k");
-    assert.equal(outcome.fellBackToAutoparse, true);
-    // Both requests of the call are counted.
-    assert.equal(outcome.result.attempts, 2);
+    await assert.rejects(
+      () => runExtract({ url: "https://x.com/p" }, defaultConfig(), defaultPolicy(), "k"),
+      (err: unknown) => (err as ToolkitError).code === "EXTRACT_DOMAIN_NOT_PREPARED",
+    );
   });
-  assert.deepEqual(seen, ["extract", "autoparse"]);
-});
-
-test("the Autoparse fallback shares the first request's 90 s budget instead of starting a new one", async () => {
-  const realNow = Date.now;
-  let clock = realNow();
-  Date.now = () => clock;
-  const seen: string[] = [];
-  const impl = (async (input: string | URL | Request) => {
-    const u = new URL(String(input));
-    if (u.searchParams.get("extract")) {
-      seen.push("extract");
-      clock += 89_900; // the Extract request took 89.9 s
-      return new Response(AUTH010, { status: 402, headers: { "content-type": "application/json" } });
-    }
-    seen.push("autoparse");
-    return new Response(RESP009, { status: 503, headers: { "content-type": "application/json", "retry-after": "1" } });
-  }) as unknown as typeof fetch;
-  try {
-    await withGlobalFetch(impl, async () => {
-      await assert.rejects(
-        () => runExtract({ url: "https://x.com/p", retries: 1 }, defaultConfig(), defaultPolicy(), "k"),
-        (err: unknown) => (err as ToolkitError).code === "SERVICE_BUSY",
-      );
-    });
-  } finally {
-    Date.now = realNow;
-  }
-  // 89.9 s spent + a 1 s wait would pass 90 s, so the fallback is sent once.
-  assert.deepEqual(seen, ["extract", "autoparse"]);
+  assert.deepEqual(seen, ["extract"]);
 });

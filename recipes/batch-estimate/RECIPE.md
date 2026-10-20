@@ -23,11 +23,14 @@ zenrows batch estimate jobs.jsonl
 ```
 
 Swap `jobs.jsonl` for your own spec. Per-line keys (`js_render`,
-`premium_proxy`, `proxy_country`, `mode`, `autoparse`, `external_id`) tune each
-URL; cost multipliers are basic 1x / JS 5x / proxy 10x / both 25x.
+`premium_proxy`, `proxy_country`, `mode`, `autoparse`, `external_id`,
+`metadata`, `method`, `body`) tune each URL; cost multipliers are basic 1x / JS
+5x / proxy 10x / both 25x, and Adaptive Stealth Mode costs 1x to 25x. Pass
+`create`'s job-level flags (`--premium-proxy`, `--js-render`, `--manual`) to
+`estimate` to price the same request.
 
 Once the spec is clean, submit it:
 ```
-zenrows batch create jobs.jsonl --wait
+zenrows batch create jobs.jsonl --follow
 ```
 See [[batch-jobs]] for the full cloud flow.

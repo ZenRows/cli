@@ -21,13 +21,6 @@ const RESP009 = JSON.stringify({
   type: "https://docs.zenrows.com/api-error-codes#RESP009",
 });
 
-const AUTH010 = JSON.stringify({
-  code: "AUTH010",
-  status: 402,
-  title: "Feature is not included in plan (AUTH010)",
-  type: "https://docs.zenrows.com/api-error-codes#AUTH010",
-});
-
 type Handler = (url: URL) => Response;
 
 /** Run `fn` in a fresh workspace with a saved key; every request goes to `handler`. */
@@ -144,22 +137,6 @@ for (const c of BUSY_CASES) {
   });
 }
 
-test("SERVICE_BUSY after the Autoparse fallback suggests the extract command that ran", async () => {
-  await inWorkspace(
-    (url) => (url.searchParams.get("extract") ? json(AUTH010, 402) : json(RESP009, 503)),
-    async (calls) => {
-      const { code, out } = await run(extract, [URL_, "--retries", "0"]);
-      assert.equal(code, 1);
-      assert.equal(out.error.code, "SERVICE_BUSY");
-      assert.deepEqual(out.error.suggested_commands, [`zenrows extract ${URL_} --retries 0 --json`]);
-      assert.deepEqual(
-        calls.map((u) => (u.searchParams.get("extract") ? "extract" : u.searchParams.get("autoparse") ? "autoparse" : "?")),
-        ["extract", "autoparse"],
-      );
-    },
-  );
-});
-
 test("extract --retries 0 sends the request once", async () => {
   await inWorkspace(
     () => new Response("busy", { status: 503 }),
@@ -194,13 +171,49 @@ test("--json reports how many HTTP requests the command sent", async () => {
       assert.equal(calls.length, 2);
     },
   );
+  n = 0;
   await inWorkspace(
-    (url) => (url.searchParams.get("extract") ? json(AUTH010, 402) : json(JSON.stringify({ title: "ok" }), 200)),
-    async () => {
+    () =>
+      ++n === 1
+        ? new Response(RESP009, { status: 503, headers: { "content-type": "application/json", "retry-after": "0" } })
+        : json(JSON.stringify({ title: "ok" }), 200),
+    async (calls) => {
       const { code, out } = await run(extract, [URL_]);
       assert.equal(code, 0);
-      assert.equal(out.fellBackToAutoparse, true);
+      assert.equal(out.ok, true);
       assert.equal(out.attempts, 2);
+      assert.equal(calls.length, 2);
     },
   );
 });
+
+// The prepared-domains endpoints answer 429 (allowance used) and 503 (preparation
+// unavailable) as answers to read, not as busy signals, so `zenrows extract
+// prepare` keeps them out of the Fetch and Extract retry.
+for (const [name, args, status, code] of [
+  ["submit 429 out_of_allowance", ["prepare", "x.com", "--url", URL_], 429, "out_of_allowance"],
+  ["submit 503 overloaded", ["prepare", "x.com", "--url", URL_], 503, "overloaded"],
+  ["submit plain 503", ["prepare", "x.com", "--url", URL_], 503, undefined],
+  ["status 429", ["prepare", "status", "x.com"], 429, "out_of_allowance"],
+  ["status 503", ["prepare", "status", "x.com"], 503, "overloaded"],
+] as const) {
+  test(`extract prepare does not retry: ${name}`, async () => {
+    await inWorkspace(
+      () =>
+        new Response(code ? JSON.stringify({ code, status, title: code, detail: `${code} detail` }) : "busy", {
+          status,
+          headers: { "content-type": code ? "application/problem+json" : "text/plain", "retry-after": "0" },
+        }),
+      async (calls) => {
+        const { code: exit, out } = await run(extract, [...args]);
+        assert.equal(exit, 1);
+        assert.match(out.error.code, /^EXTRACT_PREPARE_/);
+        // A status call also reads the allowance, which answers the same; each is sent once.
+        const prepared = calls.filter((u) => u.pathname.includes("/extract/prepared-domains"));
+        assert.equal(prepared.length, calls.length);
+        assert.equal(calls.length, args[1] === "status" ? 2 : 1);
+        assert.equal(new Set(calls.map((u) => u.pathname)).size, calls.length);
+      },
+    );
+  });
+}

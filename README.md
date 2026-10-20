@@ -37,7 +37,7 @@ that endpoint with extraction parameters, not a separate product.
 | Command | What it does | Status (this build) |
 | --- | --- | --- |
 | `zenrows fetch` | Fetch: retrieve a protected page | **available**: `GET https://api.zenrows.com/v1/` |
-| `zenrows extract` | Extract: turn a page into structured data with `extract=auto` on any prepared domain (falls back to Autoparse on one not prepared yet), CSS selectors, or Markdown | **available**: `GET https://api.zenrows.com/v1/?extract=auto` |
+| `zenrows extract` | Extract: turn a page into structured data with `extract=auto` on any prepared domain (prepare one yourself with `zenrows extract prepare`), CSS selectors, or Markdown | **available**: `GET https://api.zenrows.com/v1/?extract=auto` |
 | `zenrows batch` | Batch: run Fetch and Extract over many URLs in one job; specs validate and estimate locally with no key | **available**: `POST https://async.api.zenrows.com/v1/jobs` |
 | `zenrows crawl` | Crawl (new): collect the URLs behind one start page, optionally with each page's HTML | **available**: `POST https://api.zenrows.com/v1/crawls` |
 | `zenrows browser` | Browser Sessions: a real cloud browser over REST (same backend as MCP `browser_*`); escalation-only, billed by bandwidth + time | **available**: `POST https://mcp.zenrows.com/browser/sessions` |
@@ -56,7 +56,7 @@ npm install -g @zenrows/cli # puts `zenrows` on PATH (466 ms, zero deps)
 zenrows init
 zenrows fetch https://httpbin.io/html # auto-provisions a Free plan account on first use
 zenrows extract https://www.owler.com/company/meltwater # extract=auto on a prepared domain
-zenrows extract https://www.scrapingcourse.com/ecommerce/ --autoparse # Autoparse (any domain)
+zenrows extract https://www.scrapingcourse.com/ecommerce/ --css '{"title":"h1"}' # CSS selectors (any domain)
 ```
 
 > Prefer no global install? Prefix each command with `npx -y @zenrows/cli`
@@ -121,10 +121,10 @@ that happened before the request reached the API: a refused connection, a name
 that did not resolve, a connect timeout or an unreachable network. Each wait
 honours `Retry-After` in whole seconds (at least 0.25 s, at most 30 s) or is a
 random delay that grows with each retry. No retry starts after 90 s, counted
-from the command's first request; Extract's fallback to Autoparse shares that
-clock. A running request is not cut short, so a command can take longer than
-90 s. None of the retried statuses is charged. The CLI has no cancel option of
-its own; Ctrl-C ends the command, including a wait between retries.
+from the command's first request. A running request is not cut short, so a
+command can take longer than 90 s. None of the retried statuses is charged. The
+CLI has no cancel option of its own; Ctrl-C ends the command, including a wait
+between retries.
 
 The CLI does not retry:
 
@@ -134,6 +134,9 @@ The CLI does not retry:
 3. A 429 whose code says the account or the API key is out of credits
    (`AUTH004`, `AUTH014`).
 4. A status the target site sent, under `--original-status`.
+5. Any request of `zenrows extract prepare` (section 8). A 429 there means the
+   monthly allowance is used up, and a 503 means preparation is unavailable.
+   Both are answers, and the error names the next step.
 
 With `--json`, `attempts` in the result says how many HTTP requests the command
 sent (1 means no retry). When the retries run out, the error suggests the same
@@ -143,30 +146,101 @@ command again rather than a costlier configuration.
 
 ```bash
 zenrows extract https://www.owler.com/company/meltwater                # extract=auto (prepared domain)
-zenrows extract https://www.scrapingcourse.com/ecommerce/ --autoparse   # Autoparse (any domain)
+zenrows extract https://www.scrapingcourse.com/ecommerce/ --autoparse   # deprecated Autoparse (any domain)
 zenrows extract <url> --css '{"title":"h1","price":".price"}' --validate
 zenrows extract <url> --outputs emails,links                            # built-in output filters → JSON
 zenrows extract <url> --output markdown
+```
+
+On a domain Extract hasn't prepared yet, `zenrows extract` fails with
+`EXTRACT_DOMAIN_NOT_PREPARED` (API code REQS007) and prints the command to
+prepare it. Preparing takes a few minutes and costs no credits; each new domain
+uses one slot of the monthly allowance. `EXTRACT_PAGE_NOT_RECOGNISED` (also
+REQS007) is different: the domain is prepared, but this page is not one Extract
+extracts. Try a product, article or listing page instead, retry it once in a
+few minutes if it should work, or use `--css`; preparing again does not change
+it. `zenrows extract` never falls back to Autoparse. The `fallbackAutoparse`
+adapter option is deprecated and has no effect.
+
+```bash
+zenrows extract prepare example.com --url https://example.com/p/1 --url https://example.com/list --wait
+zenrows extract prepare status example.com   # progress + monthly allowance
+zenrows extract https://example.com/p/1      # then extract again
 ```
 
 ## 9. Batch
 
 Zenrows **Batch** (`https://async.api.zenrows.com/v1`) fans a
 protected fetch/extract out over many URLs. The cloud subcommands work
-with any active API key and spend the same credits as Fetch. Local spec
-validation + credit estimation always work (no key needed).
+with any active API key and cost the same credits as Fetch: Batch is the
+reliable path at scale, at Fetch's prices. Local spec validation + credit
+estimation always work (no key needed).
 
 ```bash
-zenrows batch estimate jobs.jsonl                    # validate the spec + estimate credits (local)
-zenrows batch create jobs.jsonl --wait               # submit a job and wait for it to finish
-zenrows batch status <job-id>                        # run status + progress stats
-zenrows batch results <job-id> --out results.jsonl   # collect results (paginated)
-zenrows batch cancel <job-id>                        # stop an in-flight run
+zenrows batch estimate jobs.jsonl                     # validate the spec + estimate credits (local)
+zenrows batch create jobs.jsonl --follow              # submit a job and wait for it to finish
+zenrows batch list                                    # your jobs, newest first
+zenrows batch status <job-id>                         # run status, progress stats, pause state
+zenrows batch wait <job-id> --timeout 30m             # wait for the run to end
+zenrows batch results <job-id> --out results.jsonl    # collect results (paginated)
+zenrows batch content <job-id> <task-id>              # one task's result body
+zenrows batch pause <job-id>                          # pause the run (resume <job-id> continues it)
+zenrows batch cancel <job-id>                         # stop an in-flight run
+zenrows batch retry-failed <job-id> --include-pending # rerun every task that did not succeed
+zenrows batch rerun <job-id>                          # rerun failed + pending tasks (--all: every task)
+zenrows batch delete <job-id> --yes                   # delete the job, its runs and results
 ```
 
 `jobs.jsonl` is one JSON object per line, each with a `url` (plus optional
 per-line overrides like `js_render`, `premium_proxy`, `proxy_country`,
-`extract`). Validate and estimate locally first, then submit with `create`.
+`extract`, nested `zenrows_params`, an `external_id`, string `metadata`, and
+`"method": "POST"` with a `body` of up to 16 KiB). `estimate` and `create`
+check every line against the API's limits before anything is sent: `url` up
+to 2048 bytes, `external_id` up to 128 letters, digits, `.`, `_` or `-`,
+and `metadata` up to 20 string entries (4 KiB). Validate and estimate locally
+first, then submit with `create`. `estimate` takes `create`'s
+`--manual` / `--js-render` / `--premium-proxy` / `--proxy-country` flags and
+prices the same request, as a range (Adaptive Stealth Mode costs 1 to 25).
+
+`create` also takes `--name`, `--external-id` and `--metadata key=value`
+(repeatable) for the job itself. It sends an `Idempotency-Key` (generated, or
+`--idempotency-key`) and retries network errors and 502/503/504 under it; an
+outcome that stays unknown prints the command that repeats the request with
+that key, which cannot create a second job.
+
+The local policy caps a run at 10,000 URLs and 250,000 estimated credits by
+default (an Adaptive Stealth Mode task counts 25), so a default run of up to
+10,000 URLs passes in any mode. Raise them for larger jobs (the API takes up to
+100,000 tasks per job): `zenrows policy set max_pages_per_run 100000` and
+`zenrows policy set max_credits_per_run 2500000`. A workspace created by an
+earlier version keeps its caps (1,000 and 10,000) in `policy.json`.
+
+`wait`, `create --follow` and `rerun --follow` poll until the run ends, the run
+is paused, or `--timeout` runs out (default 10 minutes; `30s`, `5m`, `1h`; a
+bare number is milliseconds, as before). When the time runs out, or the run is
+paused, the command exits 0 and prints the run with a `note` and the next
+command; the job keeps running. Ctrl-C stops the wait, not the job, and exits
+130. A run that ends `failed` exits 1: out of credits is
+`POLICY_MAX_CREDITS_EXCEEDED`, an inactive subscription `AUTH_INVALID`, a key
+cap `KEY_CREDIT_CAP_REACHED` (the same codes a refused request gets), anything
+else `BATCH_FAILED`, each with the run's `failure_reason` as `server_code` and
+the `job_id`. Then run the unfinished tasks with
+`zenrows batch rerun <job-id> --status failed,pending,processing`. With no
+flag, `rerun` reruns the `failed` and `pending` tasks, so successful tasks are
+never billed again by surprise; `--status <list>` picks the statuses and
+`--all` reruns every task (not with `--status`). A partial rerun works for 10
+days after the run started; `--all` always does.
+
+With `--json`, `create`, `status`, `wait`, `cancel`, `pause`, `resume` and
+`rerun` print `{ok, job_id, run_id, status, stats, job}` (`jobId` is kept for
+older scripts), plus `paused`, `ingest_status`, `accepted_tasks`, `rerun_of`,
+`retried_tasks` and `inherited_tasks` when the API sends them. Results are
+kept 14 days by default and then read `expired`; a `result_url` is valid 2
+hours. Lifecycle errors get their own codes (`BATCH_RUN_IN_PROGRESS`,
+`BATCH_NO_MATCHING_TASKS`, `BATCH_RERUN_WINDOW_EXPIRED`,
+`BATCH_REQUEST_IN_FLIGHT`, `BATCH_RESULT_EXPIRED`, ...) and carry the API's code
+as `server_code`. Schedules, webhooks, ZIP exports, CSV inputs and open jobs
+are available through the Batch API and the SDKs, not this CLI.
 
 **Extract in Batch.** Set `"extract": "auto"` on a line to run that URL through
 Extract — structured data instead of raw HTML:
@@ -211,7 +285,7 @@ zenrows crawl stop <crawl-id>                           # stop a running crawl
 follows links until `--max-items` or `--max-pages` stops it, or nothing is left
 to open. `--max-items` and `--max-pages` cap the crawl (API default 100 each),
 and `--max-pages` bounds the cost, since each page is one fetch. The local policy `max_pages_per_run` caps `--max-pages` (default
-1000). `--output-format html` uses up the page budget: each kept page is one
+10000). `--output-format html` uses up the page budget: each kept page is one
 more fetch, and `--max-pages` counts it. `--include-patterns` /
 `--exclude-patterns` are repeatable substring filters on the URL. A crawl whose
 pages held nothing new to follow ends `completed` with no results and exits 0.

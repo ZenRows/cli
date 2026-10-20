@@ -10,7 +10,7 @@
 import type { Policy, ToolkitConfig } from "../types/index.ts";
 import { ToolkitError } from "../core/errors.ts";
 import { assertDomainAllowed } from "../core/policy.ts";
-import { scrape, type RetryBudget, type ScraperParams, type ScraperResult } from "../core/http.ts";
+import { scrape, type ScraperParams, type ScraperResult } from "../core/http.ts";
 
 export type ResponseFormat = "html" | "markdown" | "plaintext" | "pdf";
 
@@ -56,12 +56,6 @@ export interface FetchOptions {
    * Not an API parameter. Unset means `http.ts`'s default; 0 sends the request once.
    */
   retries?: number;
-  /**
-   * The retry budget of the logical call this request belongs to. Not an API
-   * parameter. Extract's Autoparse fallback passes the first request's budget,
-   * so no retry starts more than 90 s after the call's first request.
-   */
-  budget?: RetryBudget;
   /**
    * The command the user ran, quoted for a shell. Not an API parameter.
    * Errors that advise running the same command again suggest it verbatim.
@@ -172,7 +166,6 @@ export async function runFetch(
     timeoutMs: opts.timeoutMs,
     retries: opts.retries,
     projectRoot,
-    budget: opts.budget,
     rerunCommand: opts.rerunCommand,
   });
   return { result, params, mode };

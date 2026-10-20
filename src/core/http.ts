@@ -13,6 +13,7 @@ import { log, registerSecret } from "./logger.ts";
 import { CLI_USER_AGENT } from "./config.ts";
 import { agentClientHeader } from "./agent-client.ts";
 import { defaultSleep, fullJitterMs, retryAfterDelayMs, retryAfterMs } from "./backoff.ts";
+import { normalizeDomain, PAGE_NOT_RECOGNISED_STEPS, prepareCommand } from "./prepared-domains-api.ts";
 
 export interface ScraperResult {
   status: number;
@@ -45,11 +46,7 @@ export interface ScraperResult {
    * The request is not charged, and the same request returns the same answer.
    */
   noDataExtracted?: boolean;
-  /**
-   * HTTP requests sent for this logical call, the first one included (1 means
-   * no retry). With a shared `RetryBudget` it counts every request in it, such
-   * as Extract's request plus its Autoparse fallback.
-   */
+  /** HTTP requests sent for this call, the first one included (1 means no retry). */
   attempts?: number;
 }
 
@@ -107,20 +104,6 @@ const NEVER_SENT_CODES: ReadonlySet<string> = new Set([
   "UND_ERR_CONNECT_TIMEOUT",
 ]);
 
-/**
- * The start time and request count of one logical call. Extract's Autoparse
- * fallback shares the first request's budget, so its retries cannot restart
- * the 90 s clock.
- */
-export interface RetryBudget {
-  startedAt: number;
-  attempts: number;
-}
-
-export function newRetryBudget(now: () => number = Date.now): RetryBudget {
-  return { startedAt: now(), attempts: 0 };
-}
-
 export interface ScrapeOptions {
   /** Per HTTP attempt. */
   timeoutMs?: number;
@@ -133,8 +116,6 @@ export interface ScrapeOptions {
   nowImpl?: () => number;
   /** Source of the jitter. */
   randomImpl?: () => number;
-  /** A budget shared with an earlier request of the same call; unset starts a new one. */
-  budget?: RetryBudget;
   /**
    * The command the user ran, ready to paste. Errors that say "run the same
    * command again" suggest it. Unset means `zenrows fetch|extract <url>`.
@@ -160,8 +141,7 @@ function buildUrl(apiBase: string, apiKey: string, params: ScraperParams): { ful
  *
  * Retries 429, 502, 503 and 504, and network errors that happened before the
  * request was written, up to `retries` times, with full jitter or the server's
- * Retry-After. No retry starts after `RETRY_BUDGET_MS` from the first request
- * of the call. Our own timeout is never retried, and neither is any other
+ * Retry-After. No retry starts after `RETRY_BUDGET_MS` from the first request. Our own timeout is never retried, and neither is any other
  * status, a 429 out-of-credits code, or a status that belongs to the target
  * site (`original_status`, `allowed_status_codes`).
  */
@@ -176,17 +156,16 @@ export async function scrape(
   const retries = opts.retries ?? DEFAULT_RETRIES;
   const sleep = opts.sleepImpl ?? defaultSleep;
   const now = opts.nowImpl ?? Date.now;
-  const budget = opts.budget ?? newRetryBudget(now);
+  const startedAt = now();
 
   for (let n = 0; ; n++) {
-    budget.attempts++;
     const sent = await sendOnce(full, params.url, opts);
     if (!sent.ok) {
       // A timeout, or a failure after the request was written, is not retried:
       // the API may still be working on it and may charge it.
       if (n >= retries || !sent.neverSent) throw sent.error;
       const delayMs = fullJitterMs(n, opts.randomImpl);
-      if (now() - budget.startedAt + delayMs > RETRY_BUDGET_MS) throw sent.error;
+      if (now() - startedAt + delayMs > RETRY_BUDGET_MS) throw sent.error;
       log.dim(`Network error before the request was sent; retry ${n + 1}/${retries} in ${formatMs(delayMs)}`);
       await sleep(delayMs);
       continue;
@@ -194,7 +173,7 @@ export async function scrape(
     const body = sent.raw.toString("utf8");
     if (n < retries && isRetryable(sent.res.status, body, params)) {
       const delayMs = retryAfterDelayMs(sent.res.headers.get("retry-after")) ?? fullJitterMs(n, opts.randomImpl);
-      if (now() - budget.startedAt + delayMs <= RETRY_BUDGET_MS) {
+      if (now() - startedAt + delayMs <= RETRY_BUDGET_MS) {
         const code = zrErrorCode(body);
         log.dim(`HTTP ${sent.res.status}${code ? ` ${code}` : ""}; retry ${n + 1}/${retries} in ${formatMs(delayMs)}`);
         await sleep(delayMs);
@@ -203,7 +182,7 @@ export async function scrape(
     }
     return interpret(sent.res, sent.raw, params, redacted, {
       retriesUsed: n,
-      attempts: budget.attempts,
+      attempts: n + 1,
       rerunCommand: opts.rerunCommand ?? defaultRerunCommand(params),
     });
   }
@@ -319,7 +298,7 @@ async function sendOnce(full: string, targetUrl: string, opts: ScrapeOptions): P
 interface AttemptContext {
   /** Retries this request made before the final response. */
   retriesUsed: number;
-  /** Requests sent for the whole call (see `ScraperResult.attempts`). */
+  /** Requests sent for this call (see `ScraperResult.attempts`). */
   attempts: number;
   /** The command to suggest when the advice is "run the same command again". */
   rerunCommand: string;
@@ -353,18 +332,10 @@ function interpret(
     attempts: attempt.attempts,
   };
 
-  // REQS007 on extract=auto: the domain hasn't been prepared for Extract yet.
-  // Same recovery as AUTH010 (the extract adapter falls back to autoparse), so it
-  // maps to the same code. Checked before the 403 auth branch below.
+  // REQS007 on extract=auto: Extract has not prepared the domain yet. Reported,
+  // never retried: the fix is to prepare the domain, which the error names.
   if (res.status === 403 && params.extract !== undefined && zrErrorCode(body) === "REQS007") {
-    throw new ToolkitError({
-      code: "EXTRACT_DOMAIN_NOT_ENABLED",
-      message: "Extract has not been prepared for this domain yet.",
-      likely_cause: zrErrorDetail(body) ?? "This domain is not prepared for Extract.",
-      next_action:
-        "Retry with --autoparse for general-purpose extraction on any site, or get the domain prepared for Extract (POST /v1/extract/prepared-domains).",
-      suggested_commands: [`zenrows extract ${params.url} --autoparse`],
-    });
+    throw extractDomainNotPrepared(params.url, body);
   }
   // 422 no_data_extracted on an Extract request: the page was processed and had
   // nothing to extract. It is an answer, not a failure to reach the target, so
@@ -422,18 +393,10 @@ function interpret(
     }
   }
   if (res.status === 402 && isZenrowsErrorEnvelope(body)) {
-    // AUTH010 on extract=auto means the target domain is not enabled for
-    // Extract, distinct from credit exhaustion (AUTH004). Let the extract
-    // adapter fall back to autoparse.
+    // AUTH010 on extract=auto is the legacy code for REQS007: the domain is
+    // not prepared for Extract. Distinct from credit exhaustion (AUTH004).
     if (params.extract !== undefined && zrErrorCode(body) === "AUTH010") {
-      throw new ToolkitError({
-        code: "EXTRACT_DOMAIN_NOT_ENABLED",
-        message: "Extract is not enabled for this domain yet.",
-        likely_cause: zrErrorDetail(body) ?? "This domain is not enabled for Extract.",
-        next_action:
-          "Retry with --autoparse for general-purpose extraction on any site, or get the domain prepared for Extract (POST /v1/extract/prepared-domains).",
-        suggested_commands: [`zenrows extract ${params.url} --autoparse`],
-      });
+      throw extractDomainNotPrepared(params.url, body);
     }
     // AUTH014: this key hit one of its credit caps; the account still has credits.
     if (isKeyCapReached(zrErrorCode(body) ?? undefined)) {
@@ -575,6 +538,79 @@ function serviceBusy(params: ScraperParams, body: string, retryAfter: string | n
     suggested_commands: [attempt.rerunCommand],
     server_code: "RESP009",
     retry_after: waitSeconds !== undefined ? waitSeconds / 1000 : undefined,
+  });
+}
+
+/** Why a REQS007 refused, as the gateway's `reason` field names it. */
+export type RefusalReason = "domain_not_prepared" | "page_not_recognised" | "domain_not_enabled";
+
+const REFUSAL_REASONS: readonly string[] = ["domain_not_prepared", "page_not_recognised", "domain_not_enabled"];
+
+/**
+ * Which REQS007 this is. Only domain_not_prepared is fixed by preparing the
+ * domain: on page_not_recognised the domain is already prepared, and
+ * resubmitting it returns the existing ready record, so pointing there would
+ * loop.
+ *
+ * The gateway says it in the problem's `reason` field, read first. The sentence
+ * match below is only the fallback for a gateway deployed before that field
+ * existed, and reads the titles that gateway sends; remove it once every gateway
+ * sends `reason`.
+ */
+export function refusalReason(body: string): RefusalReason {
+  let j: { reason?: unknown; title?: unknown; detail?: unknown };
+  try {
+    j = JSON.parse(body) as typeof j;
+  } catch {
+    return "domain_not_prepared";
+  }
+  if (typeof j.reason === "string" && REFUSAL_REASONS.includes(j.reason)) return j.reason as RefusalReason;
+  const title = typeof j.title === "string" ? j.title : "";
+  const detail = typeof j.detail === "string" ? j.detail : "";
+  if (/did not recogni[sz]e this page/i.test(title) || /^Extract serves /.test(detail)) return "page_not_recognised";
+  if (/^Extract is not enabled/i.test(title)) return "domain_not_enabled";
+  return "domain_not_prepared";
+}
+
+/**
+ * REQS007 (or the legacy AUTH010) on extract=auto. Each reason names its own
+ * next step, because agents copy it: the exact prepare command for a domain not
+ * prepared yet, the gateway's advice in the gateway's order for a page it did not
+ * recognise. None offers Autoparse.
+ */
+export function extractDomainNotPrepared(url: string, body: string): ToolkitError {
+  const domain = normalizeDomain(url);
+  const detail = zrErrorDetail(body);
+  const css = `zenrows extract ${url} --css '{"title":"h1"}'`;
+  const reason = refusalReason(body);
+  if (reason === "page_not_recognised") {
+    return new ToolkitError({
+      code: "EXTRACT_PAGE_NOT_RECOGNISED",
+      message: `Extract serves ${domain} but did not recognise this page as one it can extract (it may be a page with nothing to extract, such as a home page). ${PAGE_NOT_RECOGNISED_STEPS} The request was not charged.`,
+      likely_cause: detail ?? `Extract serves ${domain} but did not recognise this page.`,
+      next_action: PAGE_NOT_RECOGNISED_STEPS,
+      suggested_commands: [css],
+      server_code: "REQS007",
+    });
+  }
+  if (reason === "domain_not_enabled") {
+    return new ToolkitError({
+      code: "EXTRACT_DOMAIN_NOT_ENABLED",
+      message: `Extract is not enabled for ${domain}, and preparing it does not change this.`,
+      likely_cause: detail ?? `Extract is not enabled for ${domain}.`,
+      next_action: "Extract this page with --css and explicit selectors, or contact Zenrows support to have the site enabled.",
+      suggested_commands: [css],
+      server_code: "REQS007",
+    });
+  }
+  const prepare = prepareCommand(url);
+  return new ToolkitError({
+    code: "EXTRACT_DOMAIN_NOT_PREPARED",
+    message: `Extract hasn't prepared ${domain} yet. Prepare it with \`${prepare}\` (a few example URLs, a few minutes, no credits), then retry; meanwhile use --css.`,
+    likely_cause: detail ?? `Extract has not prepared ${domain} yet.`,
+    next_action: `Run \`${prepare} --wait\` (up to 5 --url pages, one per page kind you want), then retry \`zenrows extract ${url}\`. Without --wait, check progress about every 30 seconds with \`zenrows extract prepare status ${domain}\`. Meanwhile extract with --css and explicit selectors.`,
+    suggested_commands: [`${prepare} --wait`, `zenrows extract prepare status ${domain}`, css],
+    server_code: "REQS007",
   });
 }
 

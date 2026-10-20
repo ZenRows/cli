@@ -25,13 +25,13 @@
     {
       "name": "extract",
       "type": "skill",
-      "description": "Turn protected pages into structured data with Autoparse / CSS / Markdown.",
+      "description": "Turn protected pages into structured data with Extract / CSS / Markdown (Autoparse is deprecated).",
       "status": "available",
       "requires_backend_capabilities": ["extract"],
       "requires_auth": true,
       "version": "0.1.0",
       "path": "skills/extract",
-      "tags": ["extract", "autoparse", "structured-data"]
+      "tags": ["extract", "structured-data"]
     },
     {
       "name": "batch-jobs",

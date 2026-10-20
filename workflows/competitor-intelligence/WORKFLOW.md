@@ -9,7 +9,7 @@ status: available
 
 A higher-level process built on Zenrows **Fetch and Extract**: retrieve
 protected pages with `zenrows fetch`, then turn them into structured data with
-`zenrows extract` (the same API's Autoparse / CSS / Markdown — not a separate
+`zenrows extract` (the same API's `extract=auto` / CSS / Markdown — not a separate
 product). Scheduling and scaling use the tools you already have (cron/CI, a
 simple per-URL loop).
 
@@ -20,7 +20,7 @@ simple per-URL loop).
    ```
    zenrows fetch https://competitor.example/products
    ```
-2. **Validate extraction** on one page (extract=auto falls back to autoparse on a domain not prepared yet).
+2. **Validate extraction** on one page (on a domain not prepared yet, `EXTRACT_DOMAIN_NOT_PREPARED`, run `zenrows extract prepare <domain> --url <page> --wait` first).
    ```
    zenrows extract https://competitor.example/p/123 --validate
    ```
