@@ -244,7 +244,12 @@ type SendResult =
   | { ok: true; res: Response; raw: Buffer }
   | { ok: false; error: ToolkitError; neverSent: boolean };
 
-/** One HTTP attempt with its own timeout; the body is read inside it. */
+/**
+ * One HTTP attempt. Its timeout covers only the wait for the response
+ * headers: the timer is cleared before the body is read, so reading the body
+ * has no timeout, and a failure while reading it rejects with the raw error
+ * (for example a TypeError), not a ToolkitError.
+ */
 async function sendOnce(full: string, targetUrl: string, opts: ScrapeOptions): Promise<SendResult> {
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const controller = new AbortController();

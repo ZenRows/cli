@@ -46,9 +46,10 @@ export interface FetchOptions {
   outputs?: string;
   jsonResponse?: boolean;
   /**
-   * Client-side timeout in milliseconds. Not an API parameter — it never goes
-   * into the query string. Unset means `http.ts`'s default, which is above the
-   * gateway's own request budget on purpose.
+   * Client-side timeout in milliseconds, per HTTP attempt. Not an API
+   * parameter — it never goes into the query string. Unset means
+   * `DEFAULT_TIMEOUT_MS` in `http.ts` (200 s), which sits above the API's own
+   * 180 s budget (`SERVER_BUDGET_MS`) on purpose.
    */
   timeoutMs?: number;
   /**
