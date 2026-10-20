@@ -34,7 +34,7 @@ scrape({ url, js_render: true, wait_for: ".price" })
 - Prefer `response_type: "markdown"` for LLM consumption; use `html` only when
   you need raw markup.
 - For **structured** fields, prefer the `extract` tool (or `scrape` with
-  `autoparse` / `css_extractor` / `outputs`) — see [[extract]].
+  `css_extractor` / `outputs`) — see [[extract]].
 - On failure, escalate with evidence before `browser_*` ([[interact-browser]]).
 - Cost model: [[cost-control]].
 

@@ -37,7 +37,7 @@ If the user has a known URL and wants page content:
 
 If the user has a known URL and wants structured data:
   → Use Extract.                    (MCP tool: extract)
-                                     Fallback: scrape with autoparse / css_extractor / outputs
+                                     Fallback: scrape with css_extractor / outputs
 
 If the user has many URLs (bulk):
   → Use Batch.                      (validate one page with scrape/extract first,
@@ -67,7 +67,8 @@ If the user needs login, clicks, forms, sessions, or persistent state:
 | Primitive | MCP tools | Notes |
 | --- | --- | --- |
 | Protected Fetch | `scrape` | Default markdown; HTML / plaintext / PDF / screenshot options |
-| Extract | `extract` | Structured JSON (`extract=auto`, autoparse, css_extractor). `extract=auto` is currently free; billing may apply later |
+| Extract | `extract` | Structured JSON (`extract=auto` on any prepared domain, css_extractor; autoparse deprecated). `extract=auto` is currently free; billing may apply later |
+| Prepare a domain | `prepare_domain`, `prepared_domain_status` | After an `extract` REQS007 with reason `domain_not_prepared`: prepare the domain with 1 to 5 example URLs, poll about every 30 seconds until ready, extract again. No credits; uses one monthly allowance slot. Not for `page_not_recognised`: that domain is already prepared |
 | Batch | `batch_create`, `batch_status`, `batch_results`, `batch_cancel` | Same credits as Fetch; a 403 maps to `BATCH_ACCESS_DENIED` |
 | Browser | `browser_*` (start with `browser_navigate`) | Escalation-only; same backend as Browser Sessions |
 

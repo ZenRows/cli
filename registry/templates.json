@@ -14,7 +14,7 @@
     {
       "name": "extract-pricing-pages",
       "type": "template",
-      "description": "Extract structured pricing fields from product pages (Autoparse / CSS).",
+      "description": "Extract structured pricing fields from product pages (extract=auto / CSS).",
       "status": "available",
       "requires_backend_capabilities": ["extract"],
       "requires_auth": true,

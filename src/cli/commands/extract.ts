@@ -1,9 +1,12 @@
 /**
  * `zenrows extract <url> [flags]` → Extract (structured extraction on `/v1/`).
  *
- * Default: `extract=auto` (site-tailored Extract). If the domain is
- * not enabled or prepared (AUTH010 / REQS007), falls back once to Autoparse. Opt into Autoparse
- * directly with `--autoparse`. Other methods: `--css`, `--outputs`, `--output`.
+ * Default: `extract=auto` (site-tailored Extract). On a REQS007 / AUTH010 the
+ * error names the next step for its reason (prepare the domain, or try another
+ * page); nothing is retried. `--autoparse` runs the deprecated Autoparse
+ * explicitly. Other
+ * methods: `--css`, `--outputs`, `--output`. `zenrows extract prepare` prepares a
+ * domain (see extract-prepare.ts).
  */
 import { ensureApiKey } from "../../core/ensure-key.ts";
 import { maybeNudgeClaim } from "../../core/nudge.ts";
@@ -18,15 +21,19 @@ import { formatRequestCost } from "../../core/http.ts";
 import { parse, asString, asNumber, type Command, type RunContext } from "../command.ts";
 import { printError, writeOut } from "../output.ts";
 import { refreshClaimAdvice } from "../../core/claim-link.ts";
+import { PREPARE_HELP, PREPARE_USAGE, runPrepare } from "./extract-prepare.ts";
 
 export const extract: Command = {
   name: "extract",
   summary: "Turn a protected page into structured data (Extract / Autoparse / CSS / Markdown).",
-  usage: "zenrows extract <url> [--autoparse | --css <json> | --outputs <filters> | --output md|text] [flags]",
+  usage:
+    "zenrows extract <url> [--autoparse | --css <json> | --outputs <filters> | --output md|text] [flags]\n       " +
+    PREPARE_USAGE,
   help: [
     "Methods:",
-    "  (default)              extract=auto: site-tailored Extract; falls back to Autoparse if the domain is not enabled or prepared",
-    "  --autoparse            general-purpose Autoparse (any domain, no Extract fallback)",
+    "  (default)              extract=auto: site-tailored Extract on any prepared domain",
+    "                         (EXTRACT_DOMAIN_NOT_PREPARED = not prepared yet: run zenrows extract prepare, below)",
+    "  --autoparse            deprecated general-purpose Autoparse (any domain)",
     "  --css <json>           CSS selector map, e.g. '{\"title\":\"h1\",\"price\":\".price\"}'",
     "  --outputs <list>       built-in output filters → JSON: emails, phone_numbers, headings,",
     "                         images, audios, videos, links, menus, hashtags, metadata, tables,",
@@ -41,8 +48,12 @@ export const extract: Command = {
     "",
     "Cost (credits per request): 1x normal · 5x --js-render · 10x --premium-proxy · 25x both.",
     "The exact charge is reported after every request (costCredits / X-Request-Credits).",
+    "",
+    "Prepare a domain:",
+    PREPARE_HELP.split("\n").map((l) => (l ? "  " + l : l)).join("\n"),
   ].join("\n"),
   async run(argv: string[], ctx: RunContext): Promise<number> {
+    if (argv[0] === "prepare") return runPrepare(argv.slice(1), ctx);
     const { values, positionals } = parse(argv, {
       autoparse: { type: "boolean" },
       css: { type: "string" },
@@ -123,16 +134,15 @@ export const extract: Command = {
     const runId = newRunId();
     const startedAt = new Date().toISOString();
     log.step(`Extract ${url} (method=${opts.method ?? "extract"})…`);
+    if (opts.method === "autoparse") {
+      log.warn("Autoparse is deprecated. Prefer the default extract=auto on a prepared domain, or --css.");
+    }
 
     try {
       const outcome = await runExtract(opts, config, policy, apiKey);
       const finishedAt = new Date().toISOString();
       const safeParams = { ...outcome.params };
       delete (safeParams as Record<string, unknown>).apikey;
-
-      if (outcome.fellBackToAutoparse) {
-        log.info("Extract not available for this domain yet — fell back to Autoparse.");
-      }
 
       const runDir = writeRun(
         {
@@ -146,7 +156,6 @@ export const extract: Command = {
           request: {
             ...safeParams,
             method: outcome.method,
-            fellBackToAutoparse: outcome.fellBackToAutoparse ?? false,
           },
           result: { httpStatus: outcome.result.status, bytes: outcome.result.body.length, parsed: outcome.data !== undefined },
           costUsd: outcome.result.costUsd,
@@ -161,9 +170,8 @@ export const extract: Command = {
         writeOut(values.out as string, payload);
         log.success(`Wrote output → ${values.out}`);
       }
-      const via = outcome.fellBackToAutoparse ? `${outcome.method} (fallback)` : outcome.method;
       log.success(
-        `Extracted via ${via} · ${outcome.result.body.length} bytes · ${formatRequestCost(outcome.result.costUsd, outcome.result.costCredits)} · run ${runId}`,
+        `Extracted via ${outcome.method} · ${outcome.result.body.length} bytes · ${formatRequestCost(outcome.result.costUsd, outcome.result.costCredits)} · run ${runId}`,
       );
       if (runDir) log.dim(`  artifact: ${runDir}`);
       if (outcome.noDataExtracted) {
@@ -183,7 +191,6 @@ export const extract: Command = {
               ok: true,
               runId,
               method: outcome.method,
-              fellBackToAutoparse: outcome.fellBackToAutoparse ?? false,
               empty: outcome.empty ?? false,
               noDataExtracted: outcome.noDataExtracted ?? false,
               httpStatus: outcome.result.status,
