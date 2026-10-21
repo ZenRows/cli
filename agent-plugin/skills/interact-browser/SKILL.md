@@ -27,8 +27,10 @@ cannot handle. **Escalation only.**
 6. Always `browser_close` when done
 
 Other useful tools: `browser_evaluate`, cookies (`browser_get_cookies` /
-`browser_set_cookies` / `browser_clear_cookies`), `browser_local_storage`,
-tabs (`browser_new_tab` / `browser_switch_tab`), `browser_generate_pdf`.
+`browser_set_cookies` / `browser_clear_cookies`), local storage
+(`browser_get_local_storage` / `browser_set_local_storage` /
+`browser_clear_local_storage`), tabs (`browser_new_tab` / `browser_switch_tab`),
+`browser_generate_pdf`.
 
 ## Rules
 
