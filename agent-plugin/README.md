@@ -62,7 +62,7 @@ Use MCP tool names — not CLI `zenrows fetch`:
 | --- | --- |
 | `zenrows` | Decision tree across all primitives |
 | `protected-fetch` | `scrape` |
-| `extract` | `extract` (fallback: `scrape` + css_extractor); on REQS007 with reason `domain_not_prepared`, `prepare_domain` then `prepared_domain_status` |
+| `extract` | `extract` (fallback: `scrape` + css_extractor); on REQS007 with reason `domain_not_prepared`, `prepare_domain` (at least 3 example URLs of the same page type when you can, up to 5) then `prepared_domain_status` |
 | `batch-jobs` | `batch_create`, `batch_status`, `batch_results`, `batch_cancel` |
 | `interact-browser` | `browser_*` (escalation only) |
 | `cost-control` | Cost multipliers + escalate-with-evidence |

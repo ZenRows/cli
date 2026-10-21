@@ -43,15 +43,22 @@ of three cases it is and prints the next step. It never retries with Autoparse.
 Preparing a domain:
 
 ```
-zenrows extract https://example.com/p/1             # 1. fails: EXTRACT_DOMAIN_NOT_PREPARED
+zenrows extract https://www.example.com/products/a  # 1. fails: EXTRACT_DOMAIN_NOT_PREPARED
 zenrows extract prepare example.com \
-  --url https://example.com/p/1 --url https://example.com/list --wait
+  --url https://www.example.com/products/a \
+  --url https://www.example.com/products/b \
+  --url https://www.example.com/products/c --wait
                                                     # 2. prepare it and wait until ready (a few minutes)
-zenrows extract https://example.com/p/1             # 3. extract again
+zenrows extract https://www.example.com/products/a  # 3. extract again
 ```
 
-- `--url`: 1 to 5 real pages you want to extract, one per page kind (for
-  example a product page and a listing page).
+- `--url`: real pages you want to extract, 1 to 5. One works; pass at least 3
+  example URLs of the same page type when you can, up to 5: several pages of
+  each page type you need parsed (several types can share the 5, e.g. 3 product
+  pages + 2 search-result pages). Extract compares the pages of one type against
+  each other, so it can check the fields it found and fill in fields one page is
+  missing; more pages of a type give more complete, more reliable results. With
+  fewer than 3 the command prints a tip on stderr; it is never an error.
 - Without `--wait` the command returns at once; then check about every 30
   seconds with `zenrows extract prepare status example.com` until it says
   `ready`. `--wait` polls at the same pace.

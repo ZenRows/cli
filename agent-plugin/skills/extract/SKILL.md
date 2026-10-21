@@ -48,15 +48,22 @@ Preparing a domain:
 
 ```
 extract({ url })                                          # 1. REQS007, reason domain_not_prepared
-prepare_domain({ domain: "example.com",
-  example_urls: ["https://example.com/p/1", "https://example.com/list"] })
+prepare_domain({ domain: "example.com", example_urls: [
+  "https://www.example.com/products/a",
+  "https://www.example.com/products/b",
+  "https://www.example.com/products/c"] })
                                                           # 2. returns at once, status "preparing"
 prepared_domain_status({ domain: "example.com" })         # 3. about every 30 seconds until "ready"
 extract({ url })                                          # 4. extract again
 ```
 
-- `example_urls`: 1 to 5 real pages you want to extract, one per page kind
-  (for example a product page and a listing page).
+- `example_urls`: real pages you want to extract, 1 to 5. One works; pass at
+  least 3 example URLs of the same page type when you can, up to 5: several
+  pages of each page type you need parsed (several types can share the 5, e.g.
+  3 product pages + 2 search-result pages). Extract compares the pages of one
+  type against each other, so it can check the fields it found and fill in
+  fields one page is missing; more pages of a type give more complete, more
+  reliable results.
 - The domain is the host: `shop.example.com` and `example.com` are prepared
   separately, and a leading `www.` is dropped.
 - Preparing takes a few minutes and costs no credits. Each new domain uses one

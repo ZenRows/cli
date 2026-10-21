@@ -369,7 +369,7 @@ export function extractDomainNotPrepared(url: string, body: string): ToolkitErro
     code: "EXTRACT_DOMAIN_NOT_PREPARED",
     message: `Extract hasn't prepared ${domain} yet. Prepare it with \`${prepare}\` (a few example URLs, a few minutes, no credits), then retry; meanwhile use --css.`,
     likely_cause: detail ?? `Extract has not prepared ${domain} yet.`,
-    next_action: `Run \`${prepare} --wait\` (up to 5 --url pages, one per page kind you want), then retry \`zenrows extract ${url}\`. Without --wait, check progress about every 30 seconds with \`zenrows extract prepare status ${domain}\`. Meanwhile extract with --css and explicit selectors.`,
+    next_action: `Run \`${prepare} --wait\` (add --url pages: one works, at least 3 of the same page type work better, up to 5), then retry \`zenrows extract ${url}\`. Without --wait, check progress about every 30 seconds with \`zenrows extract prepare status ${domain}\`. Meanwhile extract with --css and explicit selectors.`,
     suggested_commands: [`${prepare} --wait`, `zenrows extract prepare status ${domain}`, css],
     server_code: "REQS007",
   });
