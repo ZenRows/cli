@@ -143,7 +143,7 @@ test("a wrong answer stores the new question and says the answer was wrong", asy
   try {
     createWorkspace(root);
     writeChallenge({ id: "old00000", prompt: "q?", expiresAt: new Date(Date.now() + 60_000).toISOString(), signupUrl: URL_ }, root);
-    const fetchImpl = stubFetch([() => challenge428("new11111", "Mia had nine pens and gave three away. How many left? Digits.", "Wrong or expired. To create...")], []);
+    const fetchImpl = stubFetch([() => challenge428("new11111", "odd one out: gecko, chin, badger, ferret?", "Wrong or expired. To create...")], []);
     await withTelemetryOff(async () => {
       await assert.rejects(
         () => answerSignupChallenge("7", { fetchImpl, projectRoot: root }),
@@ -151,7 +151,7 @@ test("a wrong answer stores the new question and says the answer was wrong", asy
           e instanceof ToolkitError &&
           e.code === "SIGNUP_CHALLENGE" &&
           /^That answer was wrong or came too late/.test(e.message) &&
-          e.message.endsWith("Mia had nine pens and gave three away. How many left? Digits."),
+          e.message.endsWith("odd one out: gecko, chin, badger, ferret?"),
       );
     });
     assert.equal(readChallenge(root)?.id, "new11111");

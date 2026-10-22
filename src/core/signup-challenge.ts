@@ -93,7 +93,7 @@ export function wasWrongAnswer(body: string): boolean {
   return typeof msg === "string" && /^wrong or expired/i.test(msg.trim());
 }
 
-/** True when a 429 is the per-network lock after too many wrong answers. */
+/** True when a 429 is the per-network lock after too many questions or wrong answers. */
 export function isChallengeLocked(body: string): boolean {
   return parseBody(body)?.error === "challenge_locked";
 }
@@ -114,8 +114,8 @@ export function challengeError(c: PendingChallenge, opts: { wrong?: boolean } = 
 export function challengeLockedError(retryAfter?: number): ToolkitError {
   return new ToolkitError({
     code: "SIGNUP_CHALLENGE_LOCKED",
-    message: "Too many wrong answers from this network, so Zenrows paused account creation here.",
-    likely_cause: "Three wrong answers to the signup question within an hour.",
+    message: "Too many signup questions or wrong answers from this network, so Zenrows paused account creation here.",
+    likely_cause: "Too many signup questions asked, or wrong answers given, from this network within an hour.",
     next_action:
       "Try again in an hour by re-running your original command, which asks a new question. If you already have a Zenrows API key, use it now: zenrows login --api-key <key> (or set ZENROWS_API_KEY).",
     suggested_commands: ["zenrows login --api-key <your-key>"],

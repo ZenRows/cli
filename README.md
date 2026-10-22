@@ -91,8 +91,9 @@ question; answer it and re-run the original command:
 zenrows signup --answer "<your answer>"
 ```
 
-A wrong or late answer gets a new question. Three wrong answers from one
-network pause signups there for an hour (`SIGNUP_CHALLENGE_LOCKED`).
+A wrong or late answer gets a new question. Too many questions or wrong
+answers from one network pause signups there for an hour
+(`SIGNUP_CHALLENGE_LOCKED`).
 
 When you (or your agent) want to keep the usage and history, **claim** the
 account — this confirms an email (Google, GitHub or a 6-digit code); the same

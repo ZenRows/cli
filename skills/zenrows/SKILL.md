@@ -24,7 +24,7 @@ Before it creates the account, Zenrows may ask you one short question (error cod
 `SIGNUP_CHALLENGE`, with the question in the message and in `error.challenge.question`).
 Answer it yourself, do not ask the human, then run `zenrows signup --answer "<your answer>"`
 and re-run your original command. A wrong answer returns a new question the same way.
-After three wrong answers from one network (`SIGNUP_CHALLENGE_LOCKED`), wait an hour or use
+After too many questions or wrong answers from one network (`SIGNUP_CHALLENGE_LOCKED`), wait an hour or use
 `zenrows login --api-key <key>`.
 
 When the Free plan nears its limit (or the user asks), tell the human they can **claim** the
