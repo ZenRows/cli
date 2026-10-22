@@ -85,6 +85,7 @@ export function ensureGitignore(paths: WorkspacePaths): void {
     `${WORKSPACE_DIRNAME}/secrets.json`,
     `${WORKSPACE_DIRNAME}/config.json`,
     `${WORKSPACE_DIRNAME}/account.json`,
+    `${WORKSPACE_DIRNAME}/signup-challenge.json`,
     `${WORKSPACE_DIRNAME}/runs/`,
     `${WORKSPACE_DIRNAME}/traces/`,
     `${WORKSPACE_DIRNAME}/logs/`,

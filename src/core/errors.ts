@@ -23,6 +23,9 @@ export type ErrorCode =
   | "POLICY_BROWSER_DISABLED"
   | "SIGNUP_RATE_LIMITED"
   | "SIGNUP_FAILED"
+  | "SIGNUP_CHALLENGE"
+  | "SIGNUP_CHALLENGE_LOCKED"
+  | "SIGNUP_CHALLENGE_MISSING"
   | "UNKNOWN_FLAG"
   | "DOMAIN_FORBIDDEN"
   | "FETCH_FAILED"
@@ -90,6 +93,8 @@ export interface ToolkitErrorShape {
   idempotency_key?: string;
   /** Seconds to wait before a retry (the `Retry-After` header). */
   retry_after?: number;
+  /** The question signup asks before it creates an account (SIGNUP_CHALLENGE). */
+  challenge?: { id: string; question: string; expires_at: string };
 }
 
 export class ToolkitError extends Error {
@@ -102,6 +107,7 @@ export class ToolkitError extends Error {
   readonly job_id?: string;
   readonly idempotency_key?: string;
   readonly retry_after?: number;
+  readonly challenge?: { id: string; question: string; expires_at: string };
 
   constructor(shape: ToolkitErrorShape) {
     super(shape.message);
@@ -115,6 +121,7 @@ export class ToolkitError extends Error {
     this.job_id = shape.job_id;
     this.idempotency_key = shape.idempotency_key;
     this.retry_after = shape.retry_after;
+    this.challenge = shape.challenge;
   }
 
   toJSON(): ToolkitErrorShape {
@@ -129,6 +136,7 @@ export class ToolkitError extends Error {
       ...(this.job_id ? { job_id: this.job_id } : {}),
       ...(this.idempotency_key ? { idempotency_key: this.idempotency_key } : {}),
       ...(this.retry_after !== undefined ? { retry_after: this.retry_after } : {}),
+      ...(this.challenge ? { challenge: this.challenge } : {}),
     };
   }
 }

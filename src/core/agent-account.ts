@@ -13,6 +13,18 @@ import { ToolkitError } from "./errors.ts";
 import { AGENT_SIGNUP_API_URL, WELL_KNOWN_PROTECTED_RESOURCE } from "./open-url.ts";
 import { detectClient } from "./provenance.ts";
 import { findWorkspace, readJson, workspacePaths, writePrivateJson } from "./workspace.ts";
+import {
+  challengeError,
+  challengeExpired,
+  challengeLockedError,
+  clearChallenge,
+  isChallengeLocked,
+  noChallengeError,
+  parseChallenge,
+  readChallenge,
+  wasWrongAnswer,
+  writeChallenge,
+} from "./signup-challenge.ts";
 
 /** Env var to override the signup endpoint (highest priority; for local testing). */
 export const SIGNUP_URL_ENV = "ZENROWS_AGENT_SIGNUP_URL";
@@ -137,11 +149,31 @@ export interface SignupResponse {
 }
 
 export async function signupAgent(
-  opts: { url?: string; fetchImpl?: typeof fetch } = {},
+  opts: { url?: string; fetchImpl?: typeof fetch; projectRoot?: string } = {},
 ): Promise<SignupResponse> {
-  const urls = opts.url ? [opts.url] : await signupCandidates(undefined, { fetchImpl: opts.fetchImpl });
-  const doFetch = opts.fetchImpl ?? fetch;
+  const urls = opts.url ? [opts.url] : await signupCandidates(opts.projectRoot, { fetchImpl: opts.fetchImpl });
+  return postSignup(urls, undefined, opts);
+}
 
+/**
+ * Answer the pending signup question (see signup-challenge.ts). Posts it to
+ * the signup URL that asked it; a right answer creates the account like a
+ * plain signup does. A wrong answer stores and reports the new question.
+ */
+export async function answerSignupChallenge(
+  answer: string,
+  opts: { fetchImpl?: typeof fetch; projectRoot?: string } = {},
+): Promise<SignupResponse> {
+  const pending = readChallenge(opts.projectRoot);
+  if (!pending) throw noChallengeError(false);
+  if (challengeExpired(pending)) {
+    clearChallenge(opts.projectRoot);
+    throw noChallengeError(true);
+  }
+  return postSignup([pending.signupUrl], { challenge_id: pending.id, answer }, opts);
+}
+
+function signupHeaders(projectRoot?: string): Record<string, string> {
   // Signup is the one functional request the CLI must make — no separate
   // telemetry beacon exists. When attribution is enabled we ride anonymous
   // provenance on it (a random id + coarse host/runtime brand). No PII, no URLs.
@@ -149,7 +181,7 @@ export async function signupAgent(
   const headers: Record<string, string> = {
     "content-type": "application/json",
     "User-Agent": CLI_USER_AGENT,
-    ...agentClientHeader(),
+    ...agentClientHeader({ projectRoot }),
   };
   if (attributionEnabled()) {
     const p = detectClient();
@@ -161,15 +193,27 @@ export async function signupAgent(
     headers["X-ZR-Node"] = p.node;
     headers["X-ZR-CI"] = p.ci ? "1" : "0";
   }
+  return headers;
+}
+
+async function postSignup(
+  urls: string[],
+  body: { challenge_id: string; answer: string } | undefined,
+  opts: { fetchImpl?: typeof fetch; projectRoot?: string },
+): Promise<SignupResponse> {
+  const doFetch = opts.fetchImpl ?? fetch;
+  const headers = signupHeaders(opts.projectRoot);
 
   // Try each candidate in order; on any failure fall back to the next (the last
   // is always the built-in default). This is the safety net: a wrong/blocked
   // discovered endpoint can never leave provisioning worse off than no discovery.
+  // A signup question or the wrong-answer lock is a real answer from a working
+  // endpoint, so it ends the loop.
   let lastErr: ToolkitError | undefined;
   for (const url of urls) {
     let res: Response;
     try {
-      res = await doFetch(url, { method: "POST", headers });
+      res = await doFetch(url, { method: "POST", headers, ...(body ? { body: JSON.stringify(body) } : {}) });
     } catch (err) {
       lastErr = new ToolkitError({
         code: "BACKEND_UNAVAILABLE",
@@ -179,8 +223,24 @@ export async function signupAgent(
       });
       continue;
     }
-    if (res.status === 201) return (await res.json()) as SignupResponse;
-    lastErr = signupError(res.status, await res.text());
+    if (res.status === 201) {
+      clearChallenge(opts.projectRoot);
+      return (await res.json()) as SignupResponse;
+    }
+    const text = await res.text();
+    if (res.status === 428) {
+      const challenge = parseChallenge(text, url);
+      if (challenge) {
+        writeChallenge(challenge, opts.projectRoot);
+        throw challengeError(challenge, { wrong: body !== undefined || wasWrongAnswer(text) });
+      }
+    }
+    if (res.status === 429 && isChallengeLocked(text)) {
+      clearChallenge(opts.projectRoot);
+      const ra = Number(res.headers.get("retry-after"));
+      throw challengeLockedError(Number.isFinite(ra) && ra > 0 ? ra : undefined);
+    }
+    lastErr = signupError(res.status, text);
   }
   throw (
     lastErr ??
