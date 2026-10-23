@@ -108,11 +108,11 @@ zenrows usage          # plan usage, credits & concurrency (does not count again
 Opt out of auto-provisioning at any time:
 
 ```bash
-zenrows fetch <url> --no-signup # do not auto-create an account for this call
-zenrows signup --agent          # explicitly provision a Free plan account, headless
+zenrows fetch <url> --no-signup  # do not auto-create an account for this call
+zenrows signup --agent           # explicitly provision a Free plan account, headless
 zenrows signup --answer "<text>" # answer the signup question (SIGNUP_CHALLENGE)
-zenrows login --api-key <key>   # use an existing key (stored 0600, gitignored)
-zenrows login --env             # use the ZENROWS_API_KEY environment variable
+zenrows login --api-key <key>    # use an existing key (stored 0600, gitignored)
+zenrows login --env              # use the ZENROWS_API_KEY environment variable
 ```
 
 Set `auto_signup: false` in `.zenrows/policy.json` to disable auto-provisioning
