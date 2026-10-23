@@ -83,6 +83,18 @@ unclaimed Zenrows Free plan account**, stores the key in `.zenrows/secrets.json`
 (0600, gitignored), and records the account in `.zenrows/account.json`
 (no secret — just the accountId, Free-period info, and a claim link).
 
+Zenrows may first ask the agent one short question before it creates the
+account. The command then fails with `SIGNUP_CHALLENGE` and prints the
+question; answer it and re-run the original command:
+
+```bash
+zenrows signup --answer "<your answer>"
+```
+
+A wrong or late answer gets a new question. Too many questions or wrong
+answers from one network pause signups there for an hour
+(`SIGNUP_CHALLENGE_LOCKED`).
+
 When you (or your agent) want to keep the usage and history, **claim** the
 account — this confirms an email (Google, GitHub or a 6-digit code); the same
 key keeps working:
@@ -96,10 +108,11 @@ zenrows usage          # plan usage, credits & concurrency (does not count again
 Opt out of auto-provisioning at any time:
 
 ```bash
-zenrows fetch <url> --no-signup # do not auto-create an account for this call
-zenrows signup --agent          # explicitly provision a Free plan account, headless
-zenrows login --api-key <key>   # use an existing key (stored 0600, gitignored)
-zenrows login --env             # use the ZENROWS_API_KEY environment variable
+zenrows fetch <url> --no-signup  # do not auto-create an account for this call
+zenrows signup --agent           # explicitly provision a Free plan account, headless
+zenrows signup --answer "<text>" # answer the signup question (SIGNUP_CHALLENGE)
+zenrows login --api-key <key>    # use an existing key (stored 0600, gitignored)
+zenrows login --env              # use the ZENROWS_API_KEY environment variable
 ```
 
 Set `auto_signup: false` in `.zenrows/policy.json` to disable auto-provisioning

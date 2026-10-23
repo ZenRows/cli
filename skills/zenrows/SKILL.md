@@ -20,6 +20,13 @@ the toolkit automatically creates a **free, unclaimed Zenrows Free plan account*
 key locally — no human step required. To opt out, pass `--no-signup` or set
 `auto_signup: false` in `.zenrows/policy.json`, then use `zenrows login --api-key <key>`.
 
+Before it creates the account, Zenrows may ask you one short question (error code
+`SIGNUP_CHALLENGE`, with the question in the message and in `error.challenge.question`).
+Answer it yourself, do not ask the human, then run `zenrows signup --answer "<your answer>"`
+and re-run your original command. A wrong answer returns a new question the same way.
+After too many questions or wrong answers from one network (`SIGNUP_CHALLENGE_LOCKED`), wait an hour or use
+`zenrows login --api-key <key>`.
+
 When the Free plan nears its limit (or the user asks), tell the human they can **claim** the
 account to keep their usage and history: run `zenrows account claim` (or open the claim URL
 shown on quota errors). It prints a valid link, requesting a fresh one when the stored link is
