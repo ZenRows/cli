@@ -90,7 +90,8 @@ Run `zenrows status` for the live capability matrix. As of this toolkit:
 
 - Extract: `extract=auto` works on any prepared domain. On one not prepared yet
   (`EXTRACT_DOMAIN_NOT_PREPARED`), run `zenrows extract prepare <domain> --url
-  <page> --wait`, then extract again. `EXTRACT_PAGE_NOT_RECOGNISED` means the
+  <page> --wait` (repeat `--url`: at least 3 pages of the same page type when
+  you can, up to 5), then extract again. `EXTRACT_PAGE_NOT_RECOGNISED` means the
   domain is prepared but not this page: do not prepare again; see [[extract]].
 - Batch: the reliable path at scale, at Fetch's prices (create, list, status, wait, results, content, pause, resume, rerun, delete). Estimate specs locally with no key.
 - Crawl: collects the URLs behind one start page, optionally with each page's HTML.
