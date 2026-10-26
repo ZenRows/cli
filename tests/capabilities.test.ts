@@ -18,7 +18,7 @@ test("extract notes name the prepare step and no automatic autoparse fallback", 
   assert.match(notes, /POST \/v1\/extract\/prepared-domains/);
   assert.match(notes, /zenrows extract prepare <domain> --url <page>/);
   assert.match(notes, /zenrows extract prepare status <domain>/);
-  assert.match(notes, /1 to 5 example URLs; one works, at least 3 of the same page type work better/);
+  assert.match(notes, /1 to 5 example URLs; one works, we recommend 3 or more of the same page type/);
   assert.match(notes, /EXTRACT_PAGE_NOT_RECOGNISED/);
   assert.match(notes, /preparing again does not change it/);
   assert.match(notes, /autoparse is deprecated/);

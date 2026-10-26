@@ -52,13 +52,12 @@ zenrows extract prepare example.com \
 zenrows extract https://www.example.com/products/a  # 3. extract again
 ```
 
-- `--url`: real pages you want to extract, 1 to 5. One works; pass at least 3
-  example URLs of the same page type when you can, up to 5: several pages of
-  each page type you need parsed (several types can share the 5, e.g. 3 product
-  pages + 2 search-result pages). Extract compares the pages of one type against
-  each other, so it can check the fields it found and fill in fields one page is
-  missing; more pages of a type give more complete, more reliable results. With
-  fewer than 3 the command prints a tip on stderr; it is never an error.
+- `--url`: 1 to 5 real pages you want to extract. One works; we recommend 3 or
+  more of the same page type (e.g. 3 product pages), because Extract compares
+  pages of one type to check the fields it found and fill in fields one page is
+  missing. Several page types can share the 5 (e.g. 3 product pages + 2
+  search-result pages). With fewer than 3 the command prints a tip on stderr;
+  it is never an error.
 - Without `--wait` the command returns at once; then check about every 30
   seconds with `zenrows extract prepare status example.com` until it says
   `ready`. `--wait` polls at the same pace.

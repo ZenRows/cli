@@ -4,8 +4,8 @@
  * `extract=auto` answers REQS007 on a domain Extract has not prepared yet. Preparing
  * it is a call any key can make: `POST {apiBase}/extract/prepared-domains` with the
  * domain and 1 to 5 example URLs answers 202 at once; the preparation itself takes a
- * few minutes and costs no credits. One example URL works; at least 3 of the same
- * page type work better (see `RECOMMENDED_EXAMPLE_URLS`). `GET .../{domain}` reports progress and
+ * few minutes and costs no credits. One example URL works; we recommend 3 or more of
+ * the same page type (see `RECOMMENDED_EXAMPLE_URLS`). `GET .../{domain}` reports progress and
  * `GET .../allowance` the account's monthly allowance of new domains. Auth is the
  * `X-API-Key` header; errors are problem+json and we branch on `status` + `code`.
  * `fetchImpl` / `sleepImpl` / `now` are injectable for tests.
@@ -17,9 +17,9 @@ import { agentClientHeader } from "./agent-client.ts";
 
 export const MAX_EXAMPLE_URLS = 5;
 /**
- * How many example URLs to recommend: 3 pages of one page type. Extract compares
- * the pages of a type against each other, so it can check the fields it found and
- * fill in fields one page is missing. Advice only: 1 and 2 URLs are still valid.
+ * How many example URLs to recommend: 3 or more of the same page type, because
+ * Extract compares pages of one type to check the fields it found and fill in fields
+ * one page is missing. Advice only: 1 and 2 URLs are still valid.
  */
 export const RECOMMENDED_EXAMPLE_URLS = 3;
 
@@ -30,9 +30,9 @@ export const RECOMMENDED_EXAMPLE_URLS = 3;
 export function exampleUrlsHint(count: number): string | undefined {
   if (count >= RECOMMENDED_EXAMPLE_URLS) return undefined;
   return (
-    `Tip: ${count === 1 ? "one example URL works" : `${count} example URLs work`}, but more related URLs work better. ` +
-    `Add pages of the same page type (at least ${RECOMMENDED_EXAMPLE_URLS}, up to ${MAX_EXAMPLE_URLS} in total): ` +
-    "Extract compares them to check the fields it finds and fill in fields one page is missing."
+    `Tip: ${count === 1 ? "one example URL works" : `${count} example URLs work`}; we recommend ` +
+    `${RECOMMENDED_EXAMPLE_URLS} or more of the same page type (e.g. 3 product pages), up to ${MAX_EXAMPLE_URLS} in total, ` +
+    "because Extract compares pages of one type to check the fields it found and fill in fields one page is missing."
   );
 }
 /** How often `--wait` polls, and for how long by default. */
@@ -312,7 +312,7 @@ export function failureNextStep(domain: string, failure: PreparedDomain["failure
       step = `Run the same zenrows extract prepare ${domain} command again.`;
       break;
     case "discovery_failed":
-      step = `Run zenrows extract prepare ${domain} again with 1 to ${MAX_EXAMPLE_URLS} --url page URLs.`;
+      step = `Run zenrows extract prepare ${domain} again with 1 to ${MAX_EXAMPLE_URLS} --url page URLs; we recommend ${RECOMMENDED_EXAMPLE_URLS} or more of the same page type (e.g. 3 product pages).`;
       break;
     case "unpreparable":
       step = `Run zenrows extract prepare ${domain} again with different --url pages from the same site; the same URLs fail again.`;

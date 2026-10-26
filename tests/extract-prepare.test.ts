@@ -231,6 +231,7 @@ test("failureNextStep: the step comes from failure.code, the slot sentence from 
   assert.match(failureNextStep("x.com", { code: "interrupted" }), /same zenrows extract prepare/);
   assert.match(failureNextStep("x.com", { code: "preparation_exhausted" }), /same zenrows extract prepare/);
   assert.match(failureNextStep("x.com", { code: "discovery_failed" }), /--url page URLs/);
+  assert.match(failureNextStep("x.com", { code: "discovery_failed" }), /1 to 5 --url page URLs; we recommend 3 or more of the same page type/);
   assert.match(failureNextStep("x.com", { code: "unpreparable" }), /different --url pages/);
   assert.match(failureNextStep("x.com", { code: "preparation_failed" }), /other --url pages/);
   assert.match(failureNextStep("x.com", { code: "verification_failed" }), /support/);
@@ -301,8 +302,9 @@ test("prepare with fewer than 3 URLs prints a tip on stderr, keeps the JSON and 
     assert.equal(result!.out.ok, true);
     assert.equal(result!.out.hint, undefined, "the tip never enters the stdout JSON");
     assert.deepEqual((calls[0]!.body as { example_urls: string[] }).example_urls, urls, "1 or 2 URLs are still sent as given");
-    assert.match(err, /Tip: .*more related URLs work better/);
-    assert.match(err, /same page type \(at least 3, up to 5 in total\)/);
+    assert.match(err, /Tip: .*we recommend 3 or more of the same page type/);
+    assert.match(err, /up to 5 in total/);
+    assert.doesNotMatch(err, /at least 3/);
   }
 });
 
@@ -327,7 +329,8 @@ test("exampleUrlsHint recommends 3 and is silent from 3 on", () => {
 test("prepare help recommends several URLs of one page type, not one per page kind", () => {
   assert.doesNotMatch(PREPARE_HELP, /one per page kind/);
   assert.match(PREPARE_HELP, /One works;/);
-  assert.match(PREPARE_HELP, /at least 3 pages of the same page type work better/);
-  assert.match(PREPARE_HELP, /3 product pages \+\s+2 search-result pages/);
+  assert.match(PREPARE_HELP, /we recommend 3 or more of the same page type/);
+  assert.doesNotMatch(PREPARE_HELP, /at least 3/);
+  assert.match(PREPARE_HELP, /Several page types can share the 5\s+\(e\.g\. 3 product pages \+ 2 search-result pages\)/);
   assert.match(PREPARE_HELP, /products\/a[\s\S]*products\/b[\s\S]*products\/c/);
 });
