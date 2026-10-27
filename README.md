@@ -147,10 +147,18 @@ few minutes if it should work, or use `--css`; preparing again does not change
 it. `zenrows extract` never falls back to Autoparse. The `fallbackAutoparse`
 adapter option is deprecated and has no effect.
 
+Pass 1 to 5 example URLs. One works; we recommend 3 or more of the same page
+type (e.g. 3 product pages), because Extract compares pages of one type to check
+the fields it found and fill in fields one page is missing. Several page types
+can share the 5 (e.g. 3 product pages + 2 search-result pages).
+
 ```bash
-zenrows extract prepare example.com --url https://example.com/p/1 --url https://example.com/list --wait
+zenrows extract prepare example.com \
+  --url https://www.example.com/products/a \
+  --url https://www.example.com/products/b \
+  --url https://www.example.com/products/c --wait
 zenrows extract prepare status example.com   # progress + monthly allowance
-zenrows extract https://example.com/p/1      # then extract again
+zenrows extract https://www.example.com/products/a   # then extract again
 ```
 
 ## 9. Batch

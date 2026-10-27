@@ -5,7 +5,8 @@
  * The way out of REQS007: prepare the domain so `extract=auto` works on it.
  * Submitting returns at once; `--wait` polls until the preparation is ready or
  * failed (a few minutes). Costs no credits; each new domain uses one slot of the
- * account's monthly allowance.
+ * account's monthly allowance. One --url works; with fewer than 3 the command prints a
+ * tip to stderr (never an error): we recommend 3 or more of the same page type, up to 5.
  */
 import { ensureApiKey } from "../../core/ensure-key.ts";
 import { loadConfig } from "../../core/config.ts";
@@ -15,6 +16,8 @@ import { ToolkitError } from "../../core/errors.ts";
 import {
   DEFAULT_WAIT_TIMEOUT_MS,
   MAX_EXAMPLE_URLS,
+  RECOMMENDED_EXAMPLE_URLS,
+  exampleUrlsHint,
   failureNextStep,
   getAllowance,
   getPreparedDomain,
@@ -39,7 +42,8 @@ export const PREPARE_HELP = [
   "Not for EXTRACT_PAGE_NOT_RECOGNISED: that domain is already prepared, and preparing it",
   "again does not change that answer.",
   "",
-  `  --url <page-url>       1 to ${MAX_EXAMPLE_URLS} real pages you want to extract, one per page kind (repeat --url)`,
+  `  --url <page-url>       a real page you want to extract (repeat --url, 1 to ${MAX_EXAMPLE_URLS}). One works;`,
+  `                         we recommend ${RECOMMENDED_EXAMPLE_URLS} or more of the same page type (e.g. 3 product pages)`,
   "  --wait                 poll every 30 seconds until the domain is ready or failed; off by default",
   `  --timeout <seconds>    give up waiting after this long (default ${DEFAULT_WAIT_TIMEOUT_MS / 1000})`,
   "  status <domain>        show progress and the account's monthly allowance",
@@ -49,6 +53,14 @@ export const PREPARE_HELP = [
   "account's monthly allowance; a domain that is already prepared answers ready at once and",
   "uses none. The domain is the host (shop.example.com and example.com are separate); a",
   "leading www. is dropped.",
+  "",
+  `1 to ${MAX_EXAMPLE_URLS} example URLs. One works; we recommend ${RECOMMENDED_EXAMPLE_URLS} or more of the same page type`,
+  "(e.g. 3 product pages), because Extract compares pages of one type to check the fields",
+  `it found and fill in fields one page is missing. Several page types can share the ${MAX_EXAMPLE_URLS}`,
+  "(e.g. 3 product pages + 2 search-result pages). Three product pages:",
+  "",
+  "  zenrows extract prepare example.com --url https://www.example.com/products/a \\",
+  "    --url https://www.example.com/products/b --url https://www.example.com/products/c --wait",
 ].join("\n");
 
 /** Injectable for tests: network, sleep and clock. */
@@ -99,6 +111,9 @@ export async function runPrepare(argv: string[], ctx: RunContext, deps: PrepareD
     }
 
     log.step(`Prepare ${domain} for Extract (${urls.length} example URL${urls.length === 1 ? "" : "s"})…`);
+    // Advice on stderr only: the --json payload on stdout and the exit code are unchanged.
+    const hint = exampleUrlsHint(urls.length);
+    if (hint) log.dim(hint);
     let record: PreparedDomain = await prepareDomain(domain, urls, opts);
     if (record.already_in_progress) log.info(`${domain} was already being prepared; following that preparation.`);
     // A submit that answers ready at once found the domain already prepared.
@@ -137,7 +152,7 @@ function validateUrls(raw: unknown, domain: string): string[] {
       code: "INVALID_USAGE",
       message: `Pass 1 to ${MAX_EXAMPLE_URLS} example page URLs with --url (got ${urls.length}).`,
       likely_cause: "Preparation learns the domain from real pages you want to extract.",
-      next_action: "Add one --url per page kind, e.g. a product page and a listing page.",
+      next_action: `Add 1 to ${MAX_EXAMPLE_URLS} --url pages. One works; ${RECOMMENDED_EXAMPLE_URLS} or more of the same page type work better.`,
       suggested_commands: [`zenrows extract prepare ${domain} --url https://${domain}/<page>`],
     });
   }

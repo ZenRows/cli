@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { runPrepare } from "../src/cli/commands/extract-prepare.ts";
+import { PREPARE_HELP, runPrepare } from "../src/cli/commands/extract-prepare.ts";
 import { extract } from "../src/cli/commands/extract.ts";
-import { failureNextStep, normalizeDomain, prepareCommand } from "../src/core/prepared-domains-api.ts";
+import { exampleUrlsHint, failureNextStep, normalizeDomain, prepareCommand } from "../src/core/prepared-domains-api.ts";
 
 const ctx = { json: true, yes: false };
 const BASE = "/v1/extract/prepared-domains";
@@ -231,6 +231,7 @@ test("failureNextStep: the step comes from failure.code, the slot sentence from 
   assert.match(failureNextStep("x.com", { code: "interrupted" }), /same zenrows extract prepare/);
   assert.match(failureNextStep("x.com", { code: "preparation_exhausted" }), /same zenrows extract prepare/);
   assert.match(failureNextStep("x.com", { code: "discovery_failed" }), /--url page URLs/);
+  assert.match(failureNextStep("x.com", { code: "discovery_failed" }), /1 to 5 --url page URLs; we recommend 3 or more of the same page type/);
   assert.match(failureNextStep("x.com", { code: "unpreparable" }), /different --url pages/);
   assert.match(failureNextStep("x.com", { code: "preparation_failed" }), /other --url pages/);
   assert.match(failureNextStep("x.com", { code: "verification_failed" }), /support/);
@@ -272,4 +273,64 @@ test("zenrows extract routes `prepare` to the prepare command", async () => {
   });
   assert.equal(code, 1);
   assert.equal(JSON.parse(raw).error.code, "INVALID_USAGE", "no --url: rejected locally, no extract of a URL named prepare");
+});
+
+async function captureErr(fn: () => unknown): Promise<string> {
+  const orig = process.stderr.write.bind(process.stderr);
+  let buf = "";
+  process.stderr.write = ((s: string | Uint8Array, ...rest: unknown[]) => {
+    if (typeof s !== "string") return (orig as (...a: unknown[]) => boolean)(s, ...rest);
+    buf += s;
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    await fn();
+  } finally {
+    process.stderr.write = orig;
+  }
+  return buf;
+}
+
+test("prepare with fewer than 3 URLs prints a tip on stderr, keeps the JSON and the exit code", async () => {
+  for (const urls of [["https://example.com/products/a"], ["https://example.com/products/a", "https://example.com/products/b"]]) {
+    const { calls, fetchImpl } = stub({ [`POST ${BASE}`]: () => res(RECORD, 202) });
+    let result: Awaited<ReturnType<typeof run>> | undefined;
+    const err = await captureErr(async () => {
+      result = await run(["example.com", ...urls.flatMap((u) => ["--url", u])], fetchImpl);
+    });
+    assert.equal(result!.code, 0);
+    assert.equal(result!.out.ok, true);
+    assert.equal(result!.out.hint, undefined, "the tip never enters the stdout JSON");
+    assert.deepEqual((calls[0]!.body as { example_urls: string[] }).example_urls, urls, "1 or 2 URLs are still sent as given");
+    assert.match(err, /Tip: .*we recommend 3 or more of the same page type/);
+    assert.match(err, /up to 5 in total/);
+    assert.doesNotMatch(err, /at least 3/);
+  }
+});
+
+test("prepare with 3 or more URLs prints no tip", async () => {
+  const { fetchImpl } = stub({ [`POST ${BASE}`]: () => res(RECORD, 202) });
+  const urls = ["a", "b", "c"].map((p) => `https://example.com/products/${p}`);
+  let code = -1;
+  const err = await captureErr(async () => {
+    ({ code } = await run(["example.com", ...urls.flatMap((u) => ["--url", u])], fetchImpl));
+  });
+  assert.equal(code, 0);
+  assert.doesNotMatch(err, /Tip:/);
+});
+
+test("exampleUrlsHint recommends 3 and is silent from 3 on", () => {
+  assert.match(exampleUrlsHint(1) ?? "", /one example URL works/);
+  assert.match(exampleUrlsHint(2) ?? "", /2 example URLs work/);
+  assert.equal(exampleUrlsHint(3), undefined);
+  assert.equal(exampleUrlsHint(5), undefined);
+});
+
+test("prepare help recommends several URLs of one page type, not one per page kind", () => {
+  assert.doesNotMatch(PREPARE_HELP, /one per page kind/);
+  assert.match(PREPARE_HELP, /One works;/);
+  assert.match(PREPARE_HELP, /we recommend 3 or more of the same page type/);
+  assert.doesNotMatch(PREPARE_HELP, /at least 3/);
+  assert.match(PREPARE_HELP, /Several page types can share the 5\s+\(e\.g\. 3 product pages \+ 2 search-result pages\)/);
+  assert.match(PREPARE_HELP, /products\/a[\s\S]*products\/b[\s\S]*products\/c/);
 });
