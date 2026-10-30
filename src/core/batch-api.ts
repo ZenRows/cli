@@ -830,7 +830,7 @@ export async function waitForJob(id: string, opts: CallOpts & { waitMs?: number 
       if (!isTransient(err)) throw err;
       lastErr = err;
     }
-    if (Date.now() + delay > deadline) {
+    if (Date.now() + delay >= deadline) {
       // Out of time: report the last state read, or the error if none was.
       if (!last) throw lastErr;
       return last;
