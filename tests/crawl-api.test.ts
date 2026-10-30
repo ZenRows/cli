@@ -284,6 +284,36 @@ test("422 idempotency_key_reused says to send a new key, not to retry as is", as
   );
 });
 
+test("createCrawl sends the webhook with only the fields set", async () => {
+  const { impl, calls } = stubFetch(202, crawlBody);
+  await createCrawl({ url: "https://example.com/products/", webhook: { url: "https://example.com/hook" } }, { apiKey: "k", fetchImpl: impl });
+  assert.deepEqual(JSON.parse(String(calls[0]!.init?.body)).webhook, { url: "https://example.com/hook" });
+  await createCrawl(
+    {
+      url: "https://example.com/products/",
+      webhook: { url: "https://example.com/hook", events: ["crawl.completed"], metadata: { k: "v" } },
+    },
+    { apiKey: "k", fetchImpl: impl },
+  );
+  assert.deepEqual(JSON.parse(String(calls[1]!.init?.body)).webhook, {
+    url: "https://example.com/hook",
+    events: ["crawl.completed"],
+    metadata: { k: "v" },
+  });
+});
+
+test("422 webhook_signing_key_required says to create the signing key", async () => {
+  const { impl } = problem(422, "webhook_signing_key_required");
+  await assert.rejects(
+    () => createCrawl({ url: "https://example.com/products/", webhook: { url: "https://example.com/hook" } }, { apiKey: "k", fetchImpl: impl }),
+    (e: unknown) =>
+      e instanceof ToolkitError &&
+      e.code === "CRAWL_INVALID_REQUEST" &&
+      e.server_code === "webhook_signing_key_required" &&
+      /signing key/.test(e.next_action),
+  );
+});
+
 test("409 maps to CRAWL_REQUEST_IN_FLIGHT", async () => {
   const { impl } = problem(409, "idempotency_request_in_flight");
   await assert.rejects(

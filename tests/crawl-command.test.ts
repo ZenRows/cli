@@ -800,3 +800,51 @@ test("crawl create sends --discovery links, and refuses any other strategy befor
     },
   );
 });
+
+test("crawl create sends --webhook, --webhook-event and --webhook-metadata as webhook, and prints it", async () => {
+  const webhook = { url: "https://example.com/hook", events: ["crawl.completed"], metadata: { k: "v" } };
+  await withCrawlWorkspace(
+    () => json({ ...crawlBody, webhook }, 202),
+    async (calls) => {
+      const { code, out } = await run([
+        "create",
+        "https://example.com/products/",
+        "--webhook",
+        "https://example.com/hook",
+        "--webhook-event",
+        "crawl.completed",
+        "--webhook-metadata",
+        "k=v",
+      ]);
+      assert.equal(code, 0);
+      assert.deepEqual(JSON.parse(String(calls[0]!.init?.body)).webhook, webhook);
+      assert.deepEqual(out.crawl.webhook, webhook);
+    },
+  );
+});
+
+test("crawl create refuses malformed webhook flags before any network call", async () => {
+  await withCrawlWorkspace(
+    () => json(crawlBody, 202),
+    async (calls) => {
+      const cases = [
+        ["--webhook", "http://example.com/hook"],
+        ["--webhook", "not-a-url"],
+        ["--webhook-event", "crawl.completed"],
+        ["--webhook-metadata", "k=v"],
+        ["--webhook", "https://example.com/hook", "--webhook-event", "crawl.done"],
+        ["--webhook", "https://example.com/hook", "--webhook-event", "crawl.failed", "--webhook-event", "crawl.failed"],
+        ["--webhook", "https://example.com/hook", "--webhook-metadata", "novalue"],
+        ["--webhook", "https://example.com/hook", "--webhook-metadata", `${"k".repeat(65)}=v`],
+        ["--webhook", "https://example.com/hook", "--webhook-metadata", `k=${"v".repeat(1023)}`],
+        ["--webhook", "https://example.com/hook", ...Array.from({ length: 21 }, (_, i) => ["--webhook-metadata", `k${i}=v`]).flat()],
+      ];
+      for (const flags of cases) {
+        const { code, out } = await run(["create", "https://example.com/products/", ...flags]);
+        assert.equal(code, 1, flags.join(" "));
+        assert.equal(out.error.code, "INVALID_USAGE", flags.join(" "));
+      }
+      assert.equal(calls.length, 0);
+    },
+  );
+});

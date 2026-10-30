@@ -892,6 +892,40 @@ await liveCheck(
   },
 );
 
+await liveCheck(
+  "25",
+  "Webhook",
+  "crawl create --webhook --webhook-event crawl.completed --webhook-metadata k=v: the crawl carries that webhook",
+  async () => {
+    const want = {
+      url: "https://example.com/zenrows-hook",
+      events: ["crawl.completed"],
+      metadata: { k: "v" },
+    };
+    const r = createWith([
+      CRAWL_URL,
+      "--depth",
+      "1",
+      "--max-pages",
+      "1",
+      "--webhook",
+      want.url,
+      "--webhook-event",
+      want.events[0],
+      "--webhook-metadata",
+      "k=v",
+    ]);
+    if (r.code !== 0 || !r.json?.crawl_id) return { status: FAIL, actual: H.trim(show(r), 400) };
+    z(["crawl", "stop", r.json.crawl_id, "--json"]);
+    const got = r.json.crawl?.webhook;
+    return {
+      status: passIf(JSON.stringify(got) === JSON.stringify(want)),
+      actual: `${r.json.crawl_id}: webhook ${JSON.stringify(got)}`,
+      evidence: show(r),
+    };
+  },
+);
+
 H.naming({
   operations: {
     create: "crawl create",

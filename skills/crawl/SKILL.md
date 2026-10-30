@@ -1,6 +1,6 @@
 ---
 name: crawl
-description: "Collect the URLs behind one start page with Crawl (new): create a crawl, wait for it, read the kept URLs and optionally each page's HTML, stop it. Use when the user has a listing or section URL but not the item URLs."
+description: "Collect the URLs behind one start page with Crawl (new): create a crawl, wait for it or get notified by webhook, read the kept URLs and optionally each page's HTML, stop it. Use when the user has a listing or section URL but not the item URLs."
 version: 0.1.0
 requires_backend_capabilities: [crawl]
 ---
@@ -70,6 +70,36 @@ fetch, and `--max-pages` counts it. Raise `--max-pages` to keep the same number
 of URLs. A result's `content_status` is `pending`, `fetched` or `failed`; only
 `fetched` results have content (else `CRAWL_CONTENT_NOT_FOUND`). `download`
 reports the crawl's `status`, and `partial: true` while it runs.
+
+## Webhooks
+
+Instead of polling, have Crawl post its events to a URL you run:
+
+```
+zenrows crawl create <url> --depth 1 --webhook https://example.com/hooks/zenrows \
+  --webhook-event crawl.completed --webhook-event crawl.failed \
+  --webhook-metadata site=books --json
+```
+
+- `--webhook <url>` takes an absolute `https` URL. It is fixed at create.
+- `--webhook-event` repeats; each of `crawl.started`, `crawl.completed`,
+  `crawl.stopped`, `crawl.failed` at most once. Leave it out for all four.
+  Exactly one of the last three is sent per crawl.
+- `--webhook-metadata key=value` repeats (up to 20 keys of 1 to 64
+  characters, each value at most 1,024 bytes as JSON); every event carries it
+  back, to match the crawl to your own records.
+- The crawl shows `webhook` as `{url, events, metadata}`, `events` being the
+  effective list; a crawl without one has none.
+- Events are signed JSON (`schema: zenrows.webhook/v1`, `event_id`,
+  `event_type`, `occurred_at`, `resource {type: crawl, id, url}`, `metadata`).
+  Verify the `X-Signature: t=…,v1=…,kid=…` header: `v1` is the hex
+  HMAC-SHA256 of `"<t>." + body` with the account's webhook signing key
+  (Settings → API Keys). Events can repeat (drop one whose `event_id` you
+  handled) and arrive out of order (sort by `occurred_at`).
+- The account needs a webhook signing key: without one the create gets 422
+  `webhook_signing_key_required` (create the key, then retry). A bad URL,
+  event or metadata gets 422 `invalid_webhook`. Both are
+  `CRAWL_INVALID_REQUEST`, and nothing was created.
 
 ## While it runs, and after
 
