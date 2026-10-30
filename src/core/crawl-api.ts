@@ -21,6 +21,7 @@ import { readAccount } from "./agent-account.ts";
 import { registerSecret } from "./logger.ts";
 import { CLI_USER_AGENT, loadConfig } from "./config.ts";
 import { agentClientHeader } from "./agent-client.ts";
+import { crawlBackoffMs as backoffMs, defaultSleep, retryAfterMs } from "./backoff.ts";
 
 /** Production Crawl API base (no trailing slash): the Fetch/Extract host. */
 export const DEFAULT_CRAWL_API_BASE = "https://api.zenrows.com/v1";
@@ -204,8 +205,6 @@ interface RawResponse {
 }
 
 const MAX_RETRIES = 3;
-/** The longest a Retry-After may make one retry wait, so a large server value cannot hang a command. */
-const MAX_RETRY_AFTER_SECONDS = 30;
 const READ_RETRY_STATUSES: ReadonlySet<number> = new Set([429, 502, 503, 504]);
 // 429 on create is the active-job limit: a retry only waits for a slot that may never free.
 const CREATE_RETRY_STATUSES: ReadonlySet<number> = new Set([502, 503, 504]);
@@ -221,18 +220,6 @@ function retryStatuses(method: string, headers: Record<string, string>): Readonl
   if (method === "GET") return READ_RETRY_STATUSES;
   return headers["Idempotency-Key"] ? CREATE_RETRY_STATUSES : undefined;
 }
-
-/** 250 ms x 2^attempt, capped at 10 s, +/-20% jitter. */
-function backoffMs(attempt: number): number {
-  return Math.min(250 * 2 ** attempt, 10_000) * (0.8 + Math.random() * 0.4);
-}
-
-/** `Retry-After` in whole seconds, as milliseconds, at most `MAX_RETRY_AFTER_SECONDS`. */
-function retryAfterMs(value: string | null): number | undefined {
-  return value && /^\d+$/.test(value.trim()) ? Math.min(Number(value), MAX_RETRY_AFTER_SECONDS) * 1000 : undefined;
-}
-
-const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 /** One HTTP attempt with its own timeout; the body is read inside it. */
 async function attempt(url: string, init: RequestInit, opts: RequestOpts): Promise<RawResponse> {

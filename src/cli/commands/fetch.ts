@@ -13,7 +13,7 @@ import { log } from "../../core/logger.ts";
 import { newRunId, writeRun } from "../../core/artifacts.ts";
 import { ToolkitError } from "../../core/errors.ts";
 import { runFetch, type FetchOptions, type ResponseFormat } from "../../adapters/protected-fetch.ts";
-import { formatRequestCost } from "../../core/http.ts";
+import { formatRequestCost, shellQuote } from "../../core/http.ts";
 import { parse, asString, asNumber, type Command, type RunContext } from "../command.ts";
 import { printError, writeOut } from "../output.ts";
 import { refreshClaimAdvice } from "../../core/claim-link.ts";
@@ -36,7 +36,8 @@ export const fetch_: Command = {
     "  --output <fmt>         html (default) | markdown | text | pdf",
     "  --screenshot           capture an above-the-fold screenshot",
     "  --out <file>           write the response body to a file",
-    "  --timeout <ms>         client-side timeout (default 120000; above the API's own 90s budget)",
+    "  --timeout <ms>         client-side timeout per attempt (default 200000; the API's own budget is 180s)",
+    "  --retries <n>          retries on 429/502/503/504 or a connect/DNS error (default 2; 0 disables)",
     "  --no-signup            do not auto-create a Free plan account if no key exists",
     "  --json                 print a structured result",
     "",
@@ -59,6 +60,7 @@ export const fetch_: Command = {
       screenshot: { type: "boolean" },
       out: { type: "string" },
       timeout: { type: "string" },
+      retries: { type: "string" },
       "no-signup": { type: "boolean" },
       json: { type: "boolean" },
     });
@@ -101,6 +103,8 @@ export const fetch_: Command = {
       output: normalizeOutput(asString(values.output)),
       screenshot: values.screenshot === true,
       timeoutMs: normalizeTimeout(values.timeout),
+      retries: normalizeRetries(values.retries),
+      rerunCommand: rerunCommand("fetch", argv, ctx),
     };
 
     const runId = newRunId();
@@ -155,7 +159,7 @@ export const fetch_: Command = {
       if (runDir) log.dim(`  artifact: ${runDir}`);
 
       if (ctx.json || values.json) {
-        log.out(JSON.stringify({ ok: true, runId, mode, httpStatus: result.status, bytes, costUsd: result.costUsd, costCredits: result.costCredits, requestId: result.requestId, finalUrl: result.finalUrl }, null, 2));
+        log.out(JSON.stringify({ ok: true, runId, mode, httpStatus: result.status, bytes, costUsd: result.costUsd, costCredits: result.costCredits, requestId: result.requestId, finalUrl: result.finalUrl, attempts: result.attempts ?? 1 }, null, 2));
       } else if (!values.out) {
         if (result.isBinary) {
           // Never dump raw binary to the terminal — it corrupts the session and
@@ -207,6 +211,36 @@ export function normalizeTimeout(v: unknown): number | undefined {
     });
   }
   return ms;
+}
+
+/**
+ * `--retries <n>`: whole decimal digits, 0 or more. Like `--timeout`, a bad
+ * value is an error, never a silent fallback to the default. `1e1`, `0x2`,
+ * `+1` and values with spaces are rejected, although `Number()` would read them.
+ */
+export function normalizeRetries(v: unknown): number | undefined {
+  if (v === undefined) return undefined;
+  const n = typeof v === "string" && /^\d+$/.test(v) ? Number(v) : undefined;
+  if (n === undefined || !Number.isSafeInteger(n)) {
+    throw new ToolkitError({
+      code: "INVALID_USAGE",
+      message: `Invalid --retries value '${String(v)}'.`,
+      likely_cause: "--retries takes a whole number, 0 or more.",
+      next_action: "Pass a count, e.g. --retries 2, or --retries 0 to send the request once.",
+      suggested_commands: ["zenrows fetch <url> --retries 0"],
+    });
+  }
+  return n;
+}
+
+/**
+ * The command the user ran, quoted for a shell, for errors whose advice is
+ * "run the same command again". The router strips a global `--json`, so it is
+ * added back when it was set.
+ */
+export function rerunCommand(name: string, argv: string[], ctx: RunContext): string {
+  const args = ctx.json && !argv.includes("--json") ? [...argv, "--json"] : argv;
+  return ["zenrows", name, ...args.map(shellQuote)].join(" ");
 }
 
 export function normalizeOutput(v?: string): ResponseFormat | undefined {

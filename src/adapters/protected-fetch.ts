@@ -46,11 +46,22 @@ export interface FetchOptions {
   outputs?: string;
   jsonResponse?: boolean;
   /**
-   * Client-side timeout in milliseconds. Not an API parameter — it never goes
-   * into the query string. Unset means `http.ts`'s default, which is above the
-   * gateway's own request budget on purpose.
+   * Client-side timeout in milliseconds, per HTTP attempt. Not an API
+   * parameter — it never goes into the query string. Unset means
+   * `DEFAULT_TIMEOUT_MS` in `http.ts` (200 s), which sits above the API's own
+   * 180 s budget (`SERVER_BUDGET_MS`) on purpose.
    */
   timeoutMs?: number;
+  /**
+   * Retries for a retryable failure (429, 502, 503, 504, or a network error).
+   * Not an API parameter. Unset means `http.ts`'s default; 0 sends the request once.
+   */
+  retries?: number;
+  /**
+   * The command the user ran, quoted for a shell. Not an API parameter.
+   * Errors that advise running the same command again suggest it verbatim.
+   */
+  rerunCommand?: string;
 }
 
 const RESPONSE_TYPE: Partial<Record<ResponseFormat, string>> = {
@@ -152,6 +163,11 @@ export async function runFetch(
   validateAutoManual(opts, config);
   const params = buildParams(opts, config);
   const mode: "auto" | "manual" = params.mode === "auto" ? "auto" : "manual";
-  const result = await scrape(config.apiBase, apiKey, params, { timeoutMs: opts.timeoutMs, projectRoot });
+  const result = await scrape(config.apiBase, apiKey, params, {
+    timeoutMs: opts.timeoutMs,
+    retries: opts.retries,
+    projectRoot,
+    rerunCommand: opts.rerunCommand,
+  });
   return { result, params, mode };
 }
