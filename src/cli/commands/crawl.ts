@@ -28,6 +28,10 @@ import {
   type CrawlResult,
   type CrawlStop,
   type CreateCrawlParams,
+  type CreateCrawlWebhook,
+  type CrawlWebhookEvent,
+  CRAWL_WEBHOOK_EVENTS,
+  WEBHOOK_METADATA_LIMITS,
 } from "../../core/crawl-api.ts";
 import { asNumber, asString, parse, type Command, type RunContext } from "../command.ts";
 import { ToolkitError, isKeyCapReached, keyCapReached, quotaExhausted } from "../../core/errors.ts";
@@ -60,6 +64,13 @@ export const crawl: Command = {
     "                                    fetch counted by --max-pages",
     "    --discovery links               how the crawl finds the URLs it follows; links (the",
     "                                    default) follows the links in each page's HTML",
+    "    --webhook <url>                 post the crawl's events to this https URL, signed with the",
+    "                                    account's webhook signing key (Settings → API Keys)",
+    "    --webhook-event <event>         with --webhook: send only this event (repeatable); one of",
+    "                                    crawl.started, crawl.completed, crawl.stopped, crawl.failed;",
+    "                                    leave it out for all four",
+    "    --webhook-metadata <key=value>  with --webhook: sent back with every event (repeatable,",
+    "                                    up to 20)",
     "    --follow                        wait until the crawl ends (Ctrl-C stops the wait, not the crawl)",
     "    --timeout <s>                   with --follow: stop waiting after s seconds (default 600)",
     "    --idempotency-key <key>         so a retried create starts no second crawl",
@@ -132,6 +143,9 @@ async function createCmd(rest: string[], ctx: RunContext): Promise<number> {
     "exclude-patterns": { type: "string", multiple: true },
     "output-format": { type: "string" },
     discovery: { type: "string", multiple: true },
+    webhook: { type: "string" },
+    "webhook-event": { type: "string", multiple: true },
+    "webhook-metadata": { type: "string", multiple: true },
     follow: { type: "boolean" },
     timeout: { type: "string" },
     "idempotency-key": { type: "string" },
@@ -186,6 +200,8 @@ async function createCmd(rest: string[], ctx: RunContext): Promise<number> {
     }
     params.discovery = ["links"];
   }
+  const webhook = webhookOf(values);
+  if (webhook) params.webhook = webhook;
   const timeoutMs = timeoutFlag(values.timeout);
   const idempotencyKey = asString(values["idempotency-key"]);
 
@@ -567,6 +583,11 @@ function printCrawl(
   if (cov) {
     log.info(`  ${cov.items_found} item(s) found · ${cov.pages_fetched} page(s) fetched · ${cov.pages_failed} failed`);
   }
+  const hook = (c as Crawl).webhook;
+  if (hook?.url) {
+    const meta = hook.metadata && Object.keys(hook.metadata).length ? ` · metadata: ${JSON.stringify(hook.metadata)}` : "";
+    log.info(`  webhook: ${hook.url} · events: ${(hook.events ?? []).join(", ") || "all"}${meta}`);
+  }
   if (extra.note) log.dim(`  next: zenrows crawl wait ${c.crawl_id}`);
   else if (note) log.warn(`  ${note}`);
   if (err) printError(err, false);
@@ -619,6 +640,77 @@ function pageLimit(v: unknown, max: number): number | undefined {
     });
   }
   return n;
+}
+
+/**
+ * `--webhook`, `--webhook-event` and `--webhook-metadata key=value` as the create's
+ * `webhook`, or undefined without `--webhook`. Checks the shapes and the API's limits
+ * before any request; whether the URL's host resolves is the API's to judge.
+ */
+function webhookOf(values: Record<string, unknown>): CreateCrawlWebhook | undefined {
+  const url = asString(values.webhook);
+  const events = patterns(values["webhook-event"]);
+  const pairs = patterns(values["webhook-metadata"]);
+  if (url === undefined) {
+    if (events.length || pairs.length) {
+      throw webhookUsage(
+        `${events.length ? "--webhook-event" : "--webhook-metadata"} needs --webhook.`,
+        "Pass --webhook <https-url> with it, or leave it out.",
+      );
+    }
+    return undefined;
+  }
+  let parsed: URL | undefined;
+  try {
+    parsed = new URL(url);
+  } catch {
+    parsed = undefined;
+  }
+  if (parsed?.protocol !== "https:") {
+    throw webhookUsage(`Invalid --webhook value '${url}': it must be an absolute https URL.`, "Pass e.g. --webhook https://example.com/hooks/zenrows.");
+  }
+  const webhook: CreateCrawlWebhook = { url };
+  if (events.length) {
+    const known = new Set<string>(CRAWL_WEBHOOK_EVENTS);
+    const unknown = events.find((e) => !known.has(e));
+    if (unknown !== undefined) {
+      throw webhookUsage(`Invalid --webhook-event value '${unknown}'.`, `Pass one of ${CRAWL_WEBHOOK_EVENTS.join(", ")}, or leave it out for all four.`);
+    }
+    const repeated = events.find((e, i) => events.indexOf(e) !== i);
+    if (repeated !== undefined) {
+      throw webhookUsage(`--webhook-event '${repeated}' is given twice.`, "Name each event once.");
+    }
+    webhook.events = events as CrawlWebhookEvent[];
+  }
+  if (pairs.length) {
+    const { keys, keyLength, valueBytes } = WEBHOOK_METADATA_LIMITS;
+    const metadata: Record<string, string> = {};
+    for (const p of pairs) {
+      const eq = p.indexOf("=");
+      if (eq <= 0) throw webhookUsage(`Invalid --webhook-metadata '${p}': use key=value.`, "Pass e.g. --webhook-metadata site=books.");
+      const key = p.slice(0, eq);
+      const value = p.slice(eq + 1);
+      if ([...key].length > keyLength) throw webhookUsage(`--webhook-metadata key '${key}' is longer than ${keyLength} characters.`, "Use a shorter key.");
+      if (key in metadata) throw webhookUsage(`--webhook-metadata key '${key}' is given twice.`, "Name each key once.");
+      if (Buffer.byteLength(JSON.stringify(value)) > valueBytes) {
+        throw webhookUsage(`--webhook-metadata '${key}' is longer than ${valueBytes} bytes as JSON.`, "Use a shorter value.");
+      }
+      metadata[key] = value;
+    }
+    if (Object.keys(metadata).length > keys) throw webhookUsage(`--webhook-metadata has more than ${keys} keys.`, `Pass at most ${keys}.`);
+    webhook.metadata = metadata;
+  }
+  return webhook;
+}
+
+function webhookUsage(message: string, next_action: string): ToolkitError {
+  return new ToolkitError({
+    code: "INVALID_USAGE",
+    message,
+    likely_cause: "The webhook flags do not match what Crawl accepts.",
+    next_action,
+    suggested_commands: ["zenrows crawl --help"],
+  });
 }
 
 function patterns(v: unknown): string[] {

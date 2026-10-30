@@ -81,6 +81,7 @@ and signal checks.
 | 19 | No match | an include pattern that matches nothing ends `completed` with 0 results and no `error`; SDKs return it; MCP and CLI say `ok: true` (CLI: exit 0, with a `note` about the patterns) |
 | 20 | Results after stop | the html crawl is stopped while its pages are still being fetched: reading its results loses no URL (MCP and CLI: `partial` follows the API's `next_cursor`, with a note to read again while it is set), and the same URLs come back once the pages in flight finish |
 | 21 | Documented defaults | a create without `max_pages` and `max_items` gets the default the docs state (100) |
+| 25 | Webhook | a create with `--webhook`, one `--webhook-event` and one `--webhook-metadata` returns a crawl that carries that `webhook`; it is stopped at once |
 
 Extra checks for this surface: every subcommand prints JSON with `--json` (`create`, `get`, `wait` and `stop` print `{ok, crawl_id, status, crawl, note?}`), Ctrl-C during `crawl wait` prints the resume hint and exits 130, and `--wait` and `--html` are rejected as unknown flags.
 

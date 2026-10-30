@@ -10,8 +10,9 @@
  * Crawl SDKs do (see `retryStatuses`). `fetchImpl` / `sleepImpl` are injectable
  * for tests.
  *
- * `output_format` takes `html` or `markdown` (absent = URLs only). Response fields we do
- * not model pass through untouched.
+ * `output_format` takes `html` or `markdown` (absent = URLs only). A `webhook` gets the
+ * crawl's events (`crawl.started` and how it ended) posted to a URL, signed with the
+ * account's webhook signing key. Response fields we do not model pass through untouched.
  */
 import { Readable } from "node:stream";
 import { ToolkitError, isKeyCapReached, keyCapReached, quotaExhausted } from "./errors.ts";
@@ -71,6 +72,16 @@ export interface Crawl {
   discovery?: string[];
   duplicates_removed?: number;
   finished_at?: string;
+  /** Where the crawl's events go. Absent or null on a crawl created without one. */
+  webhook?: CrawlWebhook | null;
+  [k: string]: unknown;
+}
+
+/** A crawl's webhook, as the API shows it: `events` is always the effective list. */
+export interface CrawlWebhook {
+  url: string;
+  events: CrawlWebhookEvent[];
+  metadata?: Record<string, unknown> | null;
   [k: string]: unknown;
 }
 
@@ -120,6 +131,18 @@ export interface CreateCrawlParams {
   output_format?: CrawlOutputFormat;
   /** How the crawl finds the URLs it follows on each page it walks. */
   discovery?: CrawlDiscoveryStrategy[];
+  /** Post the crawl's events to this URL. Fixed at create. */
+  webhook?: CreateCrawlWebhook;
+}
+
+/** The `webhook` of a create. Only the fields set are sent. */
+export interface CreateCrawlWebhook {
+  /** Absolute `https` URL each event is posted to. */
+  url: string;
+  /** The events to send, each once. Absent = all four. */
+  events?: CrawlWebhookEvent[];
+  /** Sent back with every event: up to 20 keys of 1 to 64 characters, each value at most 1,024 bytes as JSON. */
+  metadata?: Record<string, unknown>;
 }
 
 /** RFC 9457 problem body. */
@@ -138,6 +161,11 @@ export const CRAWL_NOT_ENABLED_CODE = "REQS008";
 export type CrawlOutputFormat = "html" | "markdown";
 /** How a crawl finds the URLs it follows on each page it walks. */
 export type CrawlDiscoveryStrategy = "links";
+/** The events a crawl's webhook can send. */
+export const CRAWL_WEBHOOK_EVENTS = ["crawl.started", "crawl.completed", "crawl.stopped", "crawl.failed"] as const;
+export type CrawlWebhookEvent = (typeof CRAWL_WEBHOOK_EVENTS)[number];
+/** The API's limits on a webhook's `metadata`. */
+export const WEBHOOK_METADATA_LIMITS = { keys: 20, keyLength: 64, valueBytes: 1024 } as const;
 
 
 /** A crawl stops progressing once its status is anything but `running`. */
@@ -427,7 +455,9 @@ function classifyProblem(
       next_action:
         serverCode === "idempotency_key_reused"
           ? "This Idempotency-Key was already used for a different request. Send a new key, or no key. Do not retry as is."
-          : "Fix the reported parameter and retry. See `zenrows crawl --help` for the accepted flags and ranges.",
+          : serverCode === "webhook_signing_key_required"
+            ? "Nothing was created. Create a webhook signing key in the dashboard (Settings → API Keys), then retry."
+            : "Fix the reported parameter and retry. See `zenrows crawl --help` for the accepted flags and ranges.",
     });
   }
   return new ToolkitError({
@@ -449,6 +479,12 @@ export function createCrawl(params: CreateCrawlParams, opts: CallOpts & { idempo
   if (params.exclude_patterns?.length) body.exclude_patterns = params.exclude_patterns;
   if (params.output_format !== undefined) body.output_format = params.output_format;
   if (params.discovery?.length) body.discovery = params.discovery;
+  if (params.webhook !== undefined) {
+    const webhook: Record<string, unknown> = { url: params.webhook.url };
+    if (params.webhook.events?.length) webhook.events = params.webhook.events;
+    if (params.webhook.metadata !== undefined) webhook.metadata = params.webhook.metadata;
+    body.webhook = webhook;
+  }
   return crawlJson<Crawl>("POST", "/crawls", {
     ...opts,
     body,
