@@ -706,6 +706,31 @@ test("the repeat command shell-quotes every argument and the key, keeping inner 
   );
 });
 
+test("a back-off that ends exactly at the --timeout is not slept", async () => {
+  // A clock that moves only by each sleep, so no stray millisecond decides it:
+  // after the 2 s back-off, the next 3 s one would end on the 5 s deadline
+  // itself, with no time left to read the job.
+  const realNow = Date.now;
+  let clock = realNow();
+  Date.now = () => clock;
+  try {
+    const sleeps: number[] = [];
+    const impl = (async () => json(job())) as unknown as typeof fetch;
+    await waitForJob("j1", {
+      apiKey: "k",
+      fetchImpl: impl,
+      waitMs: 5000,
+      sleepImpl: async (ms) => {
+        sleeps.push(ms);
+        clock += ms;
+      },
+    });
+    assert.deepEqual(sleeps, [2000], `sleeps: ${sleeps}`);
+  } finally {
+    Date.now = realNow;
+  }
+});
+
 test("a wait never sleeps or retries past its --timeout", async () => {
   const sleeps: number[] = [];
   let n = 0;
