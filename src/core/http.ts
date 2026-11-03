@@ -54,7 +54,7 @@ export interface ScraperParams {
 
 /**
  * Client-side timeout for a Fetch and Extract request, deliberately ABOVE the
- * gateway's own 90s request budget.
+ * gateway's own request budget: a Fetch request can take up to 3 minutes.
  *
  * The two must not be equal. When they were both 90s, any request that used
  * the full server budget became a race between our own abort and the API's
@@ -63,10 +63,10 @@ export interface ScraperParams {
  * client must outlive the server budget so the API always gets the chance to
  * answer for itself.
  */
-export const DEFAULT_TIMEOUT_MS = 120_000;
+export const DEFAULT_TIMEOUT_MS = 200_000;
 
 /** The gateway's own request budget. Kept here only to justify the default above. */
-export const SERVER_BUDGET_MS = 90_000;
+export const SERVER_BUDGET_MS = 180_000;
 
 /** No retry starts later than this after the first request. */
 const RETRY_BUDGET_MS = 90_000;
@@ -459,7 +459,7 @@ export function extractDomainNotPrepared(url: string, body: string): ToolkitErro
  * The CLI gave up waiting before the API answered. This is NOT unreachability:
  * the connection was established and the gateway was still working, so telling
  * the operator to check connectivity would send them at the wrong problem. The
- * elapsed time is included so the 90s server budget is visible in the output.
+ * elapsed time is included so the server budget is visible in the output.
  */
 export function requestTimeout(url: string, timeoutMs: number, elapsedMs: number): ToolkitError {
   const suggestedMs = Math.max(timeoutMs + 60_000, SERVER_BUDGET_MS + 60_000);

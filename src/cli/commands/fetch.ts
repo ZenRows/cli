@@ -36,7 +36,7 @@ export const fetch_: Command = {
     "  --output <fmt>         html (default) | markdown | text | pdf",
     "  --screenshot           capture an above-the-fold screenshot",
     "  --out <file>           write the response body to a file",
-    "  --timeout <ms>         client-side timeout (default 120000; above the API's own 90s budget)",
+    "  --timeout <ms>         client-side timeout (default 200000; above the API's own 180s budget)",
     "  --retries <n>          retry 429/502/503/504 and failed connects up to n times (default 0)",
     "  --no-signup            do not auto-create a Free plan account if no key exists",
     "  --json                 print a structured result",
