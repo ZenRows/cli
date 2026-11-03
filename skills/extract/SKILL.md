@@ -68,6 +68,7 @@ zenrows extract https://www.example.com/products/a  # 3. extract again
   `limit` / `remaining`.
 - `EXTRACT_PREPARE_OUT_OF_ALLOWANCE`: no slots left this month; use `--css`.
   `EXTRACT_PREPARE_UNAVAILABLE`: retry in a few minutes; do not loop.
+  `prepare` sends each request once: `--retries` does not apply to it.
   A `failed` status prints the next step for its failure code and says whether
   the attempt used an allowance slot.
 - A domain that is already prepared answers `ready` at once

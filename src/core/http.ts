@@ -9,7 +9,7 @@ import { ToolkitError, isKeyCapReached, keyCapReached, quotaExhausted } from "./
 import { storedClaimHint, usableClaimUrl } from "./claim-link.ts";
 import { readAccount } from "./agent-account.ts";
 import { ENV_KEY, resolveApiKey } from "./auth.ts";
-import { registerSecret } from "./logger.ts";
+import { log, registerSecret } from "./logger.ts";
 import { CLI_USER_AGENT } from "./config.ts";
 import { agentClientHeader } from "./agent-client.ts";
 import { normalizeDomain, PAGE_NOT_RECOGNISED_STEPS, prepareCommand } from "./prepared-domains-api.ts";
@@ -68,6 +68,47 @@ export const DEFAULT_TIMEOUT_MS = 120_000;
 /** The gateway's own request budget. Kept here only to justify the default above. */
 export const SERVER_BUDGET_MS = 90_000;
 
+/** No retry starts later than this after the first request. */
+const RETRY_BUDGET_MS = 90_000;
+/** Busy answers from the API, retried with `--retries`. */
+const RETRY_STATUSES: ReadonlySet<number> = new Set([429, 502, 503, 504]);
+/** Network error codes that mean the request never reached the API. */
+const NEVER_SENT_CODES: ReadonlySet<string> = new Set([
+  "ECONNREFUSED",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "ENETUNREACH",
+  "EHOSTUNREACH",
+  "UND_ERR_CONNECT_TIMEOUT",
+]);
+
+/** `Retry-After` in whole seconds, clamped to 0.25-30 s; undefined for any other value. */
+export function retryAfterMs(value: string | null): number | undefined {
+  if (!value || !/^\d+$/.test(value.trim())) return undefined;
+  return Math.min(Math.max(Number(value) * 1000, 250), 30_000);
+}
+
+/** Full jitter before retry `n` (0-based): uniform(0.25 s, min(30 s, 2^n s)). */
+export function jitterMs(n: number, random: () => number = Math.random): number {
+  return 250 + random() * (Math.min(30_000, 1000 * 2 ** n) - 250);
+}
+
+/**
+ * True when a fetch error's `cause` means the request never reached the API.
+ * ETIMEDOUT counts only on connect. A happy-eyeballs AggregateError counts
+ * only when every address failed to connect.
+ */
+export function neverSent(cause: unknown): boolean {
+  if (cause instanceof AggregateError) return cause.errors.length > 0 && cause.errors.every(neverSent);
+  const { code, syscall } = (cause ?? {}) as { code?: unknown; syscall?: unknown };
+  return code === "ETIMEDOUT" ? syscall === "connect" : NEVER_SENT_CODES.has(String(code));
+}
+
+/** A busy answer from the API. A status the target site sent is never retried. */
+function isRetryable(status: number, params: ScraperParams): boolean {
+  return RETRY_STATUSES.has(status) && !params.original_status && params.allowed_status_codes === undefined;
+}
+
 function buildUrl(apiBase: string, apiKey: string, params: ScraperParams): { full: string; redacted: string } {
   const u = new URL(apiBase);
   u.searchParams.set("apikey", apiKey);
@@ -86,48 +127,77 @@ export async function scrape(
   apiBase: string,
   apiKey: string,
   params: ScraperParams,
-  opts: { timeoutMs?: number; projectRoot?: string } = {},
+  opts: {
+    timeoutMs?: number;
+    projectRoot?: string;
+    /** Retries after the first request (`--retries`). 0, the default, sends it once. */
+    retries?: number;
+    /** Test seams for the waits and the retry budget. */
+    sleep?: (ms: number) => Promise<void>;
+    now?: () => number;
+  } = {},
 ): Promise<ScraperResult> {
   registerSecret(apiKey);
   const { full, redacted } = buildUrl(apiBase, apiKey, params);
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const controller = new AbortController();
-  // Our own timer is the only thing that aborts this controller, so this flag —
-  // not `err.name === "AbortError"` — is what tells a client-side give-up apart
-  // from a genuine transport failure. The two must never share an error code.
-  let timedOut = false;
-  const timeout = setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, timeoutMs);
-  const startedAt = Date.now();
+  const retries = opts.retries ?? 0;
+  const now = opts.now ?? Date.now;
+  const firstSentAt = now();
+  /** Waits before retry `n` and returns true, unless no retry is left or it would start after the budget. */
+  const retry = async (n: number, delayMs: number, reason: string): Promise<boolean> => {
+    if (n >= retries || now() - firstSentAt + delayMs > RETRY_BUDGET_MS) return false;
+    log.dim(`${reason}; retry ${n + 1}/${retries} in ${formatMs(delayMs)}`);
+    await (opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms))))(delayMs);
+    return true;
+  };
 
   let res: Response;
-  try {
-    res = await fetch(full, {
-      method: "GET",
-      headers: { "User-Agent": CLI_USER_AGENT, "Accept-Encoding": "gzip, deflate", ...agentClientHeader({ projectRoot: opts.projectRoot }) },
-      signal: controller.signal,
-    });
-  } catch (err) {
-    clearTimeout(timeout);
-    const elapsedMs = Date.now() - startedAt;
-    if (timedOut) throw requestTimeout(params.url, timeoutMs, elapsedMs);
-    const cause = err instanceof Error ? err.message : String(err);
-    throw new ToolkitError({
-      code: "BACKEND_UNAVAILABLE",
-      message: `Could not reach the Zenrows API.`,
-      likely_cause: `Network error after ${formatMs(elapsedMs)}: ${cause}`,
-      next_action: "Check connectivity and retry. Verify api base in `zenrows config show`.",
-      suggested_commands: ["zenrows status", "zenrows config show"],
-    });
-  }
-  clearTimeout(timeout);
+  let raw: Buffer;
+  let retriesUsed = 0;
+  for (; ; retriesUsed++) {
+    const controller = new AbortController();
+    // Our own timer is the only thing that aborts this controller, so this flag —
+    // not `err.name === "AbortError"` — is what tells a client-side give-up apart
+    // from a genuine transport failure. The two must never share an error code.
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
+    const startedAt = Date.now();
 
-  // Read the raw bytes once. `body` (UTF-8) drives all error detection and text
-  // output; `raw` preserves the exact bytes so binary responses (screenshot /
-  // PDF) can be written without the UTF-8 round-trip that corrupts them.
-  const raw = Buffer.from(await res.arrayBuffer());
+    try {
+      res = await fetch(full, {
+        method: "GET",
+        headers: { "User-Agent": CLI_USER_AGENT, "Accept-Encoding": "gzip, deflate", ...agentClientHeader({ projectRoot: opts.projectRoot }) },
+        signal: controller.signal,
+      });
+    } catch (err) {
+      clearTimeout(timeout);
+      const elapsedMs = Date.now() - startedAt;
+      // A timeout, or an error after the request was sent, is never retried:
+      // the API may still finish and charge that request.
+      if (timedOut) throw requestTimeout(params.url, timeoutMs, elapsedMs);
+      const retryable = err instanceof Error && neverSent(err.cause);
+      if (retryable && (await retry(retriesUsed, jitterMs(retriesUsed), "Network error before the request reached the API"))) continue;
+      const cause = err instanceof Error ? err.message : String(err);
+      throw new ToolkitError({
+        code: "BACKEND_UNAVAILABLE",
+        message: `Could not reach the Zenrows API.`,
+        likely_cause: `Network error after ${formatMs(elapsedMs)}: ${cause}`,
+        next_action: "Check connectivity and retry. Verify api base in `zenrows config show`.",
+        suggested_commands: ["zenrows status", "zenrows config show"],
+      });
+    }
+    clearTimeout(timeout);
+
+    // Read the raw bytes once. `body` (UTF-8) drives all error detection and text
+    // output; `raw` preserves the exact bytes so binary responses (screenshot /
+    // PDF) can be written without the UTF-8 round-trip that corrupts them.
+    raw = Buffer.from(await res.arrayBuffer());
+    const delayMs = retryAfterMs(res.headers.get("retry-after")) ?? jitterMs(retriesUsed);
+    if (!isRetryable(res.status, params) || !(await retry(retriesUsed, delayMs, `HTTP ${res.status}`))) break;
+  }
   const body = raw.toString("utf8");
   // A binary body is only ever produced by a successful screenshot/PDF request.
   // Zenrows error responses are always a JSON envelope (text), so exclude those.
@@ -278,6 +348,16 @@ export async function scrape(
       next_action: noResolve
         ? "Check the URL for typos. No configuration (--js-render, --premium-proxy) can reach a host with no DNS record — do not retry; it will fail identically and still cost credits."
         : "Verify the URL. Rendering or premium proxies will not turn a 404 into content — do not retry; it will fail identically and still cost credits.",
+    });
+  }
+  if (retriesUsed > 0 && isRetryable(res.status, params)) {
+    // A busy answer that outlasted the retries: a costlier configuration does not fix it.
+    throw new ToolkitError({
+      code: "FETCH_FAILED",
+      message: `The Zenrows API answered HTTP ${res.status} after ${retriesUsed} ${retriesUsed === 1 ? "retry" : "retries"}.`,
+      likely_cause: snippet(body) || "The Zenrows API is busy.",
+      next_action:
+        "Wait a minute, then run the same command again. Do not add --js-render or --premium-proxy: they cost more and do not help here.",
     });
   }
   if (res.status === 422 || res.status >= 500 || (res.status >= 400 && !looksLikeContent(result))) {
