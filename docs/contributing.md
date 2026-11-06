@@ -77,8 +77,19 @@ Merge PRs with Conventional Commit titles, for example `fix(crawl): ...` or
 
 After each merge to `main`, release-please opens or updates the PR
 `chore: release X.Y.Z`. It sets the version in `package.json`,
-`package-lock.json` and `CLI_VERSION` in `src/core/config.ts`. Do not change
-these by hand.
+`package-lock.json` and `CLI_VERSION` in `src/core/config.ts`, and adds the
+release's entry to `CHANGELOG.md`. Do not change these by hand.
+
+To list a change under "Behaviour Changes" in the changelog, end the PR body
+with an override block. release-please reads it in place of the squashed
+commit message, one Conventional Commit per line:
+
+```
+BEGIN_COMMIT_OVERRIDE
+feat(fetch): add --retries, off by default
+behaviour(fetch): what a user now sees differently
+END_COMMIT_OVERRIDE
+```
 
 To release, merge that PR. The workflow runs the checks, creates the tag
 `vX.Y.Z` and the GitHub release, and publishes `@zenrows/cli` to npm.
