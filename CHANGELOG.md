@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.13.1](https://github.com/ZenRows/cli/compare/v1.13.0...v1.13.1) (2026-11-06)
+
+
+### Behaviour Changes
+
+* **fetch:** the default --timeout is 200 s instead of 120 s, so a slow request gets the API's full 3 minutes ([07dc59f](https://github.com/ZenRows/cli/commit/07dc59ffecab780e3bfd78ceeee939c14c3b9891))
+
+
+### Bug Fixes
+
+* **fetch:** wait past the API's 3-minute budget before giving up ([07dc59f](https://github.com/ZenRows/cli/commit/07dc59ffecab780e3bfd78ceeee939c14c3b9891))
+
 ## [1.13.0](https://github.com/ZenRows/cli/compare/v1.12.0...v1.13.0) (2026-11-06)
 
 
