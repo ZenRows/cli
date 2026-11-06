@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.0](https://github.com/ZenRows/cli/compare/v1.12.0...v1.13.0) (2026-11-06)
+
+
+### Features
+
+* **fetch:** add --retries to fetch and extract, off by default, following the shared retry policy ([ea4d557](https://github.com/ZenRows/cli/commit/ea4d5578fef496d0a01123259c139dd386ee55a1))
+
 ## [1.12.0](https://github.com/ZenRows/cli/compare/v1.11.0...v1.12.0) (2026-10-30)
 
 
