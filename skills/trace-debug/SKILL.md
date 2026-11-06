@@ -32,7 +32,7 @@ zenrows trace export <run-id>     # JSON for sharing
   it. A 429 ("Rate limited") keeps its advice with or without `--retries`: wait
   a few seconds and retry; if it persists, lower concurrency.
 - `REQUEST_TIMEOUT` → the CLI stopped waiting; the API was reached. Raise
-  `--timeout` (default 120000ms, above the API's own 90s budget), or drop
+  `--timeout` (default 200000ms, above the API's own 180s budget), or drop
   `--wait-for` so the request finishes inside that budget and the API returns
   its own error. Not a connectivity problem — do not chase the network.
 - `BACKEND_UNAVAILABLE` → a genuine transport failure (DNS/TCP/TLS). Check
