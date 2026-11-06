@@ -21,6 +21,7 @@ import { formatRequestCost } from "../../core/http.ts";
 import { parse, asString, asNumber, type Command, type RunContext } from "../command.ts";
 import { printError, writeOut } from "../output.ts";
 import { refreshClaimAdvice } from "../../core/claim-link.ts";
+import { normalizeRetries } from "./fetch.ts";
 import { PREPARE_HELP, PREPARE_USAGE, runPrepare } from "./extract-prepare.ts";
 
 export const extract: Command = {
@@ -42,6 +43,7 @@ export const extract: Command = {
     "Shared:",
     "  --manual --js-render --premium-proxy   manual fetch controls",
     "  --validate             fail if the result is not valid JSON",
+    "  --retries <n>          retry 429/502/503/504 and failed connects up to n times (default 0)",
     "  --out <file>           write output to a file",
     "  --no-signup            do not auto-create a Free plan account if no key exists",
     "  --json                 structured result",
@@ -66,6 +68,7 @@ export const extract: Command = {
       wait: { type: "string" },
       "wait-for": { type: "string" },
       validate: { type: "boolean" },
+      retries: { type: "string" },
       out: { type: "string" },
       "no-signup": { type: "boolean" },
       json: { type: "boolean" },
@@ -116,6 +119,7 @@ export const extract: Command = {
       wait: asNumber(values.wait),
       waitFor: asString(values["wait-for"]),
       validate: values.validate === true,
+      retries: normalizeRetries(values.retries),
     };
 
     assertUsable("extract");

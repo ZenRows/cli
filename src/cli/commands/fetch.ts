@@ -37,6 +37,7 @@ export const fetch_: Command = {
     "  --screenshot           capture an above-the-fold screenshot",
     "  --out <file>           write the response body to a file",
     "  --timeout <ms>         client-side timeout (default 120000; above the API's own 90s budget)",
+    "  --retries <n>          retry 429/502/503/504 and failed connects up to n times (default 0)",
     "  --no-signup            do not auto-create a Free plan account if no key exists",
     "  --json                 print a structured result",
     "",
@@ -59,6 +60,7 @@ export const fetch_: Command = {
       screenshot: { type: "boolean" },
       out: { type: "string" },
       timeout: { type: "string" },
+      retries: { type: "string" },
       "no-signup": { type: "boolean" },
       json: { type: "boolean" },
     });
@@ -101,6 +103,7 @@ export const fetch_: Command = {
       output: normalizeOutput(asString(values.output)),
       screenshot: values.screenshot === true,
       timeoutMs: normalizeTimeout(values.timeout),
+      retries: normalizeRetries(values.retries),
     };
 
     const runId = newRunId();
@@ -207,6 +210,20 @@ export function normalizeTimeout(v: unknown): number | undefined {
     });
   }
   return ms;
+}
+
+/** `--retries <n>`: a whole number, 0 or more. Like `--timeout`, a bad value is an error. */
+export function normalizeRetries(v: unknown): number | undefined {
+  if (v === undefined) return undefined;
+  if (typeof v !== "string" || !/^\d+$/.test(v)) {
+    throw new ToolkitError({
+      code: "INVALID_USAGE",
+      message: `Invalid --retries value '${String(v)}'.`,
+      likely_cause: "--retries takes a whole number, 0 or more.",
+      next_action: "Pass a count, e.g. --retries 2. 0, the default, sends the request once.",
+    });
+  }
+  return Number(v);
 }
 
 export function normalizeOutput(v?: string): ResponseFormat | undefined {

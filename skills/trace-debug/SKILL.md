@@ -26,6 +26,11 @@ zenrows trace export <run-id>     # JSON for sharing
   `--manual --js-render` run; auto mode may ignore it. Each step
   multiplies the cost of the request, and both together are the most expensive
   configuration available ([[cost-control]]).
+- `FETCH_FAILED` "The Zenrows API answered HTTP 502/503/504 after N retries" →
+  the CLI already retried a busy answer (`--retries`). Wait a minute and run the
+  same command again; do not escalate, a costlier configuration does not fix
+  it. A 429 ("Rate limited") keeps its advice with or without `--retries`: wait
+  a few seconds and retry; if it persists, lower concurrency.
 - `REQUEST_TIMEOUT` → the CLI stopped waiting; the API was reached. Raise
   `--timeout` (default 120000ms, above the API's own 90s budget), or drop
   `--wait-for` so the request finishes inside that budget and the API returns

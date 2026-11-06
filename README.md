@@ -125,7 +125,21 @@ zenrows fetch <url> # Adaptive Stealth Mode (mode=auto)
 zenrows fetch <url> --output markdown
 zenrows fetch <url> --manual --js-render --premium-proxy
 zenrows fetch <url> --proxy-country us --wait-for ".price"
+zenrows fetch <url> --retries 2 # retry a busy answer up to 2 times; off by default
 ```
+
+`fetch` and `extract` send each request once. With `--retries <n>`, they retry
+up to `n` times on a 429, 502, 503 or 504 from the API, and on a network error
+before the request reached the API (refused connection, DNS failure, connect
+timeout, unreachable network). Each wait is the `Retry-After` header in whole
+seconds (0.25 s to 30 s) or a random delay that grows with each retry, and no
+retry starts more than 90 s after the first request. They never retry a client
+timeout (`--timeout`) or a connection that closed after the request was sent,
+because the API may still finish and charge it; a status the target site sent
+(`--original-status`); or any request of `zenrows extract prepare`. If a 502,
+503 or 504 is still the answer after one or more retries, the error says how
+many retries ran and to wait a minute and run the same command again, without
+suggesting costlier options. A 429 keeps the error it has without `--retries`.
 
 ## 8. Extract
 

@@ -47,6 +47,11 @@ zenrows fetch <url> --manual --js-render --premium-proxy   # the most expensive 
   needs `--premium-proxy` (else `PARAM_PROXY_COUNTRY_REQUIRES_PREMIUM`).
 - You are billed only for the configuration that succeeds.
 - On failure, read `zenrows trace explain <run-id>` before escalating.
+- The CLI sends each request once. `--retries <n>` retries a 429, 502, 503 or
+  504 and a network error before the request reached the API, up to `n` times,
+  within 90 s; prefer it to your own retry loop. It never retries a timeout, a
+  connection closed after the request was sent, or a target status under
+  `--original-status`.
 
 Every run is saved under `.zenrows/runs/<run-id>/` (no secrets). See [[extract]]
 for structured output and [[cost-control]] for the cost model.
