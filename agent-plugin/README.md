@@ -1,6 +1,6 @@
 # Zenrows Agent Plugin
 
-Agent Plugins 1.0 package for [Zenrows](https://www.zenrows.com) — MCP servers + skills that teach agents to pick the cheapest reliable primitive for protected web data.
+Agent Plugins 1.0 package for [Zenrows](https://www.zenrows.com?utm_source=github&utm_medium=readme&utm_campaign=cli) — MCP servers + skills that teach agents to pick the cheapest reliable primitive for protected web data.
 
 ```text
 agent-plugin/
