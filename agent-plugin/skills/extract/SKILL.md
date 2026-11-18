@@ -68,6 +68,8 @@ extract({ url })                                          # 4. extract again
   slot of the account's monthly allowance; `prepared_domain_status` returns it
   (`used` / `limit` / `remaining`) and a `next` field with what to do now.
 - `out_of_allowance`: no slots left this month; use `mode=css`.
+  `domain_rejection_limit`: this domain was rejected too many times this
+  month; try another domain or use `mode=css` until next month (UTC).
   `overloaded` / `disabled`: retry in a few minutes; do not loop.
   A `failed` status carries `failure.code` and `failure.slot_consumed`; follow `next`.
 - A domain that is already prepared answers `ready` at once

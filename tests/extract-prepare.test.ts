@@ -176,6 +176,31 @@ for (const [status, serverCode, code, pattern] of [
   });
 }
 
+test("prepare maps 429 domain_rejection_limit to EXTRACT_PREPARE_DOMAIN_REJECTION_LIMIT, not the allowance error", async () => {
+  const { calls, fetchImpl } = stub({
+    [`POST ${BASE}`]: () =>
+      problem(429, "domain_rejection_limit", { domain: "example.com", rejected: 3, limit: 3, month: "2026-11" }),
+  });
+  const { code: exit, out } = await run(["example.com", "--url", "https://example.com/p/1"], fetchImpl);
+  assert.equal(exit, 1);
+  assert.equal(out.error.code, "EXTRACT_PREPARE_DOMAIN_REJECTION_LIMIT");
+  assert.equal(out.error.server_code, "domain_rejection_limit");
+  assert.equal(
+    out.error.message,
+    "example.com was rejected 3 times this month (limit 3); new preparation attempts for it are refused until 2026-11 ends (UTC).",
+  );
+  assert.match(out.error.next_action, /Try another domain/);
+  assert.doesNotMatch(out.error.message, /allowance/);
+  assert.equal(calls.length, 1);
+});
+
+test("prepare on 429 domain_rejection_limit without fields still names the domain and next month", async () => {
+  const { fetchImpl } = stub({ [`POST ${BASE}`]: () => problem(429, "domain_rejection_limit") });
+  const { out } = await run(["example.com", "--url", "https://example.com/p/1"], fetchImpl);
+  assert.equal(out.error.code, "EXTRACT_PREPARE_DOMAIN_REJECTION_LIMIT");
+  assert.match(out.error.message, /^example\.com was rejected this month; .* until the start of next month \(UTC\)\.$/);
+});
+
 test("prepare rejects zero, six or non-URL --url values before any request", async () => {
   const { calls, fetchImpl } = stub({});
   for (const args of [

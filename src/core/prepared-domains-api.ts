@@ -184,6 +184,19 @@ export function prepareError(status: number, body: string, domain: string): Tool
       server_code: code,
     });
   }
+  if (code === "domain_rejection_limit") {
+    const times = p.rejected !== undefined && p.limit !== undefined ? ` ${String(p.rejected)} times this month (limit ${String(p.limit)})` : " this month";
+    const name = typeof p.domain === "string" && p.domain ? p.domain : domain;
+    const until = typeof p.month === "string" && p.month ? `${p.month} ends (UTC)` : "the start of next month (UTC)";
+    return new ToolkitError({
+      code: "EXTRACT_PREPARE_DOMAIN_REJECTION_LIMIT",
+      message: `${name} was rejected${times}; new preparation attempts for it are refused until ${until}.`,
+      likely_cause: cause,
+      next_action: "Do not retry this domain this month. Try another domain, or extract this one with --css and explicit selectors.",
+      suggested_commands: [`zenrows extract <url> --css '{"title":"h1"}'`],
+      server_code: code,
+    });
+  }
   if (code === "out_of_allowance" || status === 429) {
     const used = p.used !== undefined && p.limit !== undefined ? ` (${String(p.used)} of ${String(p.limit)} used)` : "";
     return new ToolkitError({
