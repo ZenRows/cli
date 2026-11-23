@@ -176,6 +176,57 @@ for (const [status, serverCode, code, pattern] of [
   });
 }
 
+const REJECTION_DETAIL =
+  "example.com had 3 rejected preparation attempts this month (failed verification); the limit is 3 per domain per month. This submission was not accepted and not counted against your allowance. New attempts for this domain reopen at the start of next month (UTC).";
+
+for (const [rejected, limit] of [
+  [3, 3],
+  [1, 0],
+] as const) {
+  test(`prepare maps 429 domain_rejection_limit (limit ${limit}) to EXTRACT_PREPARE_DOMAIN_REJECTION_LIMIT, not the allowance`, async () => {
+    const { calls, fetchImpl } = stub({
+      [`POST ${BASE}`]: () =>
+        res(
+          {
+            code: "domain_rejection_limit",
+            title: "Domain rejection limit reached",
+            status: 429,
+            detail: REJECTION_DETAIL,
+            domain: "example.com",
+            rejected,
+            limit,
+            month: "2026-11",
+          },
+          429,
+        ),
+    });
+    const { code: exit, out } = await run(["example.com", "--url", "https://example.com/p/1"], fetchImpl);
+    assert.equal(exit, 1);
+    assert.equal(out.error.code, "EXTRACT_PREPARE_DOMAIN_REJECTION_LIMIT");
+    assert.equal(out.error.server_code, "domain_rejection_limit");
+    assert.match(out.error.message, new RegExp(`${rejected} rejected this month, limit ${limit} per domain`));
+    assert.doesNotMatch(out.error.message, /allowance/);
+    assert.ok(out.error.likely_cause.includes(REJECTION_DETAIL));
+    assert.match(out.error.next_action, /Do not retry this domain this month/);
+    assert.match(out.error.next_action, /other domains can still be prepared/);
+    assert.match(out.error.next_action, /--css/);
+    assert.equal(calls.length, 1);
+  });
+}
+
+test("prepare reports an unknown 429 with the server's detail, not as the allowance", async () => {
+  const { fetchImpl } = stub({
+    [`POST ${BASE}`]: () => res({ code: "something_new", status: 429, detail: "Slow down for this domain." }, 429),
+  });
+  const { code: exit, out } = await run(["example.com", "--url", "https://example.com/p/1"], fetchImpl);
+  assert.equal(exit, 1);
+  assert.equal(out.error.code, "EXTRACT_PREPARE_FAILED");
+  assert.equal(out.error.server_code, "something_new");
+  assert.match(out.error.message, /Slow down for this domain\./);
+  assert.doesNotMatch(out.error.message, /allowance/);
+  assert.match(out.error.next_action, /do not retry in a loop/);
+});
+
 test("prepare rejects zero, six or non-URL --url values before any request", async () => {
   const { calls, fetchImpl } = stub({});
   for (const args of [

@@ -154,7 +154,8 @@ zenrows extract <url> --output markdown
 On a domain Extract hasn't prepared yet, `zenrows extract` fails with
 `EXTRACT_DOMAIN_NOT_PREPARED` (API code REQS007) and prints the command to
 prepare it. Preparing takes a few minutes and costs no credits; each new domain
-uses one slot of the monthly allowance. `EXTRACT_PAGE_NOT_RECOGNISED` (also
+uses one slot of the monthly allowance, and a preparation rejected by
+verification gives its slot back. `EXTRACT_PAGE_NOT_RECOGNISED` (also
 REQS007) is different: the domain is prepared, but this page is not one Extract
 extracts. Try a product, article or listing page instead, retry it once in a
 few minutes if it should work, or use `--css`; preparing again does not change
@@ -174,6 +175,14 @@ zenrows extract prepare example.com \
 zenrows extract prepare status example.com   # progress + monthly allowance
 zenrows extract https://www.example.com/products/a   # then extract again
 ```
+
+`prepare` sends each request once and names the next step when it is refused:
+`EXTRACT_PREPARE_OUT_OF_ALLOWANCE` means the account has no slots left this
+month. `EXTRACT_PREPARE_DOMAIN_REJECTION_LIMIT` means this domain's
+preparations were rejected by verification as many times as the monthly limit
+per domain allows: do not retry this domain this month (other domains can still
+be prepared, and nothing was spent); meanwhile use `--css` on it.
+`EXTRACT_PREPARE_UNAVAILABLE` means retry in a few minutes, without a loop.
 
 ## 9. Batch
 

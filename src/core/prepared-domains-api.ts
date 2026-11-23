@@ -184,7 +184,22 @@ export function prepareError(status: number, body: string, domain: string): Tool
       server_code: code,
     });
   }
-  if (code === "out_of_allowance" || status === 429) {
+  if (code === "domain_rejection_limit") {
+    const counts =
+      p.rejected !== undefined && p.limit !== undefined
+        ? ` (${String(p.rejected)} rejected this month, limit ${String(p.limit)} per domain)`
+        : "";
+    return new ToolkitError({
+      code: "EXTRACT_PREPARE_DOMAIN_REJECTION_LIMIT",
+      message: `${domain} has reached the monthly limit of preparations rejected by verification${counts}.`,
+      likely_cause: cause,
+      next_action:
+        "Do not retry this domain this month; new attempts reopen at the start of next month (UTC). This submission used no allowance slot, and other domains can still be prepared. Meanwhile extract this domain with --css and explicit selectors.",
+      suggested_commands: [`zenrows extract <url> --css '{"title":"h1"}'`],
+      server_code: code,
+    });
+  }
+  if (code === "out_of_allowance") {
     const used = p.used !== undefined && p.limit !== undefined ? ` (${String(p.used)} of ${String(p.limit)} used)` : "";
     return new ToolkitError({
       code: "EXTRACT_PREPARE_OUT_OF_ALLOWANCE",
@@ -192,6 +207,16 @@ export function prepareError(status: number, body: string, domain: string): Tool
       likely_cause: cause,
       next_action: "Do not retry this month. Meanwhile extract this domain with --css and explicit selectors.",
       suggested_commands: [`zenrows extract <url> --css '{"title":"h1"}'`],
+      server_code: code,
+    });
+  }
+  if (status === 429) {
+    // A 429 this CLI does not know: the server's detail says what to do, not the allowance.
+    return new ToolkitError({
+      code: "EXTRACT_PREPARE_FAILED",
+      message: `Zenrows refused to prepare ${domain} (HTTP 429): ${detail}`,
+      likely_cause: cause,
+      next_action: "Follow the message above; do not retry in a loop. Meanwhile extract with --css and explicit selectors.",
       server_code: code,
     });
   }
