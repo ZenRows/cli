@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.2](https://github.com/ZenRows/cli/compare/v1.13.1...v1.13.2) (2026-11-23)
+
+
+### Bug Fixes
+
+* **extract:** stop reporting a per-domain rejection limit as a used-up allowance ([#84](https://github.com/ZenRows/cli/issues/84)) ([d69c4e8](https://github.com/ZenRows/cli/commit/d69c4e81ce40df77fcaf86f0fe155c489783d6ee))
+
 ## [1.13.1](https://github.com/ZenRows/cli/compare/v1.13.0...v1.13.1) (2026-11-06)
 
 
