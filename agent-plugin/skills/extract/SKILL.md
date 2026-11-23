@@ -67,7 +67,11 @@ extract({ url })                                          # 4. extract again
 - Preparing takes a few minutes and costs no credits. Each new domain uses one
   slot of the account's monthly allowance; `prepared_domain_status` returns it
   (`used` / `limit` / `remaining`) and a `next` field with what to do now.
+  A preparation rejected by verification gives its slot back.
 - `out_of_allowance`: no slots left this month; use `mode=css`.
+  `domain_rejection_limit`: this domain's preparations were rejected by
+  verification as often as the monthly limit allows. Do not retry this domain
+  this month; other domains can still be prepared. Use `mode=css` on it.
   `overloaded` / `disabled`: retry in a few minutes; do not loop.
   A `failed` status carries `failure.code` and `failure.slot_consumed`; follow `next`.
 - A domain that is already prepared answers `ready` at once

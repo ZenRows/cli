@@ -65,8 +65,11 @@ zenrows extract https://www.example.com/products/a  # 3. extract again
   separately, and a leading `www.` is dropped.
 - Preparing takes a few minutes and costs no credits. Each new domain uses one
   slot of the account's monthly allowance; `prepare status` shows `used` /
-  `limit` / `remaining`.
+  `limit` / `remaining`. A preparation rejected by verification gives its slot back.
 - `EXTRACT_PREPARE_OUT_OF_ALLOWANCE`: no slots left this month; use `--css`.
+  `EXTRACT_PREPARE_DOMAIN_REJECTION_LIMIT`: this domain's preparations were
+  rejected by verification as often as the monthly limit allows. Do not retry
+  this domain this month; other domains can still be prepared. Use `--css` on it.
   `EXTRACT_PREPARE_UNAVAILABLE`: retry in a few minutes; do not loop.
   `prepare` sends each request once: `--retries` does not apply to it.
   A `failed` status prints the next step for its failure code and says whether
